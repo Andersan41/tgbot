@@ -624,6 +624,27 @@ class AppConfig:
     htf_bias_v2: bool = os.getenv("HTF_BIAS_V2", "true").lower() == "true"
     premium_discount: bool = os.getenv("PREMIUM_DISCOUNT", "false").lower() == "true"
 
+    # ─── Feature Flags (Phase 3 — signal-recovery diagnostics) ─────────
+    # Each flag defaults to the CURRENT live behavior; flipping it changes gating.
+    # See docs/reports for the diagnosis that motivated these switches.
+    #
+    # HTF bias on CONTINUATION setups: True = hard-block a continuation whose direction
+    # opposes the HTF bias (current behavior); False = keep the signal but multiply its
+    # P(TP) by `htf_bias_continuation_penalty`, letting the Probability/Risk layer decide.
+    # (This wires the previously-unused `htf_hard_gate` flag to the continuation gate.)
+    htf_bias_continuation_penalty: float = float(os.getenv("HTF_BIAS_CONTINUATION_PENALTY", "0.85"))
+    # Reversal displacement gate: True = require the current candle to be a displacement
+    # candle (current behavior); False = treat displacement as informational only, matching
+    # the pattern engine's own stated design (sweep + MSS already gate the reversal).
+    reversal_require_displacement: bool = os.getenv("REVERSAL_REQUIRE_DISPLACEMENT", "true").lower() == "true"
+    # Require price to be inside the OB/FVG entry zone before emitting a signal. True stops
+    # the bot chasing entries at candle close; False keeps current behavior (entry_armed is
+    # soft / log-only). Default False preserves live behavior.
+    require_entry_zone: bool = os.getenv("REQUIRE_ENTRY_ZONE", "false").lower() == "true"
+    # Minimum P(TP) required to emit a signal (0.0 = disabled, current behavior). When > 0
+    # the Probability Engine becomes an actual selector rather than sizing-only input.
+    min_p_tp: float = float(os.getenv("MIN_P_TP", "0.0"))
+
     # URL базы данных
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db")
     # Уровень логирования
@@ -735,6 +756,10 @@ FILTER_TOGGLE_KEYS: dict[str, tuple[str, type]] = {
     "confidence_v2": ("scoring.confidence_v2_enabled", bool),
     "signal_block": ("signal_block_notify", bool),
     "dynamic_risk": ("risk.dynamic_risk_enabled", bool),
+    # Phase 3 signal-recovery toggles (see AppConfig for semantics)
+    "htf_hard_gate": ("htf_hard_gate", bool),
+    "reversal_require_displacement": ("reversal_require_displacement", bool),
+    "require_entry_zone": ("require_entry_zone", bool),
 }
 
 FILTER_PARAM_KEYS: dict[str, tuple[str, type]] = {
@@ -784,6 +809,9 @@ FILTER_PARAM_KEYS: dict[str, tuple[str, type]] = {
     "confidence_moderate_threshold": ("scoring.confidence_moderate_threshold", float),
     "quality_strong_threshold": ("scoring.quality_strong_threshold", float),
     "quality_moderate_threshold": ("scoring.quality_moderate_threshold", float),
+    # Phase 3 signal-recovery params (see AppConfig for semantics)
+    "htf_bias_continuation_penalty": ("htf_bias_continuation_penalty", float),
+    "min_p_tp": ("min_p_tp", float),
 }
 
 # ─── Singleton ────────────────────────────────────────────────────────────
