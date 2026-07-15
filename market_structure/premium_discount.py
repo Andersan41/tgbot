@@ -38,9 +38,10 @@ def classify_zone(
     """
     Классифицирует текущую ценовую зону по ICT концепции.
 
-    Premium: fib 0.0-0.3 (дорого, хорошо для short)
+    fib_level = (price - swing_low) / range_size, поэтому 0.0 = у минимума, 1.0 = у максимума:
+    Discount: fib 0.0-0.3 (дёшево, у минимума — хорошо для long)
     Equilibrium: fib 0.3-0.7
-    Discount: fib 0.7-1.0 (дешево, хорошо для long)
+    Premium: fib 0.7-1.0 (дорого, у максимума — хорошо для short)
     """
     price = df['close'].iloc[-1]
 
