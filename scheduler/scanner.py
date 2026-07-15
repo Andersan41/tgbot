@@ -359,7 +359,11 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             trace.passed("sweep_required")
             _current_funnel.log_gate(symbol, timeframe, "sweep_required", "PASS")
 
-            if not setup.has_displacement:
+            # Displacement gate is opt-out (config.reversal_require_displacement, default True).
+            # The pattern engine treats displacement as informational (sweep + MSS already gate
+            # the reversal); requiring the CURRENT candle to be a displacement candle is an extra
+            # filter that can be disabled to recover reversal setups.
+            if config.reversal_require_displacement and not setup.has_displacement:
                 reason = "reversal: no displacement"
                 _current_funnel.log_gate(symbol, timeframe, "displacement_gate", "BLOCKED", reason)
                 trace.blocked("displacement_gate", reason)
@@ -393,8 +397,18 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             _current_funnel.log_gate(symbol, timeframe, "bos_gate", "PASS",
                                      f"bos_type={setup.bos_type}")
 
-        # ── Entry Armed (soft — log but don't block) ──
+        # ── Entry Armed (OB/FVG zone) ──
+        # Default: soft (log only) — matches current behavior, entry is taken at close.
+        # config.require_entry_zone=True makes it a hard gate: only emit when price is
+        # actually inside the OB/FVG zone, so the bot stops chasing entries mid-move.
         if not setup.entry_armed:
+            if config.require_entry_zone:
+                reason = "price not in OB/FVG entry zone"
+                _current_funnel.log_gate(symbol, timeframe, "entry_zone", "BLOCKED", reason)
+                trace.blocked("entry_zone", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
             logger.debug(
                 f"Entry not armed: {symbol} {timeframe} — "
                 f"price not in OB/FVG zone (signal will fire but entry may be suboptimal)"
@@ -456,22 +470,33 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 if setup.setup_type == "continuation":
                     setup_bias = direction_map.get(setup.direction)
                     if setup_bias != _bias_enum:
-                        reason = f"HTF bias gate: continuation {setup.direction} vs HTF {htf_bias_str}"
-                        _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
-                        trace.blocked("htf_bias", reason)
-                        trace.set_version(VERSION, build_config_snapshot())
-                        await trace.save(db)
-                        return None
-                    trace.passed("htf_bias")
-                    _current_funnel.log_gate(
-                        symbol, timeframe, "htf_bias", "PASS",
-                        f"continuation {setup.direction} aligned with HTF {htf_bias_str}",
-                    )
+                        # Continuation opposes HTF bias. config.htf_hard_gate (default True) blocks
+                        # it outright; when disabled, keep the signal but apply a P(TP) penalty and
+                        # let the Probability/Risk layer decide.
+                        if config.htf_hard_gate:
+                            reason = f"HTF bias gate: continuation {setup.direction} vs HTF {htf_bias_str}"
+                            _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
+                            trace.blocked("htf_bias", reason)
+                            trace.set_version(VERSION, build_config_snapshot())
+                            await trace.save(db)
+                            return None
+                        _htf_bias_penalty = config.htf_bias_continuation_penalty
+                        _current_funnel.log_gate(
+                            symbol, timeframe, "htf_bias", "PASS",
+                            f"continuation {setup.direction} vs HTF {htf_bias_str} — penalty {_htf_bias_penalty}",
+                        )
+                        trace.record("htf_bias", True)
+                    else:
+                        trace.passed("htf_bias")
+                        _current_funnel.log_gate(
+                            symbol, timeframe, "htf_bias", "PASS",
+                            f"continuation {setup.direction} aligned with HTF {htf_bias_str}",
+                        )
 
                 elif setup.setup_type == "reversal":
                     setup_bias = direction_map.get(setup.direction)
                     if setup_bias != _bias_enum:
-                        _htf_bias_penalty = 0.85
+                        _htf_bias_penalty = config.htf_bias_continuation_penalty
                         _current_funnel.log_gate(
                             symbol, timeframe, "htf_bias", "PASS",
                             f"reversal mismatch penalty {_htf_bias_penalty}",
@@ -510,22 +535,33 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 if setup.setup_type == "continuation":
                     setup_bias = direction_map.get(setup.direction)
                     if setup_bias != _bias_enum:
-                        reason = f"HTF bias gate: continuation {setup.direction} vs HTF {_bias_enum.value}"
-                        _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
-                        trace.blocked("htf_bias", reason)
-                        trace.set_version(VERSION, build_config_snapshot())
-                        await trace.save(db)
-                        return None
-                    trace.passed("htf_bias")
-                    _current_funnel.log_gate(
-                        symbol, timeframe, "htf_bias", "PASS",
-                        f"continuation {setup.direction} aligned with HTF {_bias_enum.value}",
-                    )
+                        # Continuation opposes HTF bias. config.htf_hard_gate (default True) blocks
+                        # it outright; when disabled, keep the signal but apply a P(TP) penalty and
+                        # let the Probability/Risk layer decide.
+                        if config.htf_hard_gate:
+                            reason = f"HTF bias gate: continuation {setup.direction} vs HTF {_bias_enum.value}"
+                            _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
+                            trace.blocked("htf_bias", reason)
+                            trace.set_version(VERSION, build_config_snapshot())
+                            await trace.save(db)
+                            return None
+                        _htf_bias_penalty = config.htf_bias_continuation_penalty
+                        _current_funnel.log_gate(
+                            symbol, timeframe, "htf_bias", "PASS",
+                            f"continuation {setup.direction} vs HTF {_bias_enum.value} — penalty {_htf_bias_penalty}",
+                        )
+                        trace.record("htf_bias", True)
+                    else:
+                        trace.passed("htf_bias")
+                        _current_funnel.log_gate(
+                            symbol, timeframe, "htf_bias", "PASS",
+                            f"continuation {setup.direction} aligned with HTF {_bias_enum.value}",
+                        )
 
                 elif setup.setup_type == "reversal":
                     setup_bias = direction_map.get(setup.direction)
                     if setup_bias != _bias_enum:
-                        _htf_bias_penalty = 0.85
+                        _htf_bias_penalty = config.htf_bias_continuation_penalty
                         _current_funnel.log_gate(
                             symbol, timeframe, "htf_bias", "PASS",
                             f"reversal mismatch penalty {_htf_bias_penalty}",
@@ -1053,6 +1089,19 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             f"RR={probability.expected_rr:.2f} | PF={probability.profit_factor:.2f} | "
             f"model={probability.model_type} | {symbol} {timeframe}"
         )
+
+        # ═══ Phase 3.5: Probability selector (opt-in) ═══
+        # When config.min_p_tp > 0 the Probability Engine becomes an actual selector:
+        # setups below the P(TP) floor are dropped here. Default 0.0 = disabled (current
+        # behavior, where p_tp only feeds Kelly sizing in the Risk Engine).
+        if config.min_p_tp > 0.0 and probability.p_tp < config.min_p_tp:
+            reason = f"P(TP)={probability.p_tp:.1%} < min {config.min_p_tp:.1%}"
+            _current_funnel.log_gate(symbol, timeframe, "probability", "BLOCKED", reason)
+            trace.blocked("probability", reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            logger.info(f"Probability BLOCKED: {symbol} {timeframe} — {reason}")
+            return None
 
         # ═══ Phase 4: Risk Engine ═══
 
