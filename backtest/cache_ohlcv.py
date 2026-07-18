@@ -79,6 +79,74 @@ def save_cached(symbol: str, timeframe: str, candles: int, df: pd.DataFrame) -> 
     df.to_parquet(path, index=True)
 
 
+# ── Max-history cache ──────────────────────────────────────────────────────
+# The fixed-count cache above keys files by requested candle count and requires
+# >=90% of that count on load. For multi-year training the usable depth varies
+# per symbol (some altcoins are recent listings — see scripts/probe_history_depth.py),
+# so a fixed request would perpetually cache-miss on shallow symbols. The max cache
+# stores "as deep as the exchange served" under a stable `<sym>_<tf>_max.parquet`
+# name and accepts whatever was stored, validated by DatetimeIndex rather than count.
+
+
+def _max_cache_path(symbol: str, timeframe: str) -> Path:
+    """Return the max-history cache file path for a symbol/timeframe."""
+    safe_symbol = symbol.replace("/", "_")
+    return CACHE_DIR / f"{safe_symbol}_{timeframe}_max.parquet"
+
+
+def load_cached_max(symbol: str, timeframe: str) -> pd.DataFrame | None:
+    """Load the deepest-available cached OHLCV series if present.
+
+    Unlike ``load_cached`` there is no candle-count threshold — the file holds
+    whatever depth the exchange served at cache time. Raises ValueError if the
+    file exists but lacks a DatetimeIndex (written with ``index=False``).
+    """
+    path = _max_cache_path(symbol, timeframe)
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError(
+            f"Cache file {path.name} has {type(df.index).__name__} index "
+            f"instead of DatetimeIndex. Delete the file and re-cache."
+        )
+    return df
+
+
+def save_cached_max(symbol: str, timeframe: str, df: pd.DataFrame) -> None:
+    """Save the deepest-available OHLCV series with DatetimeIndex preserved."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(_max_cache_path(symbol, timeframe), index=True)
+
+
+async def fetch_and_cache_max(symbol: str, timeframe: str, cap_candles: int) -> pd.DataFrame | None:
+    """Fetch as much history as the exchange serves (up to cap) and cache it.
+
+    Reuses the existing cached file when present (no re-fetch). ``cap_candles``
+    is only a safety ceiling; the paginator stops earlier when the exchange runs
+    out of history.
+    """
+    cached = load_cached_max(symbol, timeframe)
+    if cached is not None:
+        print(f"  [CACHE HIT] {symbol} {timeframe} max → {len(cached)} rows "
+              f"({cached.index[0]} → {cached.index[-1]})")
+        return cached
+
+    print(f"  [FETCH] {symbol} {timeframe} max (cap={cap_candles})...", end=" ", flush=True)
+    t0 = time.time()
+    df = await exchange_client.fetch_ohlcv_paginated(
+        symbol, timeframe, total_limit=cap_candles, page_size=998,
+    )
+    elapsed = time.time() - t0
+    if df is None or df.empty:
+        print(f"NO DATA ({elapsed:.1f}s)")
+        return None
+    print(f"{len(df)} rows, {df.index[0]} → {df.index[-1]} ({elapsed:.1f}s)")
+
+    save_cached_max(symbol, timeframe, df)
+    return df
+
+
 def validate_time_overlap(
     df_1h: pd.DataFrame,
     df_15m: pd.DataFrame,
@@ -195,6 +263,31 @@ async def cache_all(symbols: list[str], timeframe: str, candles: int, confirm_tf
     await exchange_client.close()
 
 
+async def cache_all_max(symbols: list[str], timeframe: str, cap_candles: int):
+    """Fetch and cache the deepest-available history for all symbols.
+
+    Used by the self-learning feasibility spike to build a multi-year corpus.
+    ``cap_candles`` is a safety ceiling (e.g. ~5y of 1h ≈ 45000); each symbol
+    keeps whatever depth the exchange actually served.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    await exchange_client.connect()
+
+    print(f"Caching MAX history for {len(symbols)} symbols ({timeframe}), cap={cap_candles} candles")
+    print(f"Cache dir: {CACHE_DIR}")
+
+    total_rows = 0
+    for i, symbol in enumerate(symbols, 1):
+        print(f"\n[{i}/{len(symbols)}] {symbol}")
+        df = await fetch_and_cache_max(symbol, timeframe, cap_candles)
+        if df is not None and not df.empty:
+            total_rows += len(df)
+        await asyncio.sleep(0.5)  # Rate limit
+
+    print(f"\nDone: {total_rows:,} total rows cached")
+    await exchange_client.close()
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -206,7 +299,15 @@ if __name__ == "__main__":
                         help="Confirmation timeframe to cache (default: 15m)")
     parser.add_argument("--confirm-candles", type=int, default=CONFIRM_CANDLES,
                         help="Number of candles for confirmation timeframe")
+    parser.add_argument("--max-history", action="store_true",
+                        help="Cache the deepest-available history per symbol "
+                             "(stored as <sym>_<tf>_max.parquet); --candles is the safety cap")
     args = parser.parse_args()
 
     symbols = args.symbols.split(",") if args.symbols else DEFAULT_SYMBOLS
-    asyncio.run(cache_all(symbols, args.timeframe, args.candles, args.confirm_tf, args.confirm_candles))
+    if args.max_history:
+        # For --max-history, --candles acts as the paging safety ceiling.
+        cap = args.candles if args.candles > DEFAULT_CANDLES else 45000
+        asyncio.run(cache_all_max(symbols, args.timeframe, cap))
+    else:
+        asyncio.run(cache_all(symbols, args.timeframe, args.candles, args.confirm_tf, args.confirm_candles))

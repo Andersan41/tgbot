@@ -144,6 +144,41 @@ Backtest engine реализует полный паритет с live-пайп�
 
 ---
 
+## 🤖 Самообучение на истории (feasibility spike)
+
+Офлайн-контур, который отвечает на вопрос: **есть ли обучаемый edge на многолетней истории,
+и что стоит поменять в системе?** Он скачивает историю, строит размеченный датасет по
+**текущему** ICT-пайплайну (метки TP/SL, без look-ahead), гоняет walk-forward валидацию и
+выдаёт go/no-go отчёт с важностью фич и замером edge. Живой торговли, авто-переобучения и
+изменения гейтинга сигналов он **не** трогает: модель-кандидат пишется в scratch-путь, а не в
+живой `models/probability_model.pkl`.
+
+Запуск строго по порядку (в venv, Python 3.11):
+
+```bash
+# 1. Проверить реальную глубину истории по монетам (BTC/ETH — годы, часть альтов мелкие)
+python scripts/probe_history_depth.py --symbols BTC/USDT,ETH/USDT,SOL/USDT --years 5
+
+# 2. Скачать максимально доступную историю в parquet-кэш
+python -m backtest.cache_ohlcv --max-history --symbols BTC/USDT,ETH/USDT,SOL/USDT
+
+# 3. Построить размеченный датасет офлайн-реплеем (метки TP/SL, без look-ahead)
+python -m backtest.replay_dataset --max-history --symbols BTC/USDT,ETH/USDT,SOL/USDT
+
+# 4. Walk-forward LR/RF/XGBoost + важность фич + замер edge + сериализация кандидата
+python scripts/train_prob_model.py --dataset reports/dataset/ict_dataset.parquet
+
+# 5. Итоговый отчёт go/no-go
+python scripts/feasibility_report.py   # → reports/feasibility/FEASIBILITY_REPORT.md
+```
+
+Отчёт (`reports/feasibility/FEASIBILITY_REPORT.md`) показывает OOS AUC, PF/expectancy модели
+против правил и против того, что бот торгует сейчас, важность каждой из 46 фич и вердикт по
+полноценному контуру. Начинать стоит с BTC/ETH/SOL (глубокая история), затем добавлять монеты
+из зонда. Полный справочник флагов и артефактов — в [docs/commands.md](docs/commands.md).
+
+---
+
 ## 📲 Команды бота
 
 | Команда       | Описание                             |
