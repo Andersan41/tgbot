@@ -61,15 +61,7 @@ TIMEFRAME = "1h"
 CANDLES = 3900
 RESULTS_DIR = Path(__file__).parent.parent / "reports" / "funnel"
 
-BT_CONFIG = BacktestConfig(
-    enable_unified_entry=True,
-    enable_confirm_tf_gate=False,
-    enable_structural_sl=True,
-    enable_sl_distance_guard=True,
-    enable_rr_filter=True,
-    enable_news_filter=True,
-    enable_stop_hunt_buffer=False,
-)
+BT_CONFIG = BacktestConfig()
 
 PIPELINE_STEPS = [
     "NO_SIGNAL_ENGINE", "CONFIRM_TF_REJECT", "DISTANCE_FILTER",
@@ -306,10 +298,7 @@ async def run_funnel_one(symbol: str, candles: int) -> SymbolFunnel:
                         if confirm_ind is not None:
                             direction_str = "buy" if ind.ema_fast > ind.ema_slow else "sell"
                             confirm_ok = signal_engine.evaluate_confirm(confirm_ind, direction_str)
-                            if BT_CONFIG.enable_unified_entry:
-                                entry_price = float(confirm_ind.close)
-                            if not confirm_ok and BT_CONFIG.enable_confirm_tf_gate:
-                                rejection = "CONFIRM_TF_REJECT"
+                            entry_price = float(confirm_ind.close)
                 except Exception:
                     pass
 
@@ -388,7 +377,7 @@ async def run_funnel_one(symbol: str, candles: int) -> SymbolFunnel:
                     except Exception:
                         pass
 
-                if result.sl is not None and BT_CONFIG.enable_structural_sl:
+                if result.sl is not None:
                     try:
                         atr_val_sl = float(ind.atr) if ind.atr is not None else 0.0
                         if atr_val_sl <= 0:
@@ -409,7 +398,7 @@ async def run_funnel_one(symbol: str, candles: int) -> SymbolFunnel:
                     except Exception:
                         pass
 
-                if rejection is None and BT_CONFIG.enable_sl_distance_guard:
+                if rejection is None:
                     sl_dist_pct = abs(entry_price - result.sl) / entry_price * 100
                     min_dist = config.trading.min_sl_distance_pct
                     max_dist = config.trading.max_sl_distance_pct
@@ -418,7 +407,7 @@ async def run_funnel_one(symbol: str, candles: int) -> SymbolFunnel:
                     elif sl_dist_pct > max_dist:
                         rejection = "SL_DISTANCE_MAX"
 
-                if rejection is None and BT_CONFIG.enable_rr_filter:
+                if rejection is None:
                     risk = abs(entry_price - result.sl)
                     reward = abs(result.tp - entry_price)
                     rr = reward / risk if risk > 0 else 0

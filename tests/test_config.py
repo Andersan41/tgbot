@@ -241,8 +241,6 @@ class TestScoringConfig:
         import config.settings as settings
         importlib.reload(settings)
         s = settings.config.scoring
-        assert s.confidence_strong_threshold == 65
-        assert s.confidence_moderate_threshold == 40
         assert s.quality_strong_threshold == 65
         assert s.quality_moderate_threshold == 30
 
@@ -251,7 +249,6 @@ class TestScoringConfig:
         importlib.reload(settings)
         s = settings.config.scoring
         assert s.tech_confidence_blend == 0.6
-        assert s.market_confidence_blend == 0.4
         assert s.historical_wr_blend == 0.4
 
 

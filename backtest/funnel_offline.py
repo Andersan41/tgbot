@@ -211,9 +211,6 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
             if not setup.has_sweep:
                 counts["sweep_required"] += 1
                 continue
-            if config.reversal_require_displacement and not setup.has_displacement:
-                counts["displacement_gate"] += 1
-                continue
             if not setup.has_mss:
                 counts["mss_gate"] += 1
                 continue
@@ -327,7 +324,6 @@ def _print_report(results: list[dict]) -> dict:
     print("\n" + "=" * 68)
     print("  OFFLINE FUNNEL — live v2 structural gate chain (cached 1h)")
     print(f"  Flags: HTF_HARD_GATE={config.htf_hard_gate} "
-          f"REVERSAL_REQUIRE_DISPLACEMENT={config.reversal_require_displacement} "
           f"REQUIRE_ENTRY_ZONE={config.require_entry_zone} MIN_P_TP={config.min_p_tp}")
     print("=" * 68)
     print(f"  Evaluated candidates: {total}   PASSED: {passed} "

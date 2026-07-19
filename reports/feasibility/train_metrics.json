@@ -1,0 +1,201 @@
+{
+  "dataset": "reports\\dataset\\ict_dataset.parquet",
+  "n_rows": 19448,
+  "n_features": 31,
+  "target_positive_rate": 0.3977,
+  "model_comparison": {
+    "LogisticRegression": {
+      "mean_auc": 0.689570837142915,
+      "mean_brier": 0.21767790179426819,
+      "mean_precision": 0.5679020189495001,
+      "mean_recall": 0.47570540365559105
+    },
+    "RandomForest": {
+      "mean_auc": 0.7004654310422371,
+      "mean_brier": 0.2125944406033387,
+      "mean_precision": 0.6034236323602418,
+      "mean_recall": 0.42475550261018036
+    },
+    "XGBoost": {
+      "mean_auc": 0.6753509545765422,
+      "mean_brier": 0.23003929829401404,
+      "mean_precision": 0.569618670818422,
+      "mean_recall": 0.46215461739649644
+    }
+  },
+  "best_model": "RandomForest",
+  "lofo_top": [
+    {
+      "feature": "rr_ratio",
+      "delta_auc": 0.009180978749208535,
+      "important": true
+    },
+    {
+      "feature": "tp_distance_pct",
+      "delta_auc": 0.008374376728715771,
+      "important": true
+    },
+    {
+      "feature": "sl_distance_pct",
+      "delta_auc": 0.004597025730466164,
+      "important": false
+    },
+    {
+      "feature": "volume_ratio",
+      "delta_auc": 0.00041256129914946094,
+      "important": false
+    },
+    {
+      "feature": "macd_hist_pct",
+      "delta_auc": 0.00039427397879010506,
+      "important": false
+    },
+    {
+      "feature": "rsi",
+      "delta_auc": 0.0002183975961562723,
+      "important": false
+    },
+    {
+      "feature": "volume_above_avg",
+      "delta_auc": 2.6424403659186524e-05,
+      "important": false
+    },
+    {
+      "feature": "adx",
+      "delta_auc": -1.7337790758742422e-05,
+      "important": false
+    },
+    {
+      "feature": "components_count",
+      "delta_auc": -0.00010935551129043208,
+      "important": false
+    },
+    {
+      "feature": "has_bos",
+      "delta_auc": -0.0001508753940067109,
+      "important": false
+    },
+    {
+      "feature": "has_sweep",
+      "delta_auc": -0.0001508753940067109,
+      "important": false
+    },
+    {
+      "feature": "has_mss",
+      "delta_auc": -0.0001508753940067109,
+      "important": false
+    },
+    {
+      "feature": "sweep_reclaim_speed",
+      "delta_auc": -0.0001508753940067109,
+      "important": false
+    },
+    {
+      "feature": "is_reversal",
+      "delta_auc": -0.0001508753940067109,
+      "important": false
+    },
+    {
+      "feature": "has_ob",
+      "delta_auc": -0.0001771940591124288,
+      "important": false
+    }
+  ],
+  "lofo_baseline_auc": 0.689570837142915,
+  "edge": {
+    "oos_rows": 16205,
+    "baseline_all": {
+      "n": 16205,
+      "wr": 39.8,
+      "pf": 0.894,
+      "expectancy": -0.1476
+    },
+    "bot_passed_risk": {
+      "n": 2085,
+      "wr": 34.0,
+      "pf": 0.905,
+      "expectancy": -0.1449
+    },
+    "per_threshold": [
+      {
+        "threshold": 0.5,
+        "model": {
+          "n": 4537,
+          "wr": 60.3,
+          "pf": 0.931,
+          "expectancy": -0.1238
+        },
+        "rules": {
+          "n": 0,
+          "wr": 0.0,
+          "pf": 0.0,
+          "expectancy": 0.0
+        }
+      },
+      {
+        "threshold": 0.55,
+        "model": {
+          "n": 3037,
+          "wr": 63.5,
+          "pf": 0.922,
+          "expectancy": -0.1425
+        },
+        "rules": {
+          "n": 0,
+          "wr": 0.0,
+          "pf": 0.0,
+          "expectancy": 0.0
+        }
+      },
+      {
+        "threshold": 0.6,
+        "model": {
+          "n": 1802,
+          "wr": 66.9,
+          "pf": 0.986,
+          "expectancy": -0.0239
+        },
+        "rules": {
+          "n": 0,
+          "wr": 0.0,
+          "pf": 0.0,
+          "expectancy": 0.0
+        }
+      },
+      {
+        "threshold": 0.65,
+        "model": {
+          "n": 799,
+          "wr": 70.6,
+          "pf": 1.015,
+          "expectancy": 0.0262
+        },
+        "rules": {
+          "n": 0,
+          "wr": 0.0,
+          "pf": 0.0,
+          "expectancy": 0.0
+        }
+      },
+      {
+        "threshold": 0.7,
+        "model": {
+          "n": 182,
+          "wr": 71.4,
+          "pf": 1.078,
+          "expectancy": 0.1376
+        },
+        "rules": {
+          "n": 0,
+          "wr": 0.0,
+          "pf": 0.0,
+          "expectancy": 0.0
+        }
+      }
+    ]
+  },
+  "calibration": {
+    "ece": 0.0417,
+    "brier": 0.2126
+  }
+}

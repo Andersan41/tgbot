@@ -1,0 +1,77 @@
+{
+  "years_cap": 5.0,
+  "results": [
+    {
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "available": true,
+      "candles": 19497,
+      "earliest": "2024-04-27 10:00:00+00:00",
+      "latest": "2026-07-18 18:00:00+00:00",
+      "depth_days": 812.3,
+      "depth_years": 2.22,
+      "cap_reached": false,
+      "fetch_seconds": 19.6
+    },
+    {
+      "symbol": "BTC/USDT",
+      "timeframe": "15m",
+      "available": true,
+      "candles": 24212,
+      "earliest": "2025-11-08 14:00:00+00:00",
+      "latest": "2026-07-18 18:45:00+00:00",
+      "depth_days": 252.2,
+      "depth_years": 0.69,
+      "cap_reached": false,
+      "fetch_seconds": 24.5
+    },
+    {
+      "symbol": "ETH/USDT",
+      "timeframe": "1h",
+      "available": true,
+      "candles": 19497,
+      "earliest": "2024-04-27 10:00:00+00:00",
+      "latest": "2026-07-18 18:00:00+00:00",
+      "depth_days": 812.3,
+      "depth_years": 2.22,
+      "cap_reached": false,
+      "fetch_seconds": 19.7
+    },
+    {
+      "symbol": "ETH/USDT",
+      "timeframe": "15m",
+      "available": true,
+      "candles": 24212,
+      "earliest": "2025-11-08 14:00:00+00:00",
+      "latest": "2026-07-18 18:45:00+00:00",
+      "depth_days": 252.2,
+      "depth_years": 0.69,
+      "cap_reached": false,
+      "fetch_seconds": 24.5
+    },
+    {
+      "symbol": "SOL/USDT",
+      "timeframe": "1h",
+      "available": true,
+      "candles": 19497,
+      "earliest": "2024-04-27 10:00:00+00:00",
+      "latest": "2026-07-18 18:00:00+00:00",
+      "depth_days": 812.3,
+      "depth_years": 2.22,
+      "cap_reached": false,
+      "fetch_seconds": 19.5
+    },
+    {
+      "symbol": "SOL/USDT",
+      "timeframe": "15m",
+      "available": true,
+      "candles": 24212,
+      "earliest": "2025-11-08 14:00:00+00:00",
+      "latest": "2026-07-18 18:45:00+00:00",
+      "depth_days": 252.2,
+      "depth_years": 0.69,
+      "cap_reached": false,
+      "fetch_seconds": 24.9
+    }
+  ]
+}

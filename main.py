@@ -138,7 +138,10 @@ async def main():
         # Retry polling start to handle Telegram server lingering sessions
         for attempt in range(1, 6):
             try:
-                await app.updater.start_polling(drop_pending_updates=True)
+                await app.updater.start_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=["message", "callback_query"],
+                )
                 break
             except Exception as e:
                 if "Conflict" in str(e) and attempt < 5:

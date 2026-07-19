@@ -37,17 +37,10 @@ from backtest.engine import (
     BacktestEngine,
     BacktestResult,
     FunnelData,
-    _compute_regime,
-    get_preset_config,
-)
-from backtest.funnel import (
     FUNNEL_STEPS,
     BACKTEST_ACTIVE,
-    FunnelData as _fd,
-    aggregate_funnel,
-    build_funnel_table,
-    print_funnel_table,
-    save_funnel_json,
+    _compute_regime,
+    get_preset_config,
 )
 from config.settings import config
 from indicators.engine import IndicatorEngine, IndicatorValues
@@ -88,6 +81,78 @@ FULL_NEW_FLAGS: dict[str, bool] = {
 
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "funnel"
 FUNNEL_OUTPUT_PATH = REPORTS_DIR / "funnel_full_new1.json"
+
+
+# ── Aggregation helpers ──────────────────────────────────────────────────
+
+def aggregate_funnel(all_data: list[FunnelData]) -> dict:
+    """Aggregate per-symbol FunnelData into a single summary dict."""
+    steps: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
+    total_signals = 0
+    total_passed = 0
+    signal_engine_scores: dict[str, int] = {}
+
+    for fd in all_data:
+        for step, count in fd.steps.items():
+            if step in steps:
+                steps[step] += count
+        total_signals += fd.total_signals_processed
+        total_passed += fd.steps.get("PASSED", 0)
+        # collect score distribution
+        for key, val in fd.steps.items():
+            if key.startswith("SCORE_"):
+                signal_engine_scores[key] = signal_engine_scores.get(key, 0) + val
+
+    total_stopped = total_signals - total_passed
+    return {
+        "steps": steps,
+        "total_signals": total_signals,
+        "total_passed": total_passed,
+        "total_stopped": total_stopped,
+        "signal_engine_score_distribution": signal_engine_scores,
+    }
+
+
+def build_funnel_table(agg: dict) -> list[tuple[str, int, float, float]]:
+    """Build table rows from aggregated funnel data."""
+    total = agg["total_signals"]
+    rows = []
+    cumulative = total
+    for step in FUNNEL_STEPS:
+        count = agg["steps"].get(step, 0)
+        pct_total = count / total * 100 if total > 0 else 0
+        pct_prev = count / cumulative * 100 if cumulative > 0 else 0
+        if step != "PASSED":
+            cumulative -= count
+        rows.append((step, count, pct_total, pct_prev))
+    return rows
+
+
+def print_funnel_table(rows: list[tuple[str, int, float, float]]) -> None:
+    """Print a funnel table from rows."""
+    print(f"\n  {'Step':<25} {'Count':>8} {'% of total':>12} {'% pass-through':>15}")
+    print(f"  {'-'*25} {'-'*8} {'-'*12} {'-'*15}")
+    for step, count, pct_total, pct_prev in rows:
+        print(f"  {step:<25} {count:>8,} {pct_total:>11.1f}% {pct_prev:>14.1f}%")
+
+
+def save_funnel_json(all_data: list[FunnelData], agg: dict, path: Path) -> None:
+    """Save raw funnel data and aggregation to JSON."""
+    payload = {
+        "aggregated": {
+            "steps": agg["steps"],
+            "total_signals": agg["total_signals"],
+            "total_passed": agg["total_passed"],
+            "total_stopped": agg["total_stopped"],
+        },
+        "symbols": [
+            {"symbol": fd.symbol, "steps": fd.steps, "total_signals_processed": fd.total_signals_processed}
+            for fd in all_data
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)
 
 
 # ── Per-symbol analysis ──────────────────────────────────────────────────

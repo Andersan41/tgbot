@@ -60,7 +60,6 @@ class SimplifiedConfig:
 
     # scanner gates
     confirm_tf_enabled: bool = True
-    distance_filter_enabled: bool = True
     tp_path_enabled: bool = False       # Keep disabled by default (needs SR data)
     mtf_enabled: bool = True
 
@@ -71,9 +70,7 @@ class SimplifiedConfig:
 
     # risk
     volatility_filter_enabled: bool = True
-    no_trade_zones_enabled: bool = False   # REMOVED: most checks redundant/unreachable
     dynamic_risk_enabled: bool = True
-    news_filter_enabled: bool = False      # REMOVED: stub
 
     # context
     context_enabled: bool = True
@@ -93,16 +90,13 @@ class SimplifiedConfig:
             "MIN_SCORE_ENABLED": str(self.min_score_enabled).lower(),
             "COMPRESSION_ENABLED": str(self.compression_enabled).lower(),
             "CONFIRM_TF_ENABLED": str(self.confirm_tf_enabled).lower(),
-            "DISTANCE_FILTER_ENABLED": str(self.distance_filter_enabled).lower(),
             "TP_PATH_ENABLED": str(self.tp_path_enabled).lower(),
             "MTF_ENABLED": str(self.mtf_enabled).lower(),
             "BTC_CORRELATION_ENABLED": str(self.btc_correlation_enabled).lower(),
             "BTC_GLOBAL_TREND_FILTER": str(self.btc_global_trend_filter).lower(),
             "ETH_CORRELATION_ENABLED": str(self.eth_correlation_enabled).lower(),
             "VOLATILITY_FILTER_ENABLED": str(self.volatility_filter_enabled).lower(),
-            "NO_TRADE_ZONES_ENABLED": str(self.no_trade_zones_enabled).lower(),
             "DYNAMIC_RISK_ENABLED": str(self.dynamic_risk_enabled).lower(),
-            "NEWS_FILTER_ENABLED": str(self.news_filter_enabled).lower(),
             "CONTEXT_MIN_VERDICT": self.context_min_verdict,
             "CONTEXT_BLOCK_ON_BLOCKED": str(self.context_block_on_blocked).lower(),
         }
@@ -137,6 +131,8 @@ class SimplifiedConfig:
             ("candle_close", "weak predictor"),
             ("min_score", "weak predictor"),
             ("news", "stub, never blocks"),
+            ("distance_filter", "never called from scanner"),
+            ("require_ob_or_fvg", "dead config, never read"),
         ]:
             lines.append(f"    - {name}: {reason}")
 
@@ -147,10 +143,9 @@ class SimplifiedConfig:
 PRESETS = {
     "simplified": SimplifiedConfig(),
     "aggressive": SimplifiedConfig(
-        # Even more aggressive: remove MTF, ETH, distance
+        # Even more aggressive: remove MTF, ETH, confirm_tf
         mtf_enabled=False,
         eth_correlation_enabled=False,
-        distance_filter_enabled=False,
         confirm_tf_enabled=False,
     ),
 }

@@ -359,17 +359,8 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             trace.passed("sweep_required")
             _current_funnel.log_gate(symbol, timeframe, "sweep_required", "PASS")
 
-            # Displacement gate is opt-out (config.reversal_require_displacement, default True).
-            # The pattern engine treats displacement as informational (sweep + MSS already gate
-            # the reversal); requiring the CURRENT candle to be a displacement candle is an extra
-            # filter that can be disabled to recover reversal setups.
-            if config.reversal_require_displacement and not setup.has_displacement:
-                reason = "reversal: no displacement"
-                _current_funnel.log_gate(symbol, timeframe, "displacement_gate", "BLOCKED", reason)
-                trace.blocked("displacement_gate", reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                return None
+            # Displacement is informational — MSS already validates displacement between
+            # sweep and CHoCH. Requiring the CURRENT candle to be displacement is redundant.
             trace.passed("displacement_gate")
             _current_funnel.log_gate(symbol, timeframe, "displacement_gate", "PASS")
 

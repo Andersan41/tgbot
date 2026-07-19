@@ -352,11 +352,6 @@ class TestNewsFilterExclusion:
         events = asyncio.get_event_loop().run_until_complete(fetch_macro_events())
         assert events == []
 
-    def test_news_filter_disabled_by_default(self):
-        """news_filter_enabled defaults to False."""
-        assert config.risk.news_filter_enabled is False
-
-
 class TestPipelineStepOrder:
     """Verify the backtest engine applies steps in the same order as scanner.py."""
 

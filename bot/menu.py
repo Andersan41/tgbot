@@ -145,165 +145,176 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = query.message.chat_id
     message_id = query.message.message_id
 
+    logger.info(f"CALLBACK received: data={data} chat={chat_id}")
+
     from bot.rate_limit import get_limiter
     limiter = get_limiter(update.effective_user.id)
     if not limiter.has_capacity():
+        logger.info(f"CALLBACK rate-limited: data={data}")
         await query.answer("⏳ Слишком часто, подожди 10 секунд", show_alert=True)
         return
 
     await query.answer()
+    logger.info(f"CALLBACK processing: data={data}")
 
-    async with limiter:
-        if data == "m:back":
-            await send_main_menu(update, context, edit=True)
-            return
+    try:
+        async with limiter:
+            if data == "m:back":
+                await send_main_menu(update, context, edit=True)
+                return
 
-        if data == "m:analyze":
-            kb = token_list_keyboard("analyze")
-            await query.edit_message_text(
-                "✏️ Введите тикер токена (например: <b>BTC</b> или <b>BTCUSDT</b>):\n\n"
-                "Или выберите из списка ниже:",
-                reply_markup=kb, parse_mode=ParseMode.HTML
-            )
-            return
-
-        if data == "m:custom_token":
-            WAITING[chat_id] = "analyze"
-            await query.edit_message_text(
-                "✏️ <b>Анализ своего токена</b>\n\n"
-                "Введите тикер токена, например:\n"
-                "  • <code>BTC</code>\n"
-                "  • <code>BTCUSDT</code>\n"
-                "  • <code>ETH/USDT</code>\n\n"
-                "Если не указана пара — добавится /USDT.",
-                reply_markup=back_keyboard(), parse_mode=ParseMode.HTML
-            )
-            return
-
-        if data == "m:custom_token_indicators":
-            WAITING[chat_id] = "indicators"
-            await query.edit_message_text(
-                "✏️ <b>Индикаторы своего токена</b>\n\n"
-                "Введите тикер токена, например:\n"
-                "  • <code>BTC</code>\n"
-                "  • <code>BTCUSDT</code>\n"
-                "  • <code>ETH/USDT</code>\n\n"
-                "Если не указана пара — добавится /USDT.",
-                reply_markup=back_keyboard(), parse_mode=ParseMode.HTML
-            )
-            return
-
-        if data == "m:pick_token":
-            await query.edit_message_text(
-                "✏️ Введите тикер токена (например: <b>BTC</b> или <b>BTCUSDT</b>):\n\n"
-                "Или выберите из списка ниже:",
-                reply_markup=token_list_keyboard("token"), parse_mode=ParseMode.HTML
-            )
-            return
-
-        if data == "m:scan_all":
-            await query.edit_message_text(
-                f"⏳ Полный анализ {len(get_active_symbols())} токенов…",
-                reply_markup=None
-            )
-            text = await _do_scan_all()
-            await query.edit_message_text(text, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
-            return
-
-        if data == "m:settings":
-            text = _format_settings()
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔧 Фильтры сигналов", callback_data="m:sf")],
-                [InlineKeyboardButton("📐 Параметры индикаторов", callback_data="m:sf_params_list")],
-                [InlineKeyboardButton("◀️ Главное меню", callback_data="m:back")],
-            ])
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data == "m:open_trades":
-            from storage.database import db
-            trades = await db.get_open_trades_with_signals()
-            if not trades:
-                text = "📂 <b>Открытые сделки</b>\n\nНет открытых сделок."
-            else:
-                lines = [f"📂 <b>Открытые сделки: {len(trades)}</b>\n"]
-                for i, t in enumerate(trades, 1):
-                    signal_icon = "🟢" if t["signal_type"] == "BUY" else "🔴"
-                    sent = t.get("sent_at", "")[:16] if t.get("sent_at") else "—"
-                    lines.append(
-                        f"{i}. {signal_icon} <b>{t['symbol']}</b> {t['timeframe']} "
-                        f"| Entry: <code>{_fmt_price(t['entry'])}</code> "
-                        f"| SL: <code>{_fmt_price(t['sl'])}</code> "
-                        f"| TP: <code>{_fmt_price(t['tp'])}</code> "
-                        f"| {sent}"
-                    )
-                text = "\n".join(lines)
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("◀️ Главное меню", callback_data="m:back")]
-            ])
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data == "m:sf":
-            text, kb = _format_filters_list()
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data == "m:sf_params_list":
-            text, kb = _format_indicator_params()
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data.startswith("m:sf_toggle:"):
-            key = data.split(":", 2)[2]
-            await _handle_filter_toggle(key)
-            text, kb = _format_filters_list()
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data.startswith("m:sf_detail:"):
-            key = data.split(":", 2)[2]
-            text, kb = _format_filter_detail(key)
-            await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-
-        if data.startswith("m:sf_param_set:"):
-            key = data.split(":", 2)[2]
-            WAITING[chat_id] = f"sf_param:{key}"
-            label = FILTER_PARAM_KEYS.get(key, (key, str))[0].split(".")[-1]
-            await query.edit_message_text(
-                f"✏️ Введите новое значение для <b>{label}</b>:\n\n"
-                f"Текущее: <code>{_get_nested_config(config, FILTER_PARAM_KEYS[key][0])}</code>",
-                reply_markup=_settings_back_kb(), parse_mode=ParseMode.HTML
-            )
-            return
-
-        if data.startswith("analyze:"):
-            symbol = data.split(":", 1)[1]
-            await query.edit_message_text(
-                f"⏳ Анализирую <b>{symbol}</b>…", parse_mode=ParseMode.HTML
-            )
-            result = await _do_full_analysis(symbol)
-            try:
-                await query.edit_message_text(result, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
-            except Exception as e:
-                logger.error(f"HTML edit error for {symbol}: {e}")
-                logger.error(f"Result text (first 500 chars): {result[:500]}")
-                safe_text = result.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;").replace('"', "&quot;")
+            if data == "m:analyze":
+                kb = token_list_keyboard("analyze")
                 await query.edit_message_text(
-                    safe_text,
+                    "✏️ Введите тикер токена (например: <b>BTC</b> или <b>BTCUSDT</b>):\n\n"
+                    "Или выбберите из списка ниже:",
+                    reply_markup=kb, parse_mode=ParseMode.HTML
+                )
+                return
+
+            if data == "m:custom_token":
+                WAITING[chat_id] = "analyze"
+                await query.edit_message_text(
+                    "✏️ <b>Анализ своего токена</b>\n\n"
+                    "Введите тикер токена, например:\n"
+                    "  • <code>BTC</code>\n"
+                    "  • <code>BTCUSDT</code>\n"
+                    "  • <code>ETH/USDT</code>\n\n"
+                    "Если не указана пара — добавится /USDT.",
                     reply_markup=back_keyboard(), parse_mode=ParseMode.HTML
                 )
-            return
+                return
 
-        if data.startswith("token:"):
-            symbol = data.split(":", 1)[1]
-            await query.edit_message_text(
-                f"⏳ Индикаторы для <b>{symbol}</b>…", parse_mode=ParseMode.HTML
-            )
-            text = await _indicator_view(symbol)
-            await query.edit_message_text(text, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
-            return
+            if data == "m:custom_token_indicators":
+                WAITING[chat_id] = "indicators"
+                await query.edit_message_text(
+                    "✏️ <b>Индикаторы своего токена</b>\n\n"
+                    "Введите тикер токена, например:\n"
+                    "  • <code>BTC</code>\n"
+                    "  • <code>BTCUSDT</code>\n"
+                    "  • <code>ETH/USDT</code>\n\n"
+                    "Если не указана пара — добавится /USDT.",
+                    reply_markup=back_keyboard(), parse_mode=ParseMode.HTML
+                )
+                return
+
+            if data == "m:pick_token":
+                await query.edit_message_text(
+                    "✏️ Введите тикер токена (например: <b>BTC</b> или <b>BTCUSDT</b>):\n\n"
+                    "Или выбберите из списка ниже:",
+                    reply_markup=token_list_keyboard("token"), parse_mode=ParseMode.HTML
+                )
+                return
+
+            if data == "m:scan_all":
+                await query.edit_message_text(
+                    f"⏳ Полный анализ {len(get_active_symbols())} токенов…",
+                    reply_markup=None
+                )
+                text = await _do_scan_all()
+                await query.edit_message_text(text, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
+                return
+
+            if data == "m:settings":
+                text = _format_settings()
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔧 Фильтры сигналов", callback_data="m:sf")],
+                    [InlineKeyboardButton("📐 Параметры индикаторов", callback_data="m:sf_params_list")],
+                    [InlineKeyboardButton("◀️ Главное меню", callback_data="m:back")],
+                ])
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data == "m:open_trades":
+                from storage.database import db
+                trades = await db.get_open_trades_with_signals()
+                if not trades:
+                    text = "📂 <b>Открытые сделки</b>\n\nНет открытых сделок."
+                else:
+                    lines = [f"📂 <b>Открытые сделки: {len(trades)}</b>\n"]
+                    for i, t in enumerate(trades, 1):
+                        signal_icon = "🟢" if t["signal_type"] == "BUY" else "🔴"
+                        sent = t.get("sent_at", "")[:16] if t.get("sent_at") else "—"
+                        lines.append(
+                            f"{i}. {signal_icon} <b>{t['symbol']}</b> {t['timeframe']} "
+                            f"| Entry: <code>{_fmt_price(t['entry'])}</code> "
+                            f"| SL: <code>{_fmt_price(t['sl'])}</code> "
+                            f"| TP: <code>{_fmt_price(t['tp'])}</code> "
+                            f"| {sent}"
+                        )
+                    text = "\n".join(lines)
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Главное меню", callback_data="m:back")]
+                ])
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data == "m:sf":
+                text, kb = _format_filters_list()
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data == "m:sf_params_list":
+                text, kb = _format_indicator_params()
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data.startswith("m:sf_toggle:"):
+                key = data.split(":", 2)[2]
+                await _handle_filter_toggle(key)
+                text, kb = _format_filters_list()
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data.startswith("m:sf_detail:"):
+                key = data.split(":", 2)[2]
+                text, kb = _format_filter_detail(key)
+                await query.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                return
+
+            if data.startswith("m:sf_param_set:"):
+                key = data.split(":", 2)[2]
+                WAITING[chat_id] = f"sf_param:{key}"
+                label = FILTER_PARAM_KEYS.get(key, (key, str))[0].split(".")[-1]
+                await query.edit_message_text(
+                    f"✏️ Введите новое значение для <b>{label}</b>:\n\n"
+                    f"Текущее: <code>{_get_nested_config(config, FILTER_PARAM_KEYS[key][0])}</code>",
+                    reply_markup=_settings_back_kb(), parse_mode=ParseMode.HTML
+                )
+                return
+
+            if data.startswith("analyze:"):
+                symbol = data.split(":", 1)[1]
+                await query.edit_message_text(
+                    f"⏳ Анализирую <b>{symbol}</b>…", parse_mode=ParseMode.HTML
+                )
+                result = await _do_full_analysis(symbol)
+                try:
+                    await query.edit_message_text(result, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
+                except Exception as e:
+                    logger.error(f"HTML edit error for {symbol}: {e}")
+                    safe_text = result.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    await query.edit_message_text(
+                        safe_text,
+                        reply_markup=back_keyboard(), parse_mode=ParseMode.HTML
+                    )
+                return
+
+            if data.startswith("token:"):
+                symbol = data.split(":", 1)[1]
+                await query.edit_message_text(
+                    f"⏳ Индикаторы для <b>{symbol}</b>…", parse_mode=ParseMode.HTML
+                )
+                text = await _indicator_view(symbol)
+                await query.edit_message_text(text, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
+                return
+
+    except Exception as e:
+        logger.error(f"CALLBACK ERROR: data={data} error={e}")
+        try:
+            await query.answer("⚠️ Ошибка обработки", show_alert=True)
+        except Exception:
+            pass
 
 
 async def handle_menu_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -458,7 +469,6 @@ def _format_indicator_params() -> tuple[str, InlineKeyboardMarkup]:
 
 FILTER_META: dict[str, dict] = {
     "context":         {"label": "Контекст",           "group": "scanner"},
-    "confidence_v2":   {"label": "Confidence V2",      "group": "scanner"},
     "dynamic_risk":    {"label": "Dynamic risk",       "group": "scanner"},
     "signal_block":    {"label": "Block Notify",        "group": "scanner"},
 }

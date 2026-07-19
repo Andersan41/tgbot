@@ -39,10 +39,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_main_menu(update, context)
 
 
+async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_main_menu(update, context)
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "📖 <b>Справка</b>\n\n"
-        "<b>/start</b> — приветствие\n"
+        "<b>/start</b> — главное меню\n"
+        "<b>/menu</b> — главное меню\n"
         "<b>/status</b> — состояние сканера\n"
         "<b>/lastsignal</b> — последние 5 сигналов\n"
         "<b>/symbols</b> — отслеживаемые символы\n"
@@ -104,17 +109,29 @@ async def cmd_symbols(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @_admin_only
 async def cmd_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ручной запуск сканирования"""
+    """Ручной запуск сканирования. /scan — все токены, /scan ZRO — один токен."""
     from scheduler.scanner import run_scan_cycle
     from bot.notifier import send_signal, send_signal_blocked
 
-    await update.message.reply_text("🔍 Запускаю сканирование...")
-    try:
-        await run_scan_cycle(send_signal, blocked_callback=send_signal_blocked)
-        await update.message.reply_text("✅ Сканирование завершено.")
-    except Exception as e:
-        logger.error(f"Manual scan error: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+    if context.args:
+        raw = context.args[0].upper().strip()
+        symbol = raw if "/" in raw else f"{raw}/USDT"
+        await update.message.reply_text(f"🔍 Анализирую <b>{symbol}</b>…", parse_mode=ParseMode.HTML)
+        try:
+            from bot.menu import _do_full_analysis
+            result = await _do_full_analysis(symbol)
+            await update.message.reply_text(result, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Single scan error for {symbol}: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+    else:
+        await update.message.reply_text("🔍 Запускаю сканирование...")
+        try:
+            await run_scan_cycle(send_signal, blocked_callback=send_signal_blocked)
+            await update.message.reply_text("✅ Сканирование завершено.")
+        except Exception as e:
+            logger.error(f"Manual scan error: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
 @_admin_only
@@ -142,6 +159,7 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def register_handlers(app: Application):
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("lastsignal", cmd_lastsignal))

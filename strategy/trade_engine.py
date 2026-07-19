@@ -191,22 +191,30 @@ class TradeEngine:
             atr=atr,
             liq_map=liq_map,
             invalidation_level=invalidation.level,
+            atr_tp=atr_tp,
+        )
+
+        # Diagnostic: log liquidity map composition
+        _liq_above = len(liq_map.targets_above)
+        _liq_below = len(liq_map.targets_below)
+        _liq_total = len(liq_map.levels)
+        _eq_count = len(liq_map.equal_levels)
+        _ext_count = len(liq_map.external_levels)
+        _sweep_count = len([l for l in liq_map.levels if l.type.startswith("swept")])
+        _ob_count = len([l for l in liq_map.levels if l.type.startswith("ob_")])
+        _fvg_count = len([l for l in liq_map.levels if l.type.startswith("fvg_")])
+        logger.debug(
+            f"Liquidity map: {_liq_total} levels "
+            f"(eq={_eq_count} ext={_ext_count} sweep={_sweep_count} ob={_ob_count} fvg={_fvg_count}) "
+            f"above={_liq_above} below={_liq_below}"
         )
 
         if not targets:
-            # No valid targets — use ATR fallback
-            if signal == SignalType.BUY:
-                tp = round(entry + atr * atr_tp, 8)
-            else:
-                tp = round(entry - atr * atr_tp, 8)
-            targets = [TargetScore(
-                level=tp,
-                type="atr",
-                strength=0.3,
-                distance_pct=abs(tp - entry) / entry * 100,
-                rr_ratio=abs(tp - entry) / abs(entry - sl) if abs(entry - sl) > 0 else 0,
-                source_label="ATR fallback",
-            )]
+            # No valid targets — _find_targets already added ATR fallback
+            logger.debug(
+                f"No liquidity targets found for {direction} at {entry:.4f} "
+                f"(liq_map has {_liq_total} levels, above={_liq_above} below={_liq_below})"
+            )
 
         # ═══ Step 4: Choose Best Target ═══
 
@@ -263,6 +271,7 @@ class TradeEngine:
         atr: float,
         liq_map: LiquidityMap,
         invalidation_level: float,
+        atr_tp: float,
     ) -> list[TargetScore]:
         """Find and score all potential TP targets.
 
@@ -288,23 +297,25 @@ class TradeEngine:
         }
 
         targets = []
-        min_distance = atr * 1.0  # minimum TP distance = 1 ATR
+        min_distance = atr * 0.5  # minimum TP distance = 0.5 ATR (relaxed from 1.0)
 
         if signal == SignalType.BUY:
             candidates = liq_map.targets_above
         else:
             candidates = liq_map.targets_below
 
+        _filtered_close = 0
         for level in candidates:
             dist = abs(level.level - entry)
             if dist < min_distance:
+                _filtered_close += 1
                 continue  # too close
 
             # Distance as %
             dist_pct = dist / entry * 100
 
             # RR if this is the target
-            sl_dist = abs(entry - (liq_map.current_price - atr * 1.5))  # approximate
+            sl_dist = abs(entry - invalidation_level)
             rr = dist / max(sl_dist, atr * 0.5)
 
             # Path clarity (simplified — check if any opposing levels in between)
@@ -322,6 +333,31 @@ class TradeEngine:
                 rr_ratio=round(rr, 2),
                 path_clear=path_clear,
                 source_label=f"{level.type} @ {level.level:.4f}",
+            ))
+
+        if not targets and candidates:
+            logger.debug(
+                f"No targets passed min_distance filter: "
+                f"{len(candidates)} candidates, {_filtered_close} too close "
+                f"(min={min_distance:.2f}, entry={entry:.4f})"
+            )
+
+        # ATR fallback: if no liquidity targets found, use ATR-scaled targets
+        if not targets:
+            if signal == SignalType.BUY:
+                tp_atr = round(entry + atr * atr_tp, 8)
+            else:
+                tp_atr = round(entry - atr * atr_tp, 8)
+            sl_dist = abs(entry - invalidation_level)
+            rr_atr = abs(tp_atr - entry) / max(sl_dist, atr * 0.5)
+            targets.append(TargetScore(
+                level=tp_atr,
+                type="atr",
+                strength=0.3,
+                distance_pct=round(abs(tp_atr - entry) / entry * 100, 2),
+                rr_ratio=round(rr_atr, 2),
+                path_clear=True,
+                source_label=f"ATR fallback ({atr_tp}x)",
             ))
 
         return targets

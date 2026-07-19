@@ -125,17 +125,26 @@ class TestRejectStats:
     def test_defaults(self):
         rs = RejectStats()
         assert rs.total_rejected == 0
-        assert rs.rr_rejected == 0
+        assert rs.no_pattern == 0
+        assert rs.setup_type_gate == 0
+        assert rs.htf_bias_blocked == 0
+        assert rs.risk_engine_rejected == 0
 
     def test_tracking(self):
         rs = RejectStats()
-        rs.rr_rejected += 1
+        rs.no_pattern += 1
         rs.total_rejected += 1
-        rs.sl_distance_rejected += 2
+        rs.setup_type_gate += 2
         rs.total_rejected += 2
-        assert rs.total_rejected == 3
-        assert rs.rr_rejected == 1
-        assert rs.sl_distance_rejected == 2
+        rs.htf_bias_blocked += 1
+        rs.total_rejected += 1
+        rs.risk_engine_rejected += 1
+        rs.total_rejected += 1
+        assert rs.total_rejected == 5
+        assert rs.no_pattern == 1
+        assert rs.setup_type_gate == 2
+        assert rs.htf_bias_blocked == 1
+        assert rs.risk_engine_rejected == 1
 
 
 class TestBacktestResult:
@@ -180,7 +189,7 @@ class TestMetrics:
             )
             for i in range(5)
         ]
-        rs = RejectStats(rr_rejected=3, total_rejected=3)
+        rs = RejectStats(no_pattern=3, total_rejected=3)
         result = engine._build_result(trades, signals_count=8, reject_stats=rs, total_candles=300)
         assert result.total_trades == 5
         assert result.wins == 3
@@ -296,52 +305,33 @@ class TestNetPnl:
 class TestBacktestConfig:
     """Test BacktestConfig feature flags and presets."""
 
-    def test_default_config_all_true(self):
-        """Default BacktestConfig has all flags True (= FULL behavior)."""
+    def test_default_config(self):
+        """Default BacktestConfig has pipeline gates enabled."""
         cfg = BacktestConfig()
-        assert cfg.enable_unified_entry is True
-        assert cfg.enable_structural_sl is True
-        assert cfg.enable_sl_distance_guard is True
-        assert cfg.enable_rr_filter is True
-        assert cfg.enable_news_filter is True
-        assert cfg.enable_stop_hunt_buffer is True
+        assert cfg.enable_pattern_engine_gates is True
+        assert cfg.enable_probability_gate is False
+        assert cfg.enable_htf_bias_gate is False
 
-    def test_baseline_preset_all_false(self):
-        """Baseline preset has all flags False."""
+    def test_baseline_preset(self):
+        """Baseline preset disables all gates."""
         cfg = get_preset_config("baseline")
-        assert cfg.enable_unified_entry is False
-        assert cfg.enable_structural_sl is False
-        assert cfg.enable_sl_distance_guard is False
-        assert cfg.enable_rr_filter is False
-        assert cfg.enable_news_filter is False
-        assert cfg.enable_stop_hunt_buffer is False
+        assert cfg.enable_pattern_engine_gates is False
+        assert cfg.enable_probability_gate is False
+        assert cfg.enable_htf_bias_gate is False
 
-    def test_task2_only_preset(self):
-        """Task2_only: structural SL=True, buffer=False, rest=False."""
-        cfg = get_preset_config("task2_only")
-        assert cfg.enable_structural_sl is True
-        assert cfg.enable_stop_hunt_buffer is False
-        assert cfg.enable_unified_entry is False
-        assert cfg.enable_sl_distance_guard is False
-        assert cfg.enable_rr_filter is False
-
-    def test_task6_only_preset_couples_structural_sl(self):
-        """Task6_only: buffer requires structural SL (coupled)."""
-        cfg = get_preset_config("task6_only")
-        assert cfg.enable_structural_sl is True
-        assert cfg.enable_stop_hunt_buffer is True
-
-    def test_full_preset_all_true(self):
-        """Full preset has all flags True."""
+    def test_full_preset(self):
+        """Full preset enables pattern engine gates."""
         cfg = get_preset_config("full")
-        assert all([
-            cfg.enable_unified_entry,
-            cfg.enable_structural_sl,
-            cfg.enable_sl_distance_guard,
-            cfg.enable_rr_filter,
-            cfg.enable_news_filter,
-            cfg.enable_stop_hunt_buffer,
-        ])
+        assert cfg.enable_pattern_engine_gates is True
+        assert cfg.enable_probability_gate is False
+        assert cfg.enable_htf_bias_gate is False
+
+    def test_optimized_preset(self):
+        """Optimized preset enables all gates."""
+        cfg = get_preset_config("optimized")
+        assert cfg.enable_pattern_engine_gates is True
+        assert cfg.enable_probability_gate is True
+        assert cfg.enable_htf_bias_gate is True
 
     def test_unknown_preset_raises(self):
         """Unknown preset name raises ValueError."""
@@ -349,38 +339,33 @@ class TestBacktestConfig:
             get_preset_config("nonexistent")
 
     def test_all_presets_exist(self):
-        """All 9 expected presets are defined."""
-        expected = {"baseline", "task1_only", "confirm_tf_only", "task2_only", "task3_only",
-                    "task4_only", "task5_only", "task6_only", "full"}
+        """Expected presets are defined."""
+        expected = {"baseline", "full", "optimized"}
         assert set(PRESETS.keys()) == expected
 
     def test_engine_accepts_bt_config(self):
         """BacktestEngine accepts BacktestConfig parameter."""
-        cfg = BacktestConfig(enable_structural_sl=False)
+        cfg = BacktestConfig(enable_pattern_engine_gates=False)
         engine = BacktestEngine(bt_config=cfg)
-        assert engine.bt_config.enable_structural_sl is False
+        assert engine.bt_config.enable_pattern_engine_gates is False
 
     def test_engine_default_config(self):
         """BacktestEngine uses default BacktestConfig when none provided."""
         engine = BacktestEngine()
-        assert engine.bt_config.enable_structural_sl is True
+        assert engine.bt_config.enable_pattern_engine_gates is True
 
     def test_each_flag_independently_affects_behavior(self):
         """Each flag can be toggled independently without affecting others."""
         base = BacktestConfig()
-        # Toggle each flag one at a time
         for field_name in [
-            "enable_unified_entry", "enable_structural_sl",
-            "enable_sl_distance_guard", "enable_rr_filter",
-            "enable_news_filter", "enable_stop_hunt_buffer",
+            "enable_pattern_engine_gates", "enable_probability_gate",
+            "enable_htf_bias_gate",
         ]:
-            cfg = BacktestConfig(**{field_name: False})
-            assert getattr(cfg, field_name) is False
-            # All other flags remain True
+            cfg = BacktestConfig(**{field_name: not getattr(base, field_name)})
+            assert getattr(cfg, field_name) is not getattr(base, field_name)
             for other in [
-                "enable_unified_entry", "enable_structural_sl",
-                "enable_sl_distance_guard", "enable_rr_filter",
-                "enable_news_filter", "enable_stop_hunt_buffer",
+                "enable_pattern_engine_gates", "enable_probability_gate",
+                "enable_htf_bias_gate",
             ]:
                 if other != field_name:
-                    assert getattr(cfg, other) is True, f"{other} changed when toggling {field_name}"
+                    assert getattr(cfg, other) is getattr(base, other), f"{other} changed when toggling {field_name}"

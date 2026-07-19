@@ -1,26 +1,23 @@
 """
 backtest/engine.py — Consolidated backtest engine with full parity to live pipeline.
 
-Implements all 6 tasks from the audit:
-  1. Regime detection via RegimeDetector (risk/market_regime.py)
-  2. Structural SL/TP via calculate_structural_sl/tp (risk/dynamic_risk.py)
-  3. Stop hunt buffer
-  4. SL distance guard (min/max)
-  5. RR filter
-  6. News filter (documented exclusion — no historical data)
+Pipeline: Pattern Engine → Feature Builder → Probability Engine → Risk Engine
 
-Additional parity features:
-  - Confirmation timeframe logic
+Features:
+  - ICT setup detection via PatternEngine
+  - Liquidity-first SL/TP via TradeEngine
+  - Feature collection via FeatureBuilder
+  - P(TP) estimation via ProbabilityEngine
+  - Capital protection + position sizing via RiskEngine
   - Commission & slippage modeling
   - Reject-reason tracking
-  - Telegram output (from backtest_zro.py)
+  - Telegram output
 
 Usage:
     python -m backtest.engine BTC/USDT 1h 336
     python -m backtest.engine BTC/USDT 1h 336 --telegram
     python -m backtest.engine BTC/USDT 1h 336 --market future
     python -m backtest.engine BTC/USDT 1h 336 --preset baseline
-    python -m backtest.engine BTC/USDT 1h 336 --preset task2_only
     python -m backtest.engine BTC/USDT 1h 336 --preset full
 """
 from __future__ import annotations
@@ -43,13 +40,20 @@ from loguru import logger
 from config.settings import config
 from data.exchange_client import exchange_client
 from indicators.engine import IndicatorEngine, IndicatorValues
-from strategy.signal_engine import signal_engine, SignalType, SignalResult
+from strategy.signal_engine import SignalType, SignalResult
+from strategy.pattern_engine import pattern_engine, ICTSetup
+from strategy.feature_builder import feature_builder, SetupFeatures
+from strategy.probability_engine import probability_engine, TradeProbability
+from strategy.trade_engine import trade_engine
+from risk.engine import risk_engine, PortfolioState, RiskDecision
 from risk.market_regime import RegimeDetector, MarketRegime
-from risk.dynamic_risk import calculate_structural_sl, calculate_structural_tp
+from risk.volatility_regime import classify_volatility, VolatilityRegime
 from liquidity.sweep import detect_sweeps
 from liquidity.order_blocks import detect_order_blocks
 from liquidity.fvg import detect_fvg
+from liquidity.candle_quality import analyze_last_candle
 from market_structure.structure import analyze_structure
+from market_structure.htf_bias_v2 import get_htf_bias_v2, HTFBiasResult
 
 
 # ---------------------------------------------------------------------------
@@ -79,25 +83,21 @@ class BacktestTrade:
     signal_score: int = 0
     confidence: float = 0.0
     reasons: list[str] = field(default_factory=list)
-    # Enriched factor data (for dataset / factor importance)
-    factor_strengths: dict = field(default_factory=dict)
-    factor_present: dict = field(default_factory=dict)
-    verdict: str = ""
-    confidence_v2_score: float = 0.0
-    confidence_v2_quality: str = ""
-    sl_distance_pct: float = 0.0
-    theoretical_rr: float = 0.0
+    # New pipeline fields
+    p_tp: float = 0.0
+    risk_pct: float = 0.0
+    setup_type: str = ""
+    components: list[str] = field(default_factory=list)
 
 
 @dataclass
 class RejectStats:
     """Tracks signal rejection reasons."""
     total_rejected: int = 0
-    rr_rejected: int = 0
-    sl_distance_rejected: int = 0
-    news_rejected: int = 0
-    confirm_tf_rejected: int = 0
-    sell_sweep_rejected: int = 0
+    no_pattern: int = 0
+    setup_type_gate: int = 0
+    htf_bias_blocked: int = 0
+    risk_engine_rejected: int = 0
     other_rejected: int = 0
 
 
@@ -107,53 +107,23 @@ class FunnelData:
     symbol: str
     steps: dict = field(default_factory=dict)
     total_signals_processed: int = 0
-    signal_engine_score_distribution: dict = field(default_factory=dict)
-    passed_score_distribution: dict = field(default_factory=dict)
-    passed_sl_sources: dict = field(default_factory=dict)
-    sl_shifted: int = 0
 
 
 # Pipeline funnel steps (in order — first match wins)
 FUNNEL_STEPS = [
-    "NO_SIGNAL_ENGINE",
-    "CONFIRM_TF_REJECT",
-    "DISTANCE_FILTER",
-    "TP_PATH_BLOCKED",
-    "MTF_ALIGNMENT",
-    "BTC_CORRELATION",
-    "ETH_CORRELATION",
-    "VOLATILITY_REGIME",
-    "CONTEXT_BLOCKED",
-    "NEWS_FILTER",
-    "SL_DISTANCE_MIN",
-    "SL_DISTANCE_MAX",
-    "RR_GUARD",
-    "NO_TRADE_ZONE",
-    "DYNAMIC_RISK_WEAK",
-    "COOLDOWN",
-    "PORTFOLIO_RISK",
+    "NO_PATTERN",
+    "SETUP_TYPE_GATE",
+    "HTF_BIAS_BLOCKED",
+    "RISK_ENGINE_BLOCKED",
     "PASSED",
 ]
 
 # Which pipeline steps are actually implemented in the backtest
 BACKTEST_ACTIVE: dict[str, bool] = {
-    "NO_SIGNAL_ENGINE": True,
-    "CONFIRM_TF_REJECT": True,
-    "DISTANCE_FILTER": False,
-    "TP_PATH_BLOCKED": False,
-    "MTF_ALIGNMENT": False,
-    "BTC_CORRELATION": False,
-    "ETH_CORRELATION": False,
-    "VOLATILITY_REGIME": False,
-    "CONTEXT_BLOCKED": False,
-    "NEWS_FILTER": False,
-    "SL_DISTANCE_MIN": True,
-    "SL_DISTANCE_MAX": True,
-    "RR_GUARD": True,
-    "NO_TRADE_ZONE": False,
-    "DYNAMIC_RISK_WEAK": False,
-    "COOLDOWN": False,
-    "PORTFOLIO_RISK": False,
+    "NO_PATTERN": True,
+    "SETUP_TYPE_GATE": True,
+    "HTF_BIAS_BLOCKED": True,
+    "RISK_ENGINE_BLOCKED": True,
     "PASSED": True,
 }
 
@@ -195,152 +165,32 @@ class BacktestResult:
 class BacktestConfig:
     """Feature flags controlling which pipeline steps are active.
 
-    All flags default to True (= FULL / current live behavior).
-    For BASELINE run, all flags should be False simultaneously.
-
-    Dependency note:
-      - enable_structural_sl=True implies enable_stop_hunt_buffer can activate,
-        because buffer is applied inside the structural SL block. When
-        enable_structural_sl=False, buffer is never reached regardless of
-        enable_stop_hunt_buffer.
-      - enable_unified_entry controls ONLY whether entry_price comes from
-        confirm TF close (True) or always uses ind.close (False / baseline).
-        This does NOT reject any signals.
-      - enable_confirm_tf_gate controls the confirm-TF alignment gate:
-        when True, signals where confirm-TF EMA+Supertrend disagree are
-        rejected. This is an independent filter from entry price source.
-      - min_score_for_signal: override for config.scoring.min_score_for_signal.
-        When set (not None), the batch runner temporarily patches the global
-        config value during signal_engine.evaluate() calls for this preset,
-        then restores it. None = use global config default.
-
-    WARNING: enable_confirm_tf_gate=True without enable_unified_entry=False
-    is the recommended combination. Enabling both (gate + unified entry) is
-    destructive — the 15m entry price leads to significantly worse fills.
-    See docs/report_confirm_tf_gate.md for analysis.
+    The new pipeline (Pattern Engine → Feature Builder → Probability Engine → Risk Engine)
+    handles most logic internally. These flags control optional soft features.
     """
-    enable_unified_entry: bool = True
-    enable_confirm_tf_gate: bool = True
-    enable_structural_sl: bool = True
-    enable_sl_distance_guard: bool = True
-    enable_rr_filter: bool = True
-    enable_news_filter: bool = True
-    enable_stop_hunt_buffer: bool = True
+    enable_pattern_engine_gates: bool = True
+    enable_probability_gate: bool = False
+    enable_htf_bias_gate: bool = False
+    min_p_tp: float = 0.0
     min_score_for_signal: Optional[int] = None
-    sell_sweep_block: bool = False  # TEMP: reject SELL signals with sweep trigger
 
 
 # Preset definitions: name → dict of BacktestConfig field overrides
 PRESETS: dict[str, dict[str, bool]] = {
     "baseline": {
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": False,  # true zero-flags baseline
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task1_only": {
-        # Unified entry ONLY: entry_price = confirm TF close (no reject gate)
-        "enable_unified_entry": True,
-        "enable_confirm_tf_gate": False,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "confirm_tf_only": {
-        # Confirm-TF gate ONLY: rejects signals where confirm TF disagrees (no entry price change)
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task2_only": {
-        # Structural SL without buffer (task 2 and 6 are physically coupled:
-        # buffer lives inside the structural SL block, so task2_only = structural SL
-        # without buffer to isolate the SL recalc effect)
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": True,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task3_only": {
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": True,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task4_only": {
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": True,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task5_only": {
-        # News filter is a stub (fetch_macro_events returns []) — this preset
-        # exists for A/B/n completeness but will produce identical results to baseline.
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": True,
-        "enable_stop_hunt_buffer": False,
-    },
-    "task6_only": {
-        # Stop hunt buffer alone: requires structural SL to be active (buffer
-        # lives inside the structural SL block). This preset enables both
-        # structural SL + buffer, but notes the coupling.
-        "enable_unified_entry": False,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": True,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": True,
-    },
-    "gate_plus_unified": {
-        "enable_unified_entry": True,
-        "enable_confirm_tf_gate": True,
-        "enable_structural_sl": False,
-        "enable_sl_distance_guard": False,
-        "enable_rr_filter": False,
-        "enable_news_filter": False,
-        "enable_stop_hunt_buffer": False,
+        "enable_pattern_engine_gates": False,
+        "enable_probability_gate": False,
+        "enable_htf_bias_gate": False,
     },
     "full": {
-        "enable_unified_entry": True,
-        "enable_confirm_tf_gate": False,  # disabled: data shows it's counterproductive
-        "enable_structural_sl": True,
-        "enable_sl_distance_guard": True,
-        "enable_rr_filter": True,
-        "enable_news_filter": True,
-        "enable_stop_hunt_buffer": False,  # disabled: data shows −4.08% with no benefit
+        "enable_pattern_engine_gates": True,
+        "enable_probability_gate": False,
+        "enable_htf_bias_gate": False,
     },
     "optimized": {
-        # Data-driven config: gate and buffer disabled based on backtest evidence
-        "enable_unified_entry": True,
-        "enable_confirm_tf_gate": False,
-        "enable_structural_sl": True,
-        "enable_sl_distance_guard": True,
-        "enable_rr_filter": True,
-        "enable_news_filter": True,
-        "enable_stop_hunt_buffer": False,
+        "enable_pattern_engine_gates": True,
+        "enable_probability_gate": True,
+        "enable_htf_bias_gate": True,
     },
 }
 
@@ -402,7 +252,10 @@ def _compute_regime(
 # ---------------------------------------------------------------------------
 
 class BacktestEngine:
-    """Consolidated backtest engine with full parity to live pipeline."""
+    """Consolidated backtest engine with full parity to live pipeline.
+
+    Uses: PatternEngine → FeatureBuilder → ProbabilityEngine → RiskEngine
+    """
 
     def __init__(
         self,
@@ -450,19 +303,6 @@ class BacktestEngine:
         candle_limit = config.trading.candles_limit
         df = df.iloc[-(candle_limit + 60):] if len(df) > candle_limit + 60 else df
 
-        # Fetch confirm TF data if enabled
-        confirm_tf = config.trading.confirm_timeframe
-        confirm_df = None
-        if config.trading.confirm_tf_enabled and confirm_tf != self.timeframe:
-            try:
-                confirm_df = await exchange_client.fetch_ohlcv(
-                    self.symbol, confirm_tf, limit=limit
-                )
-                if confirm_df is not None and len(confirm_df) < 20:
-                    confirm_df = None
-            except Exception:
-                confirm_df = None
-
         trades: list[BacktestTrade] = []
         reject_stats = RejectStats()
         atr_history: list[float] = []
@@ -472,12 +312,19 @@ class BacktestEngine:
         ct: Optional[BacktestTrade] = None
         signals_count = 0
 
+        # Pre-fetch HTF data for bias (once, not per-candle)
+        _htf_result: Optional[HTFBiasResult] = None
+        if config.htf_bias_v2:
+            try:
+                df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
+                df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
+                df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
+                _htf_result = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
+            except Exception:
+                _htf_result = None
+
         # Funnel instrumentation (populated only when self.instrument=True)
         _funnel_counts: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
-        _funnel_engine_scores: dict[int, int] = {}
-        _funnel_passed_scores: dict[int, int] = {}
-        _funnel_passed_sl_sources: dict[str, int] = {}
-        _funnel_sl_shifted: int = 0
 
         for i in range(warmup, len(df)):
             window = df.iloc[:i + 1].copy()
@@ -534,207 +381,200 @@ class BacktestEngine:
             if not in_trade:
                 signals_count += 1
 
-                # Regime detection (Task 1: RegimeDetector)
+                # Regime detection
                 regime_obj = _compute_regime(ind, atr_history, ema_spread_history, volume_history)
 
-                # Structure / liquidity analysis
-                try:
-                    structure = analyze_structure(window.tail(100))
-                except Exception:
-                    structure = None
-                try:
-                    all_sweeps = detect_sweeps(window.tail(100), swing_window=5)
-                except Exception:
-                    all_sweeps = []
-                try:
-                    all_obs = detect_order_blocks(window.tail(100)) or []
-                except Exception:
-                    all_obs = []
-                valid_sweeps = [s for s in all_sweeps if getattr(s, "is_valid", False)]
-                valid_obs = [ob for ob in all_obs if getattr(ob, "is_valid", False)]
-
-                # Confirmation TF
-                # enable_unified_entry: entry_price from confirm TF close (no reject)
-                # enable_confirm_tf_gate: reject if confirm TF disagrees (independent filter)
-                entry_price = float(ind.close)
-                confirm_available = (
-                    config.trading.confirm_tf_enabled
-                    and confirm_df is not None
-                    and confirm_tf != self.timeframe
-                )
-                if confirm_available:
-                    primary_ts = df.index[i]
-                    try:
-                        confirm_idx = confirm_df.index.get_indexer([primary_ts], method="nearest")[0]
-                        if 0 <= confirm_idx < len(confirm_df):
-                            confirm_ind = self._indicator_engine.calculate(
-                                confirm_df.iloc[:confirm_idx + 1].copy(),
-                                self.symbol, confirm_tf,
-                            )
-                            if confirm_ind is not None:
-                                direction_str = "buy" if ind.ema_fast > ind.ema_slow else "sell"
-                                confirm_ok = signal_engine.evaluate_confirm(confirm_ind, direction_str)
-                                if self.bt_config.enable_unified_entry:
-                                    entry_price = float(confirm_ind.close)
-                                if not confirm_ok and self.bt_config.enable_confirm_tf_gate:
-                                    reject_stats.confirm_tf_rejected += 1
-                                    reject_stats.total_rejected += 1
-                                    if self.instrument:
-                                        _funnel_counts["CONFIRM_TF_REJECT"] += 1
-                                    continue
-                    except Exception:
-                        pass
-
-                # Signal evaluation
-                result = signal_engine.evaluate(
-                    ind,
-                    regime=regime_obj,
-                    structure=structure,
-                    sweeps=valid_sweeps,
-                    order_blocks=valid_obs,
-                    entry_price=entry_price,
-                )
-
-                if not (result.is_actionable and result.sl is not None and result.tp is not None):
-                    if self.instrument:
-                        _funnel_counts["NO_SIGNAL_ENGINE"] += 1
-                        score = result.score
-                        _funnel_engine_scores[score] = _funnel_engine_scores.get(score, 0) + 1
-                    continue
-
-                is_buy = result.signal == SignalType.BUY
-
-                # --- Post-signal processing (matching scanner.py pipeline) ---
-
-                # FVG detection
+                # === Phase 1: Pattern Detection (ICT) ===
+                _df_clean = window.dropna(subset=["open", "high", "low", "close", "volume"])
+                sweeps = []
+                order_blocks = []
+                structure = None
                 fvgs = []
+                candle_quality = None
+
                 try:
-                    _df_clean = window.dropna(subset=["open", "high", "low", "close", "volume"])
                     if len(_df_clean) >= 10:
-                        fvgs = detect_fvg(_df_clean, lookback=100)
+                        sweeps = detect_sweeps(_df_clean, lookback=50)
+                        order_blocks = detect_order_blocks(_df_clean, lookback=100)
+                        candle_quality = analyze_last_candle(_df_clean, atr_value=ind.atr)
+                        fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
+
+                        _disp_atr = 0.0
+                        _reclaim = 0
+                        if candle_quality and ind.atr and ind.atr > 0:
+                            _disp_atr = candle_quality.body_atr_ratio if hasattr(candle_quality, 'body_atr_ratio') else 0.0
+                        if sweeps:
+                            _valid_sw = [s for s in sweeps if s.is_valid]
+                            if _valid_sw:
+                                _reclaim = _valid_sw[0].reclaim_candles
+
+                        structure = analyze_structure(
+                            _df_clean, lookback=50,
+                            sweeps=sweeps,
+                            displacement_atr=_disp_atr,
+                            reclaim_bars=_reclaim,
+                            atr_value=ind.atr if ind.atr else 0.0,
+                        )
                 except Exception:
                     pass
 
-                # TP recalculation with FVGs (Task 5.2)
-                if fvgs and result.tp is not None:
-                    try:
-                        atr_val = float(ind.atr) if ind.atr is not None else 0.0
-                        if atr_val <= 0:
-                            atr_val = float(ind.close) * 0.02 if ind.close else 0.02
-                        new_targets = calculate_structural_tp(
-                            direction=result.signal.value,
-                            entry=entry_price,
-                            sl=result.sl,
-                            sweeps=all_sweeps,
-                            order_blocks=all_obs,
-                            structure=structure,
-                            fvgs=fvgs,
-                            atr=atr_val,
-                            close=float(ind.close) if ind.close else 0.0,
-                        )
-                        if new_targets:
-                            result.tp = new_targets[0].price
-                    except Exception:
-                        pass
+                setup = pattern_engine.detect(
+                    sweeps=sweeps,
+                    order_blocks=order_blocks,
+                    structure=structure,
+                    fvgs=fvgs,
+                    candle_quality=candle_quality,
+                    current_price=ind.close,
+                    atr=ind.atr if ind.atr else 0.0,
+                )
 
-                # Structural SL (Task 2.3)
-                if result.sl is not None and self.bt_config.enable_structural_sl:
-                    try:
-                        atr_val_sl = float(ind.atr) if ind.atr is not None else 0.0
-                        if atr_val_sl <= 0:
-                            atr_val_sl = float(ind.close) * 0.02 if ind.close else 0.02
+                if not setup.detected:
+                    reject_stats.no_pattern += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["NO_PATTERN"] += 1
+                    continue
 
-                        skip_structural_sl = result._sl_source == "bos"
+                # === Phase 1.4: Setup-Type-Specific Gates ===
+                if self.bt_config.enable_pattern_engine_gates:
+                    if setup.setup_type == "reversal":
+                        if not setup.has_sweep:
+                            reject_stats.setup_type_gate += 1
+                            reject_stats.total_rejected += 1
+                            if self.instrument:
+                                _funnel_counts["SETUP_TYPE_GATE"] += 1
+                            continue
+                        if not setup.has_mss:
+                            reject_stats.setup_type_gate += 1
+                            reject_stats.total_rejected += 1
+                            if self.instrument:
+                                _funnel_counts["SETUP_TYPE_GATE"] += 1
+                            continue
+                    elif setup.setup_type == "continuation":
+                        if not setup.has_bos:
+                            reject_stats.setup_type_gate += 1
+                            reject_stats.total_rejected += 1
+                            if self.instrument:
+                                _funnel_counts["SETUP_TYPE_GATE"] += 1
+                            continue
 
-                        if not skip_structural_sl:
-                            new_sl = calculate_structural_sl(
-                                direction=result.signal.value,
-                                entry=entry_price,
-                                sweeps=all_sweeps,
-                                order_blocks=all_obs,
-                                structure=structure,
-                                atr=atr_val_sl,
-                                close=float(ind.close) if ind.close else 0.0,
-                            )
-                            current_dist = abs(entry_price - result.sl)
-                            structural_dist = abs(entry_price - new_sl)
-                            structural_sl_applied = False
-                            if structural_dist <= current_dist and new_sl != result.sl:
-                                result.sl = new_sl
-                                structural_sl_applied = True
-                                result._sl_source = "structural"
+                # === Phase 1.45: HTF Bias Gate ===
+                if self.bt_config.enable_htf_bias_gate and _htf_result:
+                    htf_dir = _htf_result.direction
+                    if htf_dir != 'neutral' and setup.setup_type == "continuation":
+                        direction_map = {"buy": "bullish", "sell": "bearish"}
+                        setup_bias = direction_map.get(setup.direction)
+                        if setup_bias != htf_dir:
+                            reject_stats.htf_bias_blocked += 1
+                            reject_stats.total_rejected += 1
+                            if self.instrument:
+                                _funnel_counts["HTF_BIAS_BLOCKED"] += 1
+                            continue
 
-                            # Stop hunt buffer (Task 2.4): apply only when structural SL was accepted
-                            if structural_sl_applied and self.bt_config.enable_stop_hunt_buffer and config.trading.stop_hunt_buffer_pct > 0:
-                                buffer_pct = config.trading.stop_hunt_buffer_pct / 100.0
-                                if is_buy:
-                                    result.sl = round(result.sl * (1 - buffer_pct), 8)
-                                else:
-                                    result.sl = round(result.sl * (1 + buffer_pct), 8)
-                    except Exception:
-                        pass
+                # === Phase 1.5: Trade Plan (SL/TP) ===
+                trade_plan = trade_engine.build_trade_plan(
+                    ind=ind,
+                    direction=setup.direction,
+                    structure=structure,
+                    order_blocks=order_blocks,
+                    sweeps=sweeps,
+                    fvgs=fvgs,
+                    df=_df_clean,
+                    timeframe=self.timeframe,
+                )
 
-                # SL distance guard (Task 2.5)
-                if self.bt_config.enable_sl_distance_guard:
-                    sl_dist_pct = abs(entry_price - result.sl) / entry_price * 100
-                    min_dist = config.trading.min_sl_distance_pct
-                    max_dist = config.trading.max_sl_distance_pct
-                    if sl_dist_pct < min_dist:
-                        if is_buy:
-                            result.sl = round(entry_price * (1 - min_dist / 100), 8)
-                        else:
-                            result.sl = round(entry_price * (1 + min_dist / 100), 8)
-                        result.reasons.append(f"SL shifted to min distance {min_dist}%")
-                        if self.instrument:
-                            _funnel_sl_shifted += 1
-                    elif sl_dist_pct > max_dist:
-                        reject_stats.sl_distance_rejected += 1
-                        reject_stats.total_rejected += 1
-                        if self.instrument:
-                            _funnel_counts["SL_DISTANCE_MAX"] += 1
-                        continue
+                if not trade_plan.is_valid or trade_plan.sl == 0 or trade_plan.tp == 0:
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["NO_PATTERN"] += 1
+                    continue
 
-                # RR filter (Task 2.6)
-                if self.bt_config.enable_rr_filter:
-                    risk = abs(entry_price - result.sl)
-                    reward = abs(result.tp - entry_price)
-                    rr = reward / risk if risk > 0 else 0
-                    min_rr = config.trading.min_rr_threshold
-                    if rr < min_rr:
-                        reject_stats.rr_rejected += 1
-                        reject_stats.total_rejected += 1
-                        if self.instrument:
-                            _funnel_counts["RR_GUARD"] += 1
-                        continue
+                entry_price = float(ind.close)
+                sl = trade_plan.sl
+                tp = trade_plan.tp
 
-                # News filter (Task 2.7: documented exclusion)
-                # NOTE: risk/news_filter.py is a stub (fetch_macro_events returns []).
-                # No historical news data available for backtesting — skip filter.
-                # Gated by enable_news_filter for A/B/n completeness (no-op when enabled).
+                # === Regime + Volatility ===
+                vol_regime = classify_volatility(
+                    float(ind.atr) if ind.atr else 0.0,
+                    float(ind.close) if ind.close else 1.0,
+                )
 
-                # Funnel: signal passed all active filters
+                # === Phase 2: Feature Builder ===
+                features = feature_builder.build(
+                    setup=setup,
+                    ind=ind,
+                    structure=structure,
+                    regime=regime_obj,
+                    vol_regime=vol_regime,
+                    mtf_aligned=False,
+                    mtf_count=0,
+                    context_score=None,
+                    fear_greed=None,
+                    funding_rate=None,
+                    sl=sl,
+                    tp=tp,
+                    entry_price=entry_price,
+                    candle_quality=candle_quality,
+                    is_reversal=setup.is_reversal,
+                )
+
+                # === Phase 3: Probability Engine ===
+                probability = probability_engine.predict(features)
+
+                # Optional probability gate
+                if self.bt_config.enable_probability_gate and probability.p_tp < self.bt_config.min_p_tp:
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                # === Phase 4: Risk Engine ===
+                risk_decision = risk_engine.evaluate(
+                    features=features,
+                    probability=probability,
+                    portfolio=PortfolioState(),
+                    entry_price=entry_price,
+                    sl=sl,
+                    tp=tp,
+                    mss_quality=setup.mss_score,
+                    atr=float(ind.atr) if ind.atr else 0.0,
+                )
+
+                if not risk_decision.should_trade:
+                    reject_stats.risk_engine_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                # Use risk engine's adjusted SL/TP
+                sl = risk_decision.sl_price
+                tp = risk_decision.tp_price
+
+                # === Build Trade ===
+                is_buy = setup.direction == "buy"
+
                 if self.instrument:
                     _funnel_counts["PASSED"] += 1
-                    score = result.score
-                    _funnel_passed_scores[score] = _funnel_passed_scores.get(score, 0) + 1
-                    sl_src = result._sl_source or "atr"
-                    _funnel_passed_sl_sources[sl_src] = _funnel_passed_sl_sources.get(sl_src, 0) + 1
 
-                # Build trade
                 ct = BacktestTrade(
                     symbol=self.symbol,
                     timeframe=self.timeframe,
-                    direction=result.signal.value,
+                    direction="BUY" if is_buy else "SELL",
                     entry_price=entry_price,
                     entry_index=i,
                     entry_timestamp=str(df.index[i]),
-                    sl=result.sl,
-                    tp=result.tp,
-                    sl_source=result._sl_source or "atr",
-                    regime=regime_obj.regime,
-                    signal_score=result.score,
-                    confidence=result.confidence,
-                    reasons=list(result.reasons),
+                    sl=sl,
+                    tp=tp,
+                    sl_source=trade_plan.sl_source or "atr",
+                    regime=regime_obj.regime if regime_obj else "",
+                    signal_score=setup.components_count,
+                    confidence=probability.p_tp * 100,
+                    reasons=list(setup.components_found),
+                    p_tp=probability.p_tp,
+                    risk_pct=risk_decision.risk_pct,
+                    setup_type=setup.setup_type or "",
+                    components=list(setup.components_found),
                 )
                 in_trade = True
 
@@ -773,10 +613,6 @@ class BacktestEngine:
                 symbol=self.symbol,
                 steps=_funnel_counts,
                 total_signals_processed=signals_count,
-                signal_engine_score_distribution=_funnel_engine_scores,
-                passed_score_distribution=_funnel_passed_scores,
-                passed_sl_sources=_funnel_passed_sl_sources,
-                sl_shifted=_funnel_sl_shifted,
             )
 
         return self._build_result(trades, signals_count, reject_stats, len(df))
@@ -941,14 +777,14 @@ def print_result(result: BacktestResult):
     rs = result.reject_stats
     if rs.total_rejected > 0:
         print(f"\n  Rejected signals: {rs.total_rejected}")
-        if rs.rr_rejected:
-            print(f"    RR filter:      {rs.rr_rejected}")
-        if rs.sl_distance_rejected:
-            print(f"    SL distance:    {rs.sl_distance_rejected}")
-        if rs.confirm_tf_rejected:
-            print(f"    Confirm TF:     {rs.confirm_tf_rejected}")
-        if rs.news_rejected:
-            print(f"    News filter:    {rs.news_rejected}")
+        if rs.no_pattern:
+            print(f"    No pattern:     {rs.no_pattern}")
+        if rs.setup_type_gate:
+            print(f"    Setup gate:     {rs.setup_type_gate}")
+        if rs.htf_bias_blocked:
+            print(f"    HTF bias:       {rs.htf_bias_blocked}")
+        if rs.risk_engine_rejected:
+            print(f"    Risk engine:    {rs.risk_engine_rejected}")
 
     # Direction breakdown
     for label, stats in [("BUY", result.long_stats), ("SELL", result.short_stats)]:
@@ -1020,12 +856,14 @@ def format_telegram(result: BacktestResult) -> str:
     rs = result.reject_stats
     if rs.total_rejected > 0:
         msg += f"\n\n🚫 <b>Rejected: {rs.total_rejected}</b>"
-        if rs.rr_rejected:
-            msg += f"\n├ RR filter: {rs.rr_rejected}"
-        if rs.sl_distance_rejected:
-            msg += f"\n├ SL distance: {rs.sl_distance_rejected}"
-        if rs.confirm_tf_rejected:
-            msg += f"\n└ Confirm TF: {rs.confirm_tf_rejected}"
+        if rs.no_pattern:
+            msg += f"\n├ No pattern: {rs.no_pattern}"
+        if rs.setup_type_gate:
+            msg += f"\n├ Setup gate: {rs.setup_type_gate}"
+        if rs.htf_bias_blocked:
+            msg += f"\n├ HTF bias: {rs.htf_bias_blocked}"
+        if rs.risk_engine_rejected:
+            msg += f"\n└ Risk engine: {rs.risk_engine_rejected}"
 
     # Trade detail (last 15)
     show = result.trades[-15:]

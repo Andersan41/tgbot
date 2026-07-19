@@ -279,8 +279,6 @@ class MarketStructureConfig:
     mtf_timeframes: str = os.getenv("MTF_TIMEFRAMES", "1d,4h,1h")
     # Включить ли MTF анализ
     mtf_enabled: bool = os.getenv("MTF_ENABLED", "true").lower() == "true"
-    # Distance filter (blocks if too close to S/R)
-    distance_filter_enabled: bool = os.getenv("DISTANCE_FILTER_ENABLED", "true").lower() == "true"
     # Расчёт уровней поддержки/сопротивления
     sr_levels_enabled: bool = os.getenv("SR_LEVELS_ENABLED", "true").lower() == "true"
     # TP path quality filter
@@ -330,18 +328,8 @@ class RiskConfig:
     # ─── Filter toggles (scanner additional gates) ─────────────────────
     # Volatility regime filter (blocks breakout in low vol)
     volatility_filter_enabled: bool = os.getenv("VOLATILITY_FILTER_ENABLED", "true").lower() == "true"
-    # No-trade zones check
-    no_trade_zones_enabled: bool = os.getenv("NO_TRADE_ZONES_ENABLED", "true").lower() == "true"
     # Dynamic risk filter
     dynamic_risk_enabled: bool = os.getenv("DYNAMIC_RISK_ENABLED", "true").lower() == "true"
-
-    # ─── News Filter (Task 5) ──────────────────────────────────────────
-    # Блокировать сигналы вокруг high-impact событий
-    news_filter_enabled: bool = os.getenv("NEWS_FILTER_ENABLED", "false").lower() == "true"
-    # Блокировка до события (минуты)
-    news_block_before_minutes: int = int(os.getenv("NEWS_BLOCK_BEFORE_MINUTES", "60"))
-    # Блокировка после события (минуты)
-    news_block_after_minutes: int = int(os.getenv("NEWS_BLOCK_AFTER_MINUTES", "30"))
 
     # ─── Market Regime ───────────────────────────────────────────────────
     # Порог ADX для трендового режима (согласован с adx_min signal_engine)
@@ -415,10 +403,6 @@ class DerivativesConfig:
 class ScoringConfig:
     """Параметры скоринга и verdict."""
 
-    # Порог confidence для STRONG verdict
-    confidence_strong_threshold: float = float(os.getenv("CONFIDENCE_STRONG_THRESHOLD", "65"))
-    # Порог confidence для MODERATE verdict
-    confidence_moderate_threshold: float = float(os.getenv("CONFIDENCE_MODERATE_THRESHOLD", "40"))
     # Порог quality для STRONG (унифицирован с confidence)
     quality_strong_threshold: float = float(os.getenv("QUALITY_STRONG_THRESHOLD", "65"))
     # Порог quality для MODERATE (унифицирован с confidence)
@@ -460,14 +444,8 @@ class ScoringConfig:
     # ─── Blending ────────────────────────────────────────────────────────
     # Доля technical score в итоговой confidence
     tech_confidence_blend: float = float(os.getenv("TECH_CONFIDENCE_BLEND", "0.6"))
-    # Доля market confidence в итоговой confidence
-    market_confidence_blend: float = float(os.getenv("MARKET_CONFIDENCE_BLEND", "0.4"))
     # Доля исторического WR в blended confidence
     historical_wr_blend: float = float(os.getenv("HISTORICAL_WR_BLEND", "0.4"))
-
-    # ─── Filter toggles ──────────────────────────────────────────────────
-    # Confidence V2 scoring (10-factor weighted)
-    confidence_v2_enabled: bool = os.getenv("CONFIDENCE_V2_ENABLED", "true").lower() == "true"
 
     # Качество (strong/moderate/weak) определяется quality_* порогами в confidence_v2._quality_label().
     # По умолчанию 65/40 — унифицировано с confidence порогами.
@@ -555,10 +533,10 @@ class PatternEngineConfig:
 
     # Require BOS or sweep as trigger
     require_bos_or_sweep: bool = os.getenv("PATTERN_REQUIRE_BOS_OR_SWEEP", "true").lower() == "true"
-    # Require OB or FVG as confirmation
-    require_ob_or_fvg: bool = os.getenv("PATTERN_REQUIRE_OB_OR_FVG", "true").lower() == "true"
     # OB proximity threshold (% from midpoint to consider "near")
     ob_proximity_pct: float = float(os.getenv("PATTERN_OB_PROXIMITY_PCT", "2.0"))
+    # Require displacement candle for reversal setups (sweep + MSS is enough when false)
+    reversal_require_displacement: bool = os.getenv("REVERSAL_REQUIRE_DISPLACEMENT", "false").lower() == "true"
 
 
 @dataclass
@@ -633,17 +611,13 @@ class AppConfig:
     # P(TP) by `htf_bias_continuation_penalty`, letting the Probability/Risk layer decide.
     # (This wires the previously-unused `htf_hard_gate` flag to the continuation gate.)
     htf_bias_continuation_penalty: float = float(os.getenv("HTF_BIAS_CONTINUATION_PENALTY", "0.85"))
-    # Reversal displacement gate: True = require the current candle to be a displacement
-    # candle (current behavior); False = treat displacement as informational only, matching
-    # the pattern engine's own stated design (sweep + MSS already gate the reversal).
-    reversal_require_displacement: bool = os.getenv("REVERSAL_REQUIRE_DISPLACEMENT", "true").lower() == "true"
     # Require price to be inside the OB/FVG entry zone before emitting a signal. True stops
     # the bot chasing entries at candle close; False keeps current behavior (entry_armed is
     # soft / log-only). Default False preserves live behavior.
     require_entry_zone: bool = os.getenv("REQUIRE_ENTRY_ZONE", "false").lower() == "true"
     # Minimum P(TP) required to emit a signal (0.0 = disabled, current behavior). When > 0
     # the Probability Engine becomes an actual selector rather than sizing-only input.
-    min_p_tp: float = float(os.getenv("MIN_P_TP", "0.0"))
+    min_p_tp: float = float(os.getenv("MIN_P_TP", "0.55"))
 
     # URL базы данных
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db")
@@ -753,12 +727,10 @@ class AppConfig:
 # Mapping: DB key → (config_attribute_path, type)
 FILTER_TOGGLE_KEYS: dict[str, tuple[str, type]] = {
     "context": ("context_enabled", bool),
-    "confidence_v2": ("scoring.confidence_v2_enabled", bool),
     "signal_block": ("signal_block_notify", bool),
     "dynamic_risk": ("risk.dynamic_risk_enabled", bool),
     # Phase 3 signal-recovery toggles (see AppConfig for semantics)
     "htf_hard_gate": ("htf_hard_gate", bool),
-    "reversal_require_displacement": ("reversal_require_displacement", bool),
     "require_entry_zone": ("require_entry_zone", bool),
 }
 
@@ -959,7 +931,6 @@ def build_config_snapshot() -> str:
         # Risk
         "risk_strong_pct": r.risk_strong_pct, "risk_moderate_pct": r.risk_moderate_pct,
         "volatility_filter_enabled": r.volatility_filter_enabled,
-        "no_trade_zones_enabled": r.no_trade_zones_enabled,
         "dynamic_risk_enabled": r.dynamic_risk_enabled,
         # Context
         "context_min_verdict": config.context_min_verdict,

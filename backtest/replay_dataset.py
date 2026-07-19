@@ -205,7 +205,10 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         start = max(WARMUP, len(df) - limit)
 
     prev_clean = None
+    total_bars = len(df) - start
     for i in range(start, len(df)):
+        if (i - start) % 500 == 0 and i > start:
+            print(f"  {symbol}: {i - start}/{total_bars} bars...", end=" ", flush=True)
         row = df.iloc[i]
         if not _row_has_valid_indicators(row):
             continue
@@ -271,7 +274,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         if setup.setup_type == "reversal":
             if not setup.has_sweep:
                 continue
-            if config.reversal_require_displacement and not setup.has_displacement:
+            if config.pattern_engine.reversal_require_displacement and not setup.has_displacement:
                 continue
             if not setup.has_mss:
                 continue
