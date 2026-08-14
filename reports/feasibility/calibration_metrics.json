@@ -1,0 +1,61 @@
+{
+  "dataset": "reports\\dataset\\ict_360d_v2_all.parquet",
+  "n_rows": 1703,
+  "n_features": 36,
+  "calibration_comparison": {
+    "uncalibrated": {
+      "auc": 0.6177,
+      "brier": 0.2419,
+      "ece": 0.0921
+    },
+    "calibrated": {
+      "auc": 0.6298,
+      "brier": 0.2406,
+      "ece": 0.139
+    }
+  },
+  "edge_calibrated": [
+    {
+      "threshold": 0.45,
+      "n": 887,
+      "wr": 49.9,
+      "pf": 0.998,
+      "expectancy": 0.1977
+    },
+    {
+      "threshold": 0.5,
+      "n": 733,
+      "wr": 52.9,
+      "pf": 1.125,
+      "expectancy": 0.249
+    },
+    {
+      "threshold": 0.55,
+      "n": 574,
+      "wr": 54.7,
+      "pf": 1.208,
+      "expectancy": 0.3038
+    },
+    {
+      "threshold": 0.6,
+      "n": 433,
+      "wr": 58.7,
+      "pf": 1.419,
+      "expectancy": 0.3548
+    },
+    {
+      "threshold": 0.65,
+      "n": 289,
+      "wr": 61.2,
+      "pf": 1.58,
+      "expectancy": 0.405
+    },
+    {
+      "threshold": 0.7,
+      "n": 134,
+      "wr": 60.4,
+      "pf": 1.528,
+      "expectancy": 0.4673
+    }
+  ]
+}

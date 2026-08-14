@@ -713,17 +713,14 @@ def get_htf_directional_bias(df_1d: pd.DataFrame, df_4h: pd.DataFrame) -> str:
 def calc_premium_discount_score(
     df: pd.DataFrame,
     direction: str,
-    lookback: int = 50,
+    lookback: int = 200,
 ) -> float:
-    """Score based on price location relative to range equilibrium.
+    """Score based on price location relative to ICT premium/discount zones.
 
-    Premium = above equilibrium (good for sell)
-    Discount = below equilibrium (good for buy)
-
-    Score:
-        Favorable location  → 1.0
-        Near equilibrium    → 0.6
-        Opposing location   → 0.3
+    Uses fib levels from swing range:
+        Discount:  fib 0.0–0.3 (cheap, near swing low) → good for BUY
+        Equilibrium: fib 0.3–0.7 → neutral
+        Premium:   fib 0.7–1.0 (expensive, near swing high) → good for SELL
 
     Args:
         df: OHLCV DataFrame (at least `lookback` rows).
@@ -745,28 +742,27 @@ def calc_premium_discount_score(
         return 0.5
 
     current = float(df["close"].iloc[-1])
-    equilibrium = (range_high + range_low) / 2.0
-
-    # Position: -1 (at range low) to +1 (at range high)
-    position = (current - equilibrium) / (rng / 2.0)
+    fib = (current - range_low) / rng  # 0.0 = range low, 1.0 = range high
 
     if direction in ("buy", "bullish"):
-        # Discount = below equilibrium (position < 0) → favorable
-        if position < -0.3:
-            return 1.0  # deep discount
-        elif position < 0.1:
-            return 0.7  # near/just below equilibrium
-        elif position < 0.4:
-            return 0.5  # entering premium zone
+        if fib <= 0.3:
+            return 1.0   # deep discount — optimal for BUY
+        elif fib <= 0.4:
+            return 0.8   # discount zone
+        elif fib <= 0.6:
+            return 0.5   # equilibrium — neutral
+        elif fib <= 0.7:
+            return 0.3   # entering premium — unfavorable
         else:
-            return 0.3  # deep premium — unfavorable for buys
+            return 0.1   # deep premium — bad for BUY
     else:
-        # Premium = above equilibrium (position > 0) → favorable
-        if position > 0.3:
-            return 1.0  # deep premium
-        elif position > -0.1:
-            return 0.7  # near/just above equilibrium
-        elif position > -0.4:
-            return 0.5  # entering discount zone
+        if fib >= 0.7:
+            return 1.0   # deep premium — optimal for SELL
+        elif fib >= 0.6:
+            return 0.8   # premium zone
+        elif fib >= 0.4:
+            return 0.5   # equilibrium — neutral
+        elif fib >= 0.3:
+            return 0.3   # entering discount — unfavorable
         else:
-            return 0.3  # deep discount — unfavorable for sells
+            return 0.1   # deep discount — bad for SELL

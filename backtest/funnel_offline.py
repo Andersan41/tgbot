@@ -54,11 +54,8 @@ from backtest.run_funnel import _build_ind_values, _row_has_valid_indicators
 
 from indicators.engine import IndicatorEngine
 from strategy.pattern_engine import pattern_engine
-from strategy.feature_builder import feature_builder
-from strategy.probability_engine import probability_engine
 from strategy.trade_engine import trade_engine
 from risk.engine import risk_engine, PortfolioState
-from risk.volatility_regime import classify_volatility
 from scheduler.scanner import _detect_regime
 from liquidity.sweep import detect_sweeps
 from liquidity.order_blocks import detect_order_blocks
@@ -264,23 +261,25 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
 
         entry_price = current_price
 
-        # ── Phase 2: features ──
+        # ── Phase 2: analytics ──
         regime = _detect_regime(ind, window, symbol, TIMEFRAME)
-        vol_regime = classify_volatility(ind.atr, ind.close)
-        is_reversal = setup.setup_type == "reversal"
-        features = feature_builder.build(
-            setup=setup, ind=ind, structure=structure, regime=regime, vol_regime=vol_regime,
-            mtf_aligned=False, mtf_count=0, context_score=0.0, fear_greed=None, funding_rate=None,
-            sl=sl, tp=tp, entry_price=entry_price, candle_quality=candle_quality,
-            is_reversal=is_reversal, htf_bias_penalty=_htf_bias_penalty,
-            ob_state_multiplier=1.0, smt_divergence_score=0.0,
-        )
+        atr_pct = (ind.atr / ind.close * 100) if ind.atr and ind.close > 0 else 0.0
 
-        # ── Phase 3: probability + opt-in selector ──
-        probability = probability_engine.predict(features)
-        if config.min_p_tp > 0.0 and probability.p_tp < config.min_p_tp:
+        # ── Phase 3: inline probability ──
+        _components_score = setup.components_count if setup.detected else 0
+        p_tp = 0.45
+        if _components_score >= 4:
+            p_tp += 0.15
+        elif _components_score >= 3:
+            p_tp += 0.08
+        if setup.mss_score > 70:
+            p_tp += 0.05
+        p_tp = max(0.15, min(0.85, p_tp))
+        confidence = min(0.85, p_tp)
+
+        if config.min_p_tp > 0.0 and p_tp < config.min_p_tp:
             counts["probability"] += 1
-            rejected_p_tp.append(round(probability.p_tp, 4))
+            rejected_p_tp.append(round(p_tp, 4))
             continue
 
         # ── Phase 4: risk engine ──
@@ -290,8 +289,9 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
             max_portfolio_risk_pct=config.max_portfolio_risk_pct,
         )
         risk_decision = risk_engine.evaluate(
-            features=features, probability=probability, portfolio=portfolio,
+            portfolio=portfolio,
             entry_price=entry_price, sl=sl, tp=tp,
+            atr_pct=atr_pct, p_tp=p_tp, confidence=confidence,
             scenario_score=0.0, scenario_stability=0.0,
             mss_quality=setup.mss_score, atr=ind.atr if ind.atr else 0.0,
         )

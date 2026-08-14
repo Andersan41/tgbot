@@ -231,10 +231,12 @@ def get_ob_state(
 
     Checks the last N candles in the DataFrame to classify OB state:
     - BROKEN: close beyond zone against OB type (requires ob_type)
-    - MITIGATED: close inside zone with penetration >= 50%
+    - MITIGATED: close inside zone with penetration >= 50%, or price was inside zone
     - PARTIAL: close inside zone with penetration < 50%
     - TESTED: wick only touched the zone
     - FRESH: no touches at all
+
+    Improved: detects when price passed THROUGH the OB (not just touched the edge).
     """
     if df is None or len(df) == 0:
         return OBState.FRESH
@@ -246,26 +248,40 @@ def get_ob_state(
     lookback = min(len(df), 10)
     recent = df.tail(lookback)
 
+    inside_count = 0
     for _, candle in recent.iterrows():
-        wick_touch = candle["low"] <= ob_high and candle["high"] >= ob_low
-        close_inside = ob_low <= candle["close"] <= ob_high
+        candle_high = candle["high"]
+        candle_low = candle["low"]
+        candle_close = candle["close"]
+
+        # Check if candle was inside the OB zone
+        # Candle intersects OB if: not (candle_low > ob_high or candle_high < ob_low)
+        if not (candle_low > ob_high or candle_high < ob_low):
+            inside_count += 1
+
+        wick_touch = candle_low <= ob_high and candle_high >= ob_low
+        close_inside = ob_low <= candle_close <= ob_high
 
         if not wick_touch:
             continue
 
         # Check BROKEN first (close beyond zone against OB type)
-        if ob_type == "bullish" and candle["close"] < ob_low:
+        if ob_type == "bullish" and candle_close < ob_low:
             return OBState.BROKEN
-        if ob_type == "bearish" and candle["close"] > ob_high:
+        if ob_type == "bearish" and candle_close > ob_high:
             return OBState.BROKEN
 
         if close_inside and zone_height > 0:
-            penetration = abs(candle["close"] - zone_center) / (zone_height / 2)
+            penetration = abs(candle_close - zone_center) / (zone_height / 2)
             if penetration >= 0.5:
                 return OBState.MITIGATED
             return OBState.PARTIAL
 
         return OBState.TESTED
+
+    # If price was inside the OB in >30% of recent candles, it's mitigated
+    if inside_count > 0 and inside_count >= lookback * 0.3:
+        return OBState.MITIGATED
 
     return OBState.FRESH
 

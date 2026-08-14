@@ -65,16 +65,11 @@ class TestScanSymbolMetrics:
     @pytest.mark.asyncio
     async def test_signals_total_increased_on_signal(self, monkeypatch):
         from strategy.pattern_engine import ICTSetup
-        from strategy.probability_engine import TradeProbability
         setup_mock = ICTSetup(
             detected=True, direction="buy",
             has_bos=True, bos_type="bullish", bos_level=49500.0,
             has_ob=True, ob_type="bullish", ob_distance_pct=0.5,
             components_found=["bos", "ob"],
-        )
-        pred_mock = TradeProbability(
-            p_tp=0.55, expected_rr=2.5, profit_factor=1.8,
-            confidence=0.7, model_type="rules",
         )
         risk_mock = MagicMock(
             should_trade=True, risk_pct=1.0, rr_ratio=3.0, rejection_reason=None,
@@ -82,9 +77,10 @@ class TestScanSymbolMetrics:
 
         monkeypatch.setattr("scheduler.scanner._is_cooldown_active", AsyncMock(return_value=(False, 0)))
         monkeypatch.setattr("scheduler.scanner._get_indicators", AsyncMock(return_value=(MagicMock(atr=600.0, close=50000.0), MagicMock())))
+        monkeypatch.setattr("scheduler.scanner._detect_regime", MagicMock(return_value=None))
+        _mock_sweep = MagicMock(is_valid=True, sweep_type="bearish", reclaim_candles=2)
+        monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[_mock_sweep]))
         monkeypatch.setattr("strategy.pattern_engine.pattern_engine", MagicMock(detect=MagicMock(return_value=setup_mock)))
-        monkeypatch.setattr("strategy.feature_builder.feature_builder", MagicMock(build=MagicMock(return_value=MagicMock(to_reasoning=MagicMock(return_value=[])))))
-        monkeypatch.setattr("strategy.probability_engine.probability_engine", MagicMock(predict=MagicMock(return_value=pred_mock)))
         monkeypatch.setattr("risk.engine.risk_engine", MagicMock(evaluate=MagicMock(return_value=risk_mock)))
         monkeypatch.setattr("scheduler.scanner.db", MagicMock(
             save_signal=AsyncMock(), set_cooldown=AsyncMock(),

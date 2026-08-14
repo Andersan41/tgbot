@@ -70,13 +70,9 @@ CANDLES = 3900
 PRESET = "full_new"
 
 FULL_NEW_FLAGS: dict[str, bool] = {
-    "enable_unified_entry": True,
-    "enable_confirm_tf_gate": False,
-    "enable_structural_sl": True,
-    "enable_sl_distance_guard": True,
-    "enable_rr_filter": True,
-    "enable_news_filter": True,
-    "enable_stop_hunt_buffer": False,
+    "enable_pattern_engine_gates": True,
+    "enable_probability_gate": False,
+    "enable_htf_bias_gate": False,
 }
 
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "funnel"
@@ -91,6 +87,8 @@ def aggregate_funnel(all_data: list[FunnelData]) -> dict:
     total_signals = 0
     total_passed = 0
     signal_engine_scores: dict[str, int] = {}
+    passed_score_dist: dict[str, int] = {}
+    passed_sl_sources: dict[str, int] = {}
 
     for fd in all_data:
         for step, count in fd.steps.items():
@@ -102,6 +100,11 @@ def aggregate_funnel(all_data: list[FunnelData]) -> dict:
         for key, val in fd.steps.items():
             if key.startswith("SCORE_"):
                 signal_engine_scores[key] = signal_engine_scores.get(key, 0) + val
+        # collect passed distributions
+        for key, val in fd.passed_score_distribution.items():
+            passed_score_dist[key] = passed_score_dist.get(key, 0) + val
+        for key, val in fd.passed_sl_sources.items():
+            passed_sl_sources[key] = passed_sl_sources.get(key, 0) + val
 
     total_stopped = total_signals - total_passed
     return {
@@ -110,6 +113,8 @@ def aggregate_funnel(all_data: list[FunnelData]) -> dict:
         "total_passed": total_passed,
         "total_stopped": total_stopped,
         "signal_engine_score_distribution": signal_engine_scores,
+        "passed_score_distribution": passed_score_dist,
+        "passed_sl_sources": passed_sl_sources,
     }
 
 
@@ -319,9 +324,9 @@ async def run_one_fast(symbol: str, *, cached_1h, cached_15m) -> FunnelData:
                         c_ind = _build_ind_values(c_row, c_prev, symbol, confirm_tf)
                         direction_str = "buy" if ind.ema_fast > ind.ema_slow else "sell"
                         confirm_ok = signal_engine.evaluate_confirm(c_ind, direction_str)
-                        if bt_config.enable_unified_entry:
+                        if getattr(bt_config, 'enable_unified_entry', True):
                             entry_price = float(c_ind.close)
-                        if not confirm_ok and bt_config.enable_confirm_tf_gate:
+                        if not confirm_ok and getattr(bt_config, 'enable_confirm_tf_gate', False):
                             rejection = "CONFIRM_TF_REJECT"
             except Exception:
                 pass
@@ -385,7 +390,7 @@ async def run_one_fast(symbol: str, *, cached_1h, cached_15m) -> FunnelData:
                     pass
 
             # Structural SL
-            if result.sl is not None and bt_config.enable_structural_sl:
+            if result.sl is not None and getattr(bt_config, 'enable_structural_sl', True):
                 try:
                     atr_val_sl = float(ind.atr) if ind.atr is not None else 0.0
                     if atr_val_sl <= 0:
@@ -407,7 +412,7 @@ async def run_one_fast(symbol: str, *, cached_1h, cached_15m) -> FunnelData:
                     pass
 
             # SL distance guard
-            if bt_config.enable_sl_distance_guard:
+            if getattr(bt_config, 'enable_sl_distance_guard', True):
                 sl_dist_pct = abs(entry_price - result.sl) / entry_price * 100
                 min_dist = config.trading.min_sl_distance_pct
                 max_dist = config.trading.max_sl_distance_pct
@@ -421,7 +426,7 @@ async def run_one_fast(symbol: str, *, cached_1h, cached_15m) -> FunnelData:
                     rejection = "SL_DISTANCE_MAX"
 
             # RR filter
-            if rejection is None and bt_config.enable_rr_filter:
+            if rejection is None and getattr(bt_config, 'enable_rr_filter', True):
                 risk = abs(entry_price - result.sl)
                 reward = abs(result.tp - entry_price)
                 rr = reward / risk if risk > 0 else 0
@@ -581,7 +586,7 @@ async def main():
         for score_str, count in ps_dist.items():
             pct = count / total_passed * 100
             bar = "█" * max(1, int(pct / 3))
-            print(f"    score={score_str:>2s}  {count:>5d} ({pct:>5.1f}%) {bar}")
+            print(f"    score={str(score_str):>2s}  {count:>5d} ({pct:>5.1f}%) {bar}")
     else:
         print("    (no data)")
 

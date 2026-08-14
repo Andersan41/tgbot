@@ -342,16 +342,6 @@ class TestCommissionParity:
         assert config.trading.exchange_fee_pct == 0.05
 
 
-class TestNewsFilterExclusion:
-    """Verify news filter is correctly documented as excluded."""
-
-    def test_news_filter_returns_empty(self):
-        """fetch_macro_events returns [] — filter is a stub."""
-        import asyncio
-        from risk.news_filter import fetch_macro_events
-        events = asyncio.get_event_loop().run_until_complete(fetch_macro_events())
-        assert events == []
-
 class TestPipelineStepOrder:
     """Verify the backtest engine applies steps in the same order as scanner.py."""
 
@@ -382,10 +372,8 @@ class TestPipelineStepOrder:
             "stop_hunt_buffer",
             "sl_distance_guard",
             "rr_filter",
-            "news_filter",
             "mtf_alignment",
             "context_enrichment",
-            "confidence_v2",
         ]
         backtest_order = [
             "fvg_tp_recalc",
@@ -393,7 +381,6 @@ class TestPipelineStepOrder:
             "stop_hunt_buffer",
             "sl_distance_guard",
             "rr_filter",
-            "news_filter",
         ]
         # First 6 steps must match exactly
         for i, (s, b) in enumerate(zip(scanner_order, backtest_order)):

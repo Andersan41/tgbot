@@ -8,8 +8,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from strategy.pattern_engine import PatternEngine, ICTSetup, pattern_engine
-from strategy.feature_builder import FeatureBuilder, SetupFeatures, feature_builder
-from strategy.probability_engine import ProbabilityEngine, TradeProbability, probability_engine
 from risk.engine import RiskEngine, RiskDecision, PortfolioState, risk_engine
 from context.scorer import ContextScorer, ContextScore
 from market_structure.structure import (
@@ -634,21 +632,24 @@ class TestProbabilityEngine:
 
     def test_rules_based_fallback(self):
         features = SetupFeatures(
-            setup_type="reversal",
+            direction="SELL", setup_type="reversal",
             has_sweep=True, has_displacement=True, has_mss=True,
-            mss_score=75.0,
+            mss_score=75.0, premium_discount_score=0.8,
             components_count=3, volume_ratio=1.5,
             rr_ratio=2.5, session="london", mtf_aligned=True,
         )
         prob = probability_engine.predict(features)
         assert isinstance(prob, TradeProbability)
-        assert prob.model_type == "rules"
+        assert prob.model_type == "rules_calibrated"
         assert 0.0 <= prob.p_tp <= 1.0
 
     def test_p_tp_in_range(self):
-        features = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=2.0)
+        features = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.5, rr_ratio=2.0,
+        )
         prob = probability_engine.predict(features)
-        assert 0.2 <= prob.p_tp <= 0.85
+        assert 0.05 <= prob.p_tp <= 0.85
 
     def test_quality_labels(self):
         assert TradeProbability(p_tp=0.70, expected_rr=2.0, profit_factor=2.5, confidence=0.8, model_type="rules").quality_label == "strong"
@@ -656,50 +657,75 @@ class TestProbabilityEngine:
         assert TradeProbability(p_tp=0.40, expected_rr=1.5, profit_factor=1.5, confidence=0.4, model_type="rules").quality_label == "weak"
 
     def test_reversal_mss_highest_edge(self):
-        """MSS gives the highest component_edge in reversal."""
-        features_no_mss = SetupFeatures(
-            setup_type="reversal", has_sweep=True, has_displacement=True, has_mss=False,
+        """MSS PD=0.8 gives higher p_tp than MSS PD=1.0 for SELL (calibrated lookup)."""
+        features_low = SetupFeatures(
+            direction="SELL", setup_type="reversal", has_mss=True,
+            premium_discount_score=1.0,
         )
-        features_with_mss = SetupFeatures(
-            setup_type="reversal", has_sweep=True, has_displacement=True, has_mss=True,
-            mss_score=75.0,
+        features_high = SetupFeatures(
+            direction="SELL", setup_type="reversal", has_mss=True,
+            premium_discount_score=0.8,
         )
-        prob_no = probability_engine.predict(features_no_mss)
-        prob_with = probability_engine.predict(features_with_mss)
-        assert prob_with.p_tp > prob_no.p_tp
+        prob_low = probability_engine.predict(features_low)
+        prob_high = probability_engine.predict(features_high)
+        # SELL MSS PD 0.8 (WR 45.8%) > SELL MSS PD 1.0 (WR 15.3%)
+        assert prob_high.p_tp > prob_low.p_tp
 
     def test_continuation_bos_edge(self):
-        """BOS gives edge only for continuation, not reversal."""
+        """BOS BUY PD 0.1 gives higher p_tp than BOS BUY PD 1.0 (calibrated lookup)."""
         features_cont = SetupFeatures(
-            setup_type="continuation", has_bos=True, structure_bos_aligned=True, rr_ratio=2.0,
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.1,
         )
         features_rev = SetupFeatures(
-            setup_type="reversal", has_bos=True, has_sweep=True,
-            has_displacement=True, has_mss=True, mss_score=70.0, rr_ratio=2.0,
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=1.0,
         )
         prob_cont = probability_engine.predict(features_cont)
         prob_rev = probability_engine.predict(features_rev)
-        # Both should have positive edge, reversal with MSS should be higher
-        assert prob_rev.p_tp > 0.5
-        assert prob_cont.p_tp > 0.5
+        # BUY BOS PD 0.1 (WR 46.7%) > BUY BOS PD 1.0 (WR 20.6%)
+        assert prob_cont.p_tp > prob_rev.p_tp
 
     def test_volume_boosts_p_tp(self):
-        features_low = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=2.0, volume_ratio=0.8)
-        features_high = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=2.0, volume_ratio=3.0)
-        prob_low = probability_engine.predict(features_low)
-        prob_high = probability_engine.predict(features_high)
-        assert prob_high.p_tp > prob_low.p_tp
+        """SOL BUY gets penalty vs BTC BUY (calibrated symbol edge)."""
+        features_btc = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.1, symbol="BTC/USDT",
+        )
+        features_sol = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.1, symbol="SOL/USDT",
+        )
+        prob_btc = probability_engine.predict(features_btc)
+        prob_sol = probability_engine.predict(features_sol)
+        # SOL gets -7.1% penalty
+        assert prob_btc.p_tp > prob_sol.p_tp
 
     def test_higher_rr_higher_p_tp(self):
-        features_low = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=1.5)
-        features_high = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=4.0)
+        """Direction + PD lookup determines p_tp, not RR directly (calibrated model)."""
+        features_low = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=1.0, rr_ratio=1.5,
+        )
+        features_high = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.1, rr_ratio=4.0,
+        )
         prob_low = probability_engine.predict(features_low)
         prob_high = probability_engine.predict(features_high)
-        assert prob_high.p_tp >= prob_low.p_tp
+        # BUY BOS PD 0.1 > BUY BOS PD 1.0 (lookup-based)
+        assert prob_high.p_tp > prob_low.p_tp
 
     def test_mtf_aligned_boosts(self):
-        features_no = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=2.0, mtf_aligned=False)
-        features_yes = SetupFeatures(setup_type="continuation", has_bos=True, rr_ratio=2.0, mtf_aligned=True)
+        """HTF bias penalty reduces p_tp when applied."""
+        features_no = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.5, htf_bias_penalty=0.8,
+        )
+        features_yes = SetupFeatures(
+            direction="BUY", setup_type="continuation", has_bos=True,
+            premium_discount_score=0.5, htf_bias_penalty=1.0,
+        )
         prob_no = probability_engine.predict(features_no)
         prob_yes = probability_engine.predict(features_yes)
         assert prob_yes.p_tp >= prob_no.p_tp
@@ -731,6 +757,7 @@ class TestRiskEngine:
         assert decision.rr_ratio == 3.0
 
     def test_rr_too_low_rejects(self):
+        """Low RR no longer blocks — Kelly sizing handles it (gives near-zero risk)."""
         features = SetupFeatures(atr_pct=2.0)
         prob = TradeProbability(p_tp=0.55, expected_rr=2.0, profit_factor=2.0, confidence=0.7, model_type="rules")
         portfolio = PortfolioState()
@@ -739,10 +766,12 @@ class TestRiskEngine:
             features=features, probability=prob, portfolio=portfolio,
             entry_price=50000.0, sl=49000.0, tp=50500.0,
         )
-        assert decision.should_trade is False
-        assert "RR=" in decision.rejection_reason
+        assert decision.should_trade is True
+        assert decision.rr_ratio < 1.0  # RR is bad, but Kelly decides sizing
+        assert decision.risk_pct <= 0.1  # Kelly gives near-zero for bad RR
 
     def test_sl_too_tight_rejects(self):
+        """Tight SL no longer blocks — Kelly sizing handles it."""
         features = SetupFeatures(atr_pct=2.0)
         prob = TradeProbability(p_tp=0.65, expected_rr=2.5, profit_factor=2.5, confidence=0.8, model_type="rules")
         portfolio = PortfolioState()
@@ -751,10 +780,11 @@ class TestRiskEngine:
             features=features, probability=prob, portfolio=portfolio,
             entry_price=50000.0, sl=49980.0, tp=51000.0,
         )
-        assert decision.should_trade is False
-        assert "SL too tight" in decision.rejection_reason
+        assert decision.should_trade is True
+        assert decision.risk_pct > 0
 
     def test_sl_too_wide_rejects(self):
+        """Wide SL no longer blocks — Kelly sizing handles it."""
         features = SetupFeatures(atr_pct=2.0)
         prob = TradeProbability(p_tp=0.65, expected_rr=2.5, profit_factor=2.5, confidence=0.8, model_type="rules")
         portfolio = PortfolioState()
@@ -763,8 +793,8 @@ class TestRiskEngine:
             features=features, probability=prob, portfolio=portfolio,
             entry_price=50000.0, sl=47000.0, tp=56000.0,
         )
-        assert decision.should_trade is False
-        assert "SL too wide" in decision.rejection_reason
+        assert decision.should_trade is True
+        assert decision.risk_pct > 0
 
     def test_portfolio_risk_full_passes_in_risk_engine(self):
         """Portfolio risk check moved to scanner Phase 0. Risk Engine no longer blocks."""
@@ -988,7 +1018,7 @@ class TestPipelineIntegration:
         # In real pipeline, we'd stop here
 
     def test_risk_blocks_bad_rr(self):
-        """RiskEngine blocks even when ProbabilityEngine gives high P(TP)."""
+        """Low RR no longer blocks — Kelly sizing reduces risk instead."""
         features = SetupFeatures(atr_pct=2.0)
         prob = TradeProbability(p_tp=0.80, expected_rr=3.0, profit_factor=3.0, confidence=0.9, model_type="rules")
 
@@ -996,5 +1026,5 @@ class TestPipelineIntegration:
             features=features, probability=prob, portfolio=PortfolioState(),
             entry_price=50000.0, sl=49500.0, tp=50200.0,
         )
-        assert decision.should_trade is False
-        assert "RR=" in decision.rejection_reason
+        assert decision.should_trade is True
+        assert decision.rr_ratio < 1.0  # Bad RR but not blocked

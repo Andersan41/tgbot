@@ -236,7 +236,7 @@ def serialize_candidate(df: pd.DataFrame, feats: list[str], best_name: str) -> N
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(SCRATCH_MODEL, "wb") as f:
         pickle.dump({"classifier": model, "regressor": None, "feature_names": feats}, f)
-    print(f"\n  Serialized candidate → {SCRATCH_MODEL}")
+    print(f"\n  Serialized candidate -> {SCRATCH_MODEL}")
     print("  (scratch artifact — NOT wired into models/probability_model.pkl)")
 
 
@@ -310,7 +310,7 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(METRICS_JSON, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
-    print(f"\n  Saved metrics → {METRICS_JSON}")
+    print(f"\n  Saved metrics -> {METRICS_JSON}")
 
 
 if __name__ == "__main__":

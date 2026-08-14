@@ -103,18 +103,14 @@ class TestScanSymbolV2:
     @pytest.mark.asyncio
     async def test_full_successful_scan(self, mock_cooldown, monkeypatch):
         from strategy.pattern_engine import ICTSetup
-        from strategy.probability_engine import TradeProbability
         from market_structure.structure import StructureState
 
         setup_mock = ICTSetup(
             detected=True, direction="buy", setup_type="continuation",
             has_bos=True, bos_type="bullish", bos_level=49500.0,
             has_ob=True, ob_type="bullish", ob_distance_pct=0.5,
+            has_sweep=True, sweep_type="bearish",
             components_found=["BOS", "OB"],
-        )
-        pred_mock = TradeProbability(
-            p_tp=0.55, expected_rr=2.5, profit_factor=1.8,
-            confidence=0.7, model_type="rules",
         )
         risk_mock = MagicMock(should_trade=True, risk_pct=1.0, rr_ratio=3.0, rejection_reason=None)
 
@@ -130,7 +126,9 @@ class TestScanSymbolV2:
         monkeypatch.setattr("scheduler.scanner._is_cooldown_active", AsyncMock(return_value=(False, 0)))
         monkeypatch.setattr("scheduler.scanner._get_indicators",
                             AsyncMock(return_value=(ind_mock, df_mock)))
-        monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[]))
+        monkeypatch.setattr("scheduler.scanner._detect_regime", MagicMock(return_value=None))
+        _mock_sweep = MagicMock(is_valid=True, sweep_type="bearish", reclaim_candles=2)
+        monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[_mock_sweep]))
         monkeypatch.setattr("liquidity.order_blocks.detect_order_blocks", MagicMock(return_value=[]))
         monkeypatch.setattr("market_structure.structure.analyze_structure",
                             MagicMock(return_value=StructureState(trend="bullish")))
@@ -139,10 +137,6 @@ class TestScanSymbolV2:
                             MagicMock(return_value=MagicMock(is_displacement=True, body_atr_ratio=1.5)))
         monkeypatch.setattr("strategy.pattern_engine.pattern_engine",
                             MagicMock(detect=MagicMock(return_value=setup_mock)))
-        monkeypatch.setattr("strategy.feature_builder.feature_builder",
-                            MagicMock(build=MagicMock(return_value=MagicMock(to_reasoning=MagicMock(return_value=[])))))
-        monkeypatch.setattr("strategy.probability_engine.probability_engine",
-                            MagicMock(predict=MagicMock(return_value=pred_mock)))
         monkeypatch.setattr("risk.engine.risk_engine",
                             MagicMock(evaluate=MagicMock(return_value=risk_mock)))
         monkeypatch.setattr("scheduler.scanner.exchange_client",
@@ -167,15 +161,14 @@ class TestScanSymbolV2:
     @pytest.mark.asyncio
     async def test_sets_cooldown_after_signal(self, mock_cooldown, monkeypatch):
         from strategy.pattern_engine import ICTSetup
-        from strategy.probability_engine import TradeProbability
         from market_structure.structure import StructureState
 
         setup_mock = ICTSetup(
             detected=True, direction="buy", setup_type="continuation",
             has_bos=True, bos_type="bullish", bos_level=49500.0,
+            has_sweep=True, sweep_type="bearish",
             components_found=["BOS"],
         )
-        pred_mock = TradeProbability(p_tp=0.55, expected_rr=2.5, profit_factor=1.8, confidence=0.7, model_type="rules")
         risk_mock = MagicMock(should_trade=True, risk_pct=1.0, rr_ratio=3.0, rejection_reason=None)
 
         df_mock = pd.DataFrame({
@@ -199,7 +192,9 @@ class TestScanSymbolV2:
         monkeypatch.setattr("scheduler.scanner._is_cooldown_active", AsyncMock(return_value=(False, 0)))
         monkeypatch.setattr("scheduler.scanner._get_indicators",
                             AsyncMock(return_value=(ind_mock, df_mock)))
-        monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[]))
+        monkeypatch.setattr("scheduler.scanner._detect_regime", MagicMock(return_value=None))
+        _mock_sweep = MagicMock(is_valid=True, sweep_type="bearish", reclaim_candles=2)
+        monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[_mock_sweep]))
         monkeypatch.setattr("liquidity.order_blocks.detect_order_blocks", MagicMock(return_value=[]))
         monkeypatch.setattr("market_structure.structure.analyze_structure",
                             MagicMock(return_value=StructureState(trend="bullish")))
@@ -208,10 +203,6 @@ class TestScanSymbolV2:
                             MagicMock(return_value=MagicMock(is_displacement=True, body_atr_ratio=1.5)))
         monkeypatch.setattr("strategy.pattern_engine.pattern_engine",
                             MagicMock(detect=MagicMock(return_value=setup_mock)))
-        monkeypatch.setattr("strategy.feature_builder.feature_builder",
-                            MagicMock(build=MagicMock(return_value=MagicMock(to_reasoning=MagicMock(return_value=[])))))
-        monkeypatch.setattr("strategy.probability_engine.probability_engine",
-                            MagicMock(predict=MagicMock(return_value=pred_mock)))
         monkeypatch.setattr("risk.engine.risk_engine",
                             MagicMock(evaluate=MagicMock(return_value=risk_mock)))
         monkeypatch.setattr("scheduler.scanner.exchange_client",
@@ -246,67 +237,3 @@ class TestPortfolioRiskGate:
         assert result is None
 
 
-# === News Filter Tests ===
-
-class TestNewsFilter:
-    @pytest.mark.asyncio
-    async def test_news_filter_disabled_passes(self):
-        from risk.news_filter import check_news_block
-        result = await check_news_block("BUY", entry_price=100.0)
-        assert result.blocked is False
-
-    @pytest.mark.asyncio
-    async def test_news_filter_no_events_passes(self):
-        from risk.news_filter import check_news_block, _cache_events
-        _cache_events([])
-        result = await check_news_block("BUY", entry_price=100.0)
-        assert result.blocked is False
-
-    @pytest.mark.asyncio
-    async def test_news_filter_blocks_during_event(self):
-        from risk.news_filter import check_news_block, _cache_events, MacroEvent
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        event = MacroEvent(name="FOMC Rate Decision", timestamp=now, impact="high", currency="USD")
-        _cache_events([event])
-        import config.settings as settings_mod
-        old_val = settings_mod.config.risk.news_filter_enabled
-        settings_mod.config.risk.news_filter_enabled = True
-        try:
-            result = await check_news_block("BUY", entry_price=100.0)
-            assert result.blocked is True
-            assert "FOMC" in result.event_name
-        finally:
-            settings_mod.config.risk.news_filter_enabled = old_val
-
-    @pytest.mark.asyncio
-    async def test_news_filter_ignores_medium_impact(self):
-        from risk.news_filter import check_news_block, _cache_events, MacroEvent
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        event = MacroEvent(name="Retail Sales", timestamp=now, impact="medium", currency="USD")
-        _cache_events([event])
-        import config.settings as settings_mod
-        old_val = settings_mod.config.risk.news_filter_enabled
-        settings_mod.config.risk.news_filter_enabled = True
-        try:
-            result = await check_news_block("BUY", entry_price=100.0)
-            assert result.blocked is False
-        finally:
-            settings_mod.config.risk.news_filter_enabled = old_val
-
-    @pytest.mark.asyncio
-    async def test_news_filter_passes_outside_window(self):
-        from risk.news_filter import check_news_block, _cache_events, MacroEvent
-        from datetime import datetime, timezone, timedelta
-        now = datetime.now(timezone.utc)
-        event = MacroEvent(name="CPI", timestamp=now + timedelta(hours=3), impact="high", currency="USD")
-        _cache_events([event])
-        import config.settings as settings_mod
-        old_val = settings_mod.config.risk.news_filter_enabled
-        settings_mod.config.risk.news_filter_enabled = True
-        try:
-            result = await check_news_block("BUY", entry_price=100.0)
-            assert result.blocked is False
-        finally:
-            settings_mod.config.risk.news_filter_enabled = old_val

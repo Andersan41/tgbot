@@ -12,7 +12,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Strategy version — increment on every logic change for traceability
-VERSION = "2.4.0"
+VERSION = "2.7.0"
+
+
+class StrategyMode:
+    """Hot-swappable strategy modes."""
+    V25 = "v2.5"           # Legacy: BUY + filtered SELL, full pipeline
+    CONFLUENCE = "confluence"  # BOS + OB only, no reversals
+    HYBRID = "hybrid"      # 70/30 (future)
+    ORACLE = "oracle"      # Oracle V1: ICT-only, no ML, no scoring
+
+
+# Active strategy mode — change via .env STRATEGY_MODE or auto-switcher
+STRATEGY_MODE = os.getenv("STRATEGY_MODE", StrategyMode.V25)
 
 
 @dataclass
@@ -201,6 +213,41 @@ class TradingConfig:
     # Лимит свечей при запросе OHLCV
     candles_limit: int = int(os.getenv("CANDLES_LIMIT", "200"))
 
+    # ─── Per-Symbol Overrides ────────────────────────────────────────────
+    # JSON dict: {"ETH/USDT": {"adx_min": 20, "max_sl_pct": 3.0, "max_atr_pct": 3.0, "min_quality": 75}}
+    # Supported keys: adx_min, max_sl_pct, max_atr_pct, min_quality
+    symbol_overrides: dict = field(default_factory=lambda: _parse_json_env("SYMBOL_OVERRIDES", {}))
+
+
+@dataclass
+class DirectionFilterConfig:
+    """Фильтры направления / по символьно (Rec 3: вынос из хардкода сканера).
+
+    Ранее SELL и WIF-BUY блокировались жёстко внутри `scan_symbol_v2`
+    (scheduler/scanner.py). Теперь это настраивается через .env.
+    """
+
+    # Блокировать все SELL-сигналы (было: WR 33.7%, PnL -0.450% на 360d)
+    block_all_sell: bool = os.getenv("BLOCK_ALL_SELL", "false").lower() == "true"
+    # Причина блокировки SELL (для лога/трассировки)
+    block_all_sell_reason: str = os.getenv(
+        "BLOCK_ALL_SELL_REASON",
+        "SELL blocked: WR 33.7% across 360d, negative PnL",
+    )
+    # JSON dict: {"WIF/USDT": "buy"} — символы, чьё направление блокируется.
+    # Ключ = символ, значение = направление ("buy" / "sell").
+    blocked_symbol_directions: dict = field(default_factory=lambda: _parse_json_env(
+        "BLOCKED_SYMBOL_DIRECTIONS", {"WIF/USDT": "buy"}
+    ))
+    # Статистика для отчётов (справочно, не влияет на логику)
+    stats: dict = field(default_factory=lambda: _parse_json_env(
+        "DIRECTION_FILTER_STATS",
+        {
+            "SELL": {"wr": 33.7, "pnl_pct": -0.450},
+            "WIF/USDT:buy": {"wr": 28.8, "pnl_pct": -1.255},
+        },
+    ))
+
 
 @dataclass
 class LiquidityConfig:
@@ -358,6 +405,15 @@ class RiskConfig:
     tp_path_clear_score: int = int(os.getenv("TP_PATH_CLEAR_SCORE", "15"))
     # Штраф за obstacle в TP path
     tp_path_obstacle_penalty: int = int(os.getenv("TP_PATH_OBSTACLE_PENALTY", "-10"))
+
+    # ─── News Filter (Rec 4a) ────────────────────────────────────────────
+    # Включить фильтр новостных событий (по умолчанию выключен — события
+    # берутся из локального JSON, см. risk/news_filter.py)
+    news_filter_enabled: bool = os.getenv("NEWS_FILTER_ENABLED", "false").lower() == "true"
+    # Окно блокировки до события (минуты)
+    news_block_before_minutes: int = int(os.getenv("NEWS_BLOCK_BEFORE_MINUTES", "60"))
+    # Окно блокировки после события (минуты)
+    news_block_after_minutes: int = int(os.getenv("NEWS_BLOCK_AFTER_MINUTES", "30"))
 
 
 @dataclass
@@ -518,13 +574,25 @@ class WebConfig:
     """Параметры веб-сервера (дашборд)."""
 
     # Порт веб-сервера
-    port: int = int(os.getenv("WEB_PORT", "3002"))
+    port: int = int(os.getenv("WEB_PORT", "3001"))
     # Хост веб-сервера
     host: str = os.getenv("WEB_HOST", "0.0.0.0")
     # Включить веб-сервер
     enabled: bool = os.getenv("WEB_ENABLED", "true").lower() == "true"
     # Интервал обновлений (секунды)
     update_interval: int = int(os.getenv("WEB_UPDATE_INTERVAL", "5"))
+
+
+@dataclass
+class WebhookConfig:
+    """TradingView Webhook — входящие алерты."""
+
+    # Включить webhook endpoint
+    enabled: bool = os.getenv("WEBHOOK_ENABLED", "false").lower() == "true"
+    # Секретный ключ для валидации (опционально, пусто = без валидации)
+    secret: str = os.getenv("WEBHOOK_SECRET", "")
+    # Макс. запросов в минуту (rate limit)
+    rate_limit: int = int(os.getenv("WEBHOOK_RATE_LIMIT", "30"))
 
 
 @dataclass
@@ -538,16 +606,31 @@ class PatternEngineConfig:
     # Require displacement candle for reversal setups (sweep + MSS is enough when false)
     reversal_require_displacement: bool = os.getenv("REVERSAL_REQUIRE_DISPLACEMENT", "false").lower() == "true"
 
+    # ── Quality Thresholds (Step 2: Strict SMC Enforcement) ──
+    # Minimum overall quality score (0-100) to pass. 0 = disabled.
+    min_overall_quality: float = float(os.getenv("PATTERN_MIN_OVERALL_QUALITY", "0"))
+    # Minimum setup confidence (0-1) to pass. 0 = disabled.
+    min_setup_confidence: float = float(os.getenv("PATTERN_MIN_SETUP_CONFIDENCE", "0"))
+    # Minimum core ICT components required (sweep, displacement, MSS, BOS). 2 = default.
+    min_components_required: int = int(os.getenv("PATTERN_MIN_COMPONENTS_REQUIRED", "2"))
+    # Maximum FVG age in candles. If FVG formed more than N candles ago and price
+    # returns to it, the setup is rejected. 0 = disabled.
+    max_fvg_age_candles: int = int(os.getenv("PATTERN_MAX_FVG_AGE_CANDLES", "4"))
+
 
 @dataclass
 class ProbabilityConfig:
-    """Probability Engine — ML/rules configuration."""
+    """Probability Engine — DEPRECATED (ML engine removed in Oracle V1).
 
-    # Path to trained ML model
+    Fields kept for backward compatibility. The inline probability estimation
+    in scanner.py replaces this module.
+    """
+
+    # DEPRECATED: Path to trained ML model (no longer used)
     model_path: str = os.getenv("PROBABILITY_MODEL_PATH", "models/probability_model.pkl")
-    # Minimum outcomes needed to train ML model
+    # DEPRECATED: Minimum outcomes needed to train ML model (no longer used)
     min_samples_for_ml: int = int(os.getenv("PROBABILITY_MIN_SAMPLES_FOR_ML", "100"))
-    # Fallback winrate when no historical data
+    # DEPRECATED: Fallback winrate when no historical data (no longer used)
     fallback_winrate: float = float(os.getenv("PROBABILITY_FALLBACK_WINRATE", "50.0"))
 
 
@@ -556,9 +639,9 @@ class RiskEngineConfig:
     """Risk Engine — Layer 3 capital protection."""
 
     # Minimum R:R ratio (hard gate)
-    min_rr_ratio: float = float(os.getenv("RISK_ENGINE_MIN_RR", "1.5"))
+    min_rr_ratio: float = float(os.getenv("RISK_ENGINE_MIN_RR", "2.0"))
     # Absolute SL minimum % (hard gate)
-    sl_absolute_min_pct: float = float(os.getenv("RISK_ENGINE_SL_MIN_PCT", "0.25"))
+    sl_absolute_min_pct: float = float(os.getenv("RISK_ENGINE_SL_MIN_PCT", "0.4"))
     # Absolute SL maximum % (hard gate)
     sl_absolute_max_pct: float = float(os.getenv("RISK_ENGINE_SL_MAX_PCT", "5.0"))
     # Base risk % per trade
@@ -576,6 +659,7 @@ class AppConfig:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     exchange: ExchangeConfig = field(default_factory=ExchangeConfig)
     trading: TradingConfig = field(default_factory=TradingConfig)
+    direction_filter: DirectionFilterConfig = field(default_factory=DirectionFilterConfig)
     market_structure: MarketStructureConfig = field(default_factory=MarketStructureConfig)
     liquidity: LiquidityConfig = field(default_factory=LiquidityConfig)
     derivatives: DerivativesConfig = field(default_factory=DerivativesConfig)
@@ -586,13 +670,14 @@ class AppConfig:
     notifier: NotifierConfig = field(default_factory=NotifierConfig)
     support_resistance: SupportResistanceConfig = field(default_factory=SupportResistanceConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    webhook: WebhookConfig = field(default_factory=WebhookConfig)
     # New pipeline configs
     pattern_engine: PatternEngineConfig = field(default_factory=PatternEngineConfig)
     probability: ProbabilityConfig = field(default_factory=ProbabilityConfig)
     risk_engine: RiskEngineConfig = field(default_factory=RiskEngineConfig)
 
     # ─── Feature Flags (Phase 1) ─────────────────────────────────────────
-    htf_hard_gate: bool = os.getenv("HTF_HARD_GATE", "true").lower() == "true"
+    htf_hard_gate: bool = os.getenv("HTF_HARD_GATE", "false").lower() == "true"
     external_liquidity_tp: bool = os.getenv("EXTERNAL_LIQUIDITY_TP", "true").lower() == "true"
     ob_mitigation: bool = os.getenv("OB_MITIGATION", "true").lower() == "true"
     confidence_cap: bool = os.getenv("CONFIDENCE_CAP", "true").lower() == "true"
@@ -600,7 +685,7 @@ class AppConfig:
 
     # ─── Feature Flags (Phase 2 — HTF Bias V2 + Premium/Discount) ──────
     htf_bias_v2: bool = os.getenv("HTF_BIAS_V2", "true").lower() == "true"
-    premium_discount: bool = os.getenv("PREMIUM_DISCOUNT", "false").lower() == "true"
+    premium_discount: bool = os.getenv("PREMIUM_DISCOUNT", "true").lower() == "true"
 
     # ─── Feature Flags (Phase 3 — signal-recovery diagnostics) ─────────
     # Each flag defaults to the CURRENT live behavior; flipping it changes gating.
@@ -617,7 +702,7 @@ class AppConfig:
     require_entry_zone: bool = os.getenv("REQUIRE_ENTRY_ZONE", "false").lower() == "true"
     # Minimum P(TP) required to emit a signal (0.0 = disabled, current behavior). When > 0
     # the Probability Engine becomes an actual selector rather than sizing-only input.
-    min_p_tp: float = float(os.getenv("MIN_P_TP", "0.55"))
+    min_p_tp: float = float(os.getenv("MIN_P_TP", "0.45"))
 
     # URL базы данных
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db")
@@ -941,5 +1026,17 @@ def build_config_snapshot() -> str:
         "btc_correlation_enabled": d.btc_correlation_enabled,
         "btc_global_trend_filter": d.btc_global_trend_filter,
         "eth_correlation_enabled": d.eth_correlation_enabled,
+        # Direction / symbol filters (Rec 3)
+        "block_all_sell": config.direction_filter.block_all_sell,
+        "blocked_symbol_directions": config.direction_filter.blocked_symbol_directions,
+        # Oracle V1: Pattern Engine quality thresholds
+        "min_overall_quality": config.pattern_engine.min_overall_quality,
+        "min_setup_confidence": config.pattern_engine.min_setup_confidence,
+        "min_components_required": config.pattern_engine.min_components_required,
+        # Oracle V1: Risk Engine
+        "risk_engine_min_rr": config.risk_engine.min_rr_ratio,
+        "risk_engine_sl_min_pct": config.risk_engine.sl_absolute_min_pct,
+        "risk_engine_sl_max_pct": config.risk_engine.sl_absolute_max_pct,
+        "risk_engine_base_risk_pct": config.risk_engine.base_risk_pct,
     }
     return _json.dumps(snapshot, sort_keys=True)

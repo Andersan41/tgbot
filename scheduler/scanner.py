@@ -1,7 +1,7 @@
 """
 scheduler/scanner.py — Основной сканер рынка.
 
-ICT Core pipeline: Pattern Engine → Feature Builder → Probability Engine → Risk Engine
+ICT Core pipeline: Pattern Engine → Risk Engine (no ML, no scoring).
 """
 import asyncio
 import collections
@@ -23,16 +23,6 @@ from risk.market_regime import RegimeDetector, MarketRegime
 from scheduler.circuit_breaker import is_circuit_breaker_active, check_recent_losses
 from storage.trace import DecisionTraceBuilder, ExecutionSnapshot
 
-# ── Shadow mode imports ──
-from strategy.market_phase_engine import MarketPhaseEngine
-from strategy.scenario_engine import ScenarioEngine
-from strategy.trade_thesis import TradeThesisManager
-from strategy.scenario_memory import scenario_memory
-
-# Shadow mode singletons
-_market_phase_engine = MarketPhaseEngine()
-_scenario_engine = ScenarioEngine()
-_thesis_manager = TradeThesisManager()
 
 # ── Timeframe-dependent cooldown ───────────────────────────────────────
 _TF_MINUTES = {
@@ -103,13 +93,6 @@ class _FunnelCounter:
 
 _current_funnel = _FunnelCounter()
 
-
-# ── Dynamic Thesis caches (per symbol/timeframe) ─────────────────────
-# These persist across scan cycles so the graph updates in-place
-# instead of rebuilding from scratch every time.
-_dynamic_graphs: dict = {}         # key = f"{symbol}_{timeframe}" → LiquidityGraph
-_dynamic_theses: dict = {}         # key = f"{symbol}_{timeframe}" → DynamicTradeThesis
-_dynamic_bar_counters: dict = {}   # key = f"{symbol}_{timeframe}" → int (bar count)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -220,8 +203,6 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
     All indicator-based filtering removed.
     """
     from strategy.pattern_engine import pattern_engine
-    from strategy.feature_builder import feature_builder
-    from strategy.probability_engine import probability_engine
     from risk.engine import risk_engine, PortfolioState
     from strategy.signal_engine import _calculate_sl_tp
 
@@ -273,6 +254,35 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         trace.passed("indicators")
         _current_funnel.log_gate(symbol, timeframe, "indicators", "PASS")
 
+        # 0.4 Compression regime gate (block choppy markets)
+        if config.trading.block_compression_regime:
+            _regime_check = _detect_regime(ind, df, symbol, timeframe)
+            if _regime_check and _regime_check.regime == "compression":
+                reason = f"compression regime (ATR percentile={_regime_check.atr_percentile:.0f})"
+                _current_funnel.log_gate(symbol, timeframe, "compression_regime", "BLOCKED", reason)
+                trace.blocked("compression_regime", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            # Also block range + high ADX combo (failure cluster pattern)
+            if (_regime_check and _regime_check.regime == "range"
+                    and float(ind.adx or 0) >= 26):
+                # Price in middle of tight range = no edge
+                if len(df) >= 20:
+                    _recent = df.tail(20)
+                    _range_pct = (_recent["high"].max() - _recent["low"].min()) / _recent["low"].min() * 100
+                    _price = df["close"].iloc[-1]
+                    _mid = (_recent["high"].max() + _recent["low"].min()) / 2
+                    _dist_mid = abs(_price - _mid) / _mid * 100
+                    if _range_pct < 1.5 and _dist_mid < 0.3:
+                        reason = f"high ADX ({ind.adx:.0f}) in tight range ({_range_pct:.2f}%)"
+                        _current_funnel.log_gate(symbol, timeframe, "compression_regime", "BLOCKED", reason)
+                        trace.blocked("compression_regime", reason)
+                        trace.set_version(VERSION, build_config_snapshot())
+                        await trace.save(db)
+                        return None
+        _current_funnel.log_gate(symbol, timeframe, "compression_regime", "PASS")
+
         # ═══ Phase 1: Pattern Engine (ICT setup detection) ═══
 
         _df_clean = df.dropna(subset=["open", "high", "low", "close", "volume"])
@@ -323,6 +333,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             candle_quality=candle_quality,
             current_price=ind.close,
             atr=ind.atr if ind.atr else 0.0,
+            df=_df_clean,
         )
 
         if not setup.detected:
@@ -338,6 +349,70 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         _current_funnel.log_gate(symbol, timeframe, "pattern_engine", "PASS",
                                  f"direction={setup.direction} components={setup.components_found}")
         trace.passed("pattern_engine")
+        trace.set_features({
+            "components": setup.components_count,
+            "overall_quality": setup.overall_quality,
+            "setup_confidence": setup.setup_confidence,
+        })
+
+        # ═══ Phase 1.35: Direction / Symbol filter ═══
+        # Configurable via config.direction_filter (Rec 3). Historical baseline:
+        # SELL blocked: WR 33.7%, PnL -0.450% across 360d backtest
+        # WIF BUY blocked: WR 28.8%, PnL -1.255%
+        if config.direction_filter.block_all_sell and setup.direction == "sell":
+            reason = config.direction_filter.block_all_sell_reason
+            _current_funnel.log_gate(symbol, timeframe, "direction_filter", "BLOCKED", reason)
+            trace.blocked("direction_filter", reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            logger.info(f"Direction BLOCKED: {symbol} {timeframe} — {reason}")
+            return None
+
+        _blocked_dir = config.direction_filter.blocked_symbol_directions.get(symbol)
+        if _blocked_dir is not None and setup.direction == _blocked_dir.lower():
+            reason = (
+                f"{symbol} {_blocked_dir.upper()} blocked: "
+                f"WR {config.direction_filter.stats.get(f'{symbol}:{_blocked_dir.lower()}', {}).get('wr', '?')}% "
+                f"across 360d"
+            )
+            _current_funnel.log_gate(symbol, timeframe, "symbol_filter", "BLOCKED", reason)
+            trace.blocked("symbol_filter", reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            logger.info(f"Symbol BLOCKED: {symbol} {timeframe} — {reason}")
+            return None
+
+        # ═══ Phase 1.35: News Filter (Rec 4a, opt-in) ═══
+        # Блокирует сигнал в окне high-impact макро-события. Отключён по
+        # умолчанию (config.risk.news_filter_enabled); события — из локального
+        # JSON (NEWS_EVENTS_FILE), см. risk/news_filter.py.
+        if config.risk.news_filter_enabled:
+            logger.debug(f"News filter disabled (news_filter.py removed) for {symbol}")
+
+        # ═══ Phase 1.35: Confluence Mode (v3.0) ═══
+        # Active only when STRATEGY_MODE == "confluence"
+        # Based on 360d analysis: reversal WR=3.6%, BOS+OB WR=93.7%
+        from config.settings import STRATEGY_MODE, StrategyMode
+        if STRATEGY_MODE == StrategyMode.CONFLUENCE:
+            # Reversal block: reversal setups are not trades, they're noise
+            if setup.setup_type == "reversal":
+                reason = "Confluence Mode: reversal blocked (WR 3.6% across 360d)"
+                _current_funnel.log_gate(symbol, timeframe, "confluence_mode", "BLOCKED", reason)
+                trace.blocked("confluence_mode", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                logger.info(f"Confluence BLOCKED: {symbol} {timeframe} — {reason}")
+                return None
+
+            # OB required for BOS continuation (WR 93.7% with OB vs 44.6% without)
+            if setup.setup_type == "continuation" and not setup.has_ob:
+                reason = "Confluence Mode: OB required for BOS (WR 93.7% with OB)"
+                _current_funnel.log_gate(symbol, timeframe, "confluence_mode", "BLOCKED", reason)
+                trace.blocked("confluence_mode", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                logger.info(f"Confluence BLOCKED: {symbol} {timeframe} — {reason}")
+                return None
 
         # ═══ Phase 1.4: Setup-Type-Specific Gates ═══
         # Reversal: sweep + displacement + MSS (all hard gates)
@@ -387,6 +462,82 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             trace.passed("bos_gate")
             _current_funnel.log_gate(symbol, timeframe, "bos_gate", "PASS",
                                      f"bos_type={setup.bos_type}")
+
+            # Sweep required for continuation (100% of winners had sweep)
+            if not setup.has_sweep:
+                reason = "continuation: no sweep"
+                _current_funnel.log_gate(symbol, timeframe, "sweep_continuation", "BLOCKED", reason)
+                trace.blocked("sweep_continuation", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            trace.passed("sweep_continuation")
+            _current_funnel.log_gate(symbol, timeframe, "sweep_continuation", "PASS",
+                                     f"sweep_type={setup.sweep_type}")
+
+        # ── Phase 1.46: Per-Symbol Overrides ──
+        _sym_overrides = config.trading.symbol_overrides.get(symbol, {})
+        if _sym_overrides:
+            # ADX minimum override
+            _min_adx = _sym_overrides.get("adx_min")
+            if _min_adx is not None and ind.adx < _min_adx:
+                reason = f"symbol ADX {ind.adx:.1f} < {_min_adx}"
+                _current_funnel.log_gate(symbol, timeframe, "symbol_adx", "BLOCKED", reason)
+                trace.blocked("symbol_adx", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            if _min_adx is not None:
+                _current_funnel.log_gate(symbol, timeframe, "symbol_adx", "PASS")
+
+            # Max SL distance override
+            _max_sl = _sym_overrides.get("max_sl_pct")
+            if _max_sl is not None and setup.sl_distance_pct > _max_sl:
+                reason = f"symbol SL {setup.sl_distance_pct:.1f}% > {_max_sl}%"
+                _current_funnel.log_gate(symbol, timeframe, "symbol_sl", "BLOCKED", reason)
+                trace.blocked("symbol_sl", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            if _max_sl is not None:
+                _current_funnel.log_gate(symbol, timeframe, "symbol_sl", "PASS")
+
+            # Max ATR% override
+            _max_atr = _sym_overrides.get("max_atr_pct")
+            if _max_atr is not None and setup.atr_pct > _max_atr:
+                reason = f"symbol ATR% {setup.atr_pct:.2f}% > {_max_atr}%"
+                _current_funnel.log_gate(symbol, timeframe, "symbol_atr", "BLOCKED", reason)
+                trace.blocked("symbol_atr", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            if _max_atr is not None:
+                _current_funnel.log_gate(symbol, timeframe, "symbol_atr", "PASS")
+
+            # Minimum quality override
+            _min_q = _sym_overrides.get("min_quality")
+            if _min_q is not None and setup.overall_setup_quality < _min_q:
+                reason = f"symbol quality {setup.overall_setup_quality:.0f} < {_min_q}"
+                _current_funnel.log_gate(symbol, timeframe, "symbol_quality", "BLOCKED", reason)
+                trace.blocked("symbol_quality", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            if _min_q is not None:
+                _current_funnel.log_gate(symbol, timeframe, "symbol_quality", "PASS")
+
+            # Block specific setup types (e.g. ["SELL_continuation"])
+            _blocked = _sym_overrides.get("block_setup_types", [])
+            if _blocked:
+                _st = f"{setup.direction.upper()}_{setup.setup_type}"
+                if _st in _blocked:
+                    reason = f"symbol blocked: {_st}"
+                    _current_funnel.log_gate(symbol, timeframe, "symbol_blocked_type", "BLOCKED", reason)
+                    trace.blocked("symbol_blocked_type", reason)
+                    trace.set_version(VERSION, build_config_snapshot())
+                    await trace.save(db)
+                    return None
+                _current_funnel.log_gate(symbol, timeframe, "symbol_blocked_type", "PASS")
 
         # ── Entry Armed (OB/FVG zone) ──
         # Default: soft (log only) — matches current behavior, entry is taken at close.
@@ -623,376 +774,10 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         entry_price = ind.close
 
-        # ═══ Phase 1.55: Market Phase Detection (SHADOW MODE) ═══
-
-        _phase_assessment = None
-        try:
-            _phase_assessment = _market_phase_engine.assess(
-                adx=ind.adx if ind.adx else 0.0,
-                atr_current=ind.atr if ind.atr else 0.0,
-                atr_avg=getattr(ind, 'atr_avg', ind.atr) if ind.atr else 0.0,
-                ema_fast=ind.ema_fast if ind.ema_fast else 0.0,
-                ema_slow=ind.ema_slow if ind.ema_slow else 0.0,
-                ema_trend=ind.ema_trend if hasattr(ind, 'ema_trend') and ind.ema_trend else 0.0,
-                ema_fast_prev=0.0,
-                ema_slow_prev=0.0,
-                close=ind.close,
-                high=ind.high,
-                low=ind.low,
-                has_bos=setup.bos_type is not None,
-                bos_direction=setup.bos_type,
-                has_choch=setup.has_mss,
-                has_displacement=setup.has_displacement if hasattr(setup, 'has_displacement') else False,
-                displacement_count=1 if setup.has_displacement else 0,
-                volume_ratio=1.0,
-                range_pct=0.0,
-                bars_in_range=20,
-            )
-            logger.info(
-                f"[SHADOW] Phase: {symbol} {timeframe} | "
-                f"phase={_phase_assessment.phase.value} "
-                f"conf={_phase_assessment.confidence:.2f} "
-                f"dur={_phase_assessment.duration_bars}bars"
-            )
-        except Exception as e:
-            logger.debug(f"[SHADOW] Phase detection failed for {symbol} {timeframe}: {e}")
-
-        # ═══ Phase 1.6: Market Thesis Engine (SHADOW MODE) ═══
-        # Dynamic approach: cache graph and thesis per symbol/timeframe.
-        # Graph updates in-place on each candle close instead of rebuilding.
-        # DynamicTradeThesis tracks competing BUY/SELL with stability.
-
-        _thesis_score = 0.0
-        _thesis_stability = 0.0
-
-        try:
-            from strategy.market_thesis_engine import (
-                market_thesis_engine, LiquidityGraph, DynamicTradeThesis,
-            )
-            from liquidity.equal_levels import detect_equal_levels
-            from liquidity.external import detect_external_liquidity
-
-            _cache_key = f"{symbol}_{timeframe}"
-
-            # Latest candle data for update_on_candle
-            _last_row = _df_clean.iloc[-1] if len(_df_clean) > 0 else None
-            _candle_data = {}
-            if _last_row is not None:
-                _candle_data = {
-                    "open": float(_last_row["open"]),
-                    "high": float(_last_row["high"]),
-                    "low": float(_last_row["low"]),
-                    "close": float(_last_row["close"]),
-                    "volume": float(_last_row["volume"]),
-                }
-
-            if _cache_key in _dynamic_graphs:
-                # ── UPDATE existing graph in-place ──
-                _liq_graph = _dynamic_graphs[_cache_key]
-                _thesis = _dynamic_theses.get(_cache_key)
-
-                if _candle_data:
-                    _liq_graph.update_on_candle(
-                        _candle_data, entry_price, new_bar=True,
-                    )
-
-                if _thesis is not None:
-                    _thesis.update(
-                        _liq_graph, entry_price, _candle_data,
-                        atr=ind.atr if ind.atr else 0,
-                    )
-                    _thesis_stability = _thesis.scenario_stability
-
-                    # Use best scenario from dynamic thesis
-                    _best = _thesis.best_scenario
-                    if _best and _best.is_active:
-                        _thesis_score = _best.score
-
-                        logger.info(
-                            f"[SHADOW] Dynamic Thesis: {symbol} {timeframe} | "
-                            f"BUY={_thesis.buy_scenario.probability:.2f} "
-                            f"SELL={_thesis.sell_scenario.probability:.2f} | "
-                            f"ambiguous={_thesis.is_ambiguous} | "
-                            f"stability={_thesis_stability:.2f} | "
-                            f"graph_v{_liq_graph.graph_version}"
-                        )
-
-                        if _thesis.is_ambiguous:
-                            logger.debug(
-                                f"[SHADOW] Ambiguous thesis for {symbol} {timeframe} "
-                                f"— probabilities too close"
-                            )
-                    else:
-                        logger.debug(
-                            f"[SHADOW] No active scenario for {symbol} {timeframe}"
-                        )
-                else:
-                    logger.debug(
-                        f"[SHADOW] No cached thesis for {symbol} {timeframe}"
-                    )
-            else:
-                # ── FIRST TIME: build graph + create thesis ──
-                _swing_highs = getattr(structure, "swing_points", []) or []
-                _swing_lows = getattr(structure, "swing_points", []) or []
-                _equal_levels = detect_equal_levels(_swing_highs, _swing_lows)
-                _external_levels = (
-                    detect_external_liquidity(_df_clean, lookback=200)
-                    if _df_clean is not None else []
-                )
-
-                _liq_graph = market_thesis_engine.build_liquidity_graph(
-                    current_price=entry_price,
-                    sweeps=sweeps,
-                    order_blocks=order_blocks,
-                    fvgs=fvgs,
-                    structure=structure,
-                    equal_levels=_equal_levels,
-                    external_levels=_external_levels,
-                    candle_quality=candle_quality,
-                    timeframe=timeframe,
-                )
-
-                _thesis = DynamicTradeThesis(
-                    symbol=symbol, timeframe=timeframe,
-                )
-                if _candle_data:
-                    _thesis.update(
-                        _liq_graph, entry_price, _candle_data,
-                        atr=ind.atr if ind.atr else 0,
-                    )
-                    _thesis_stability = _thesis.scenario_stability
-
-                # Cache for next cycle
-                _dynamic_graphs[_cache_key] = _liq_graph
-                _dynamic_theses[_cache_key] = _thesis
-
-                logger.debug(
-                    f"[SHADOW] Built initial graph for {symbol} {timeframe}: "
-                    f"{len(_liq_graph.nodes)} nodes"
-                )
-
-            # Also evaluate backward-compatible opportunity for trade plan
-            _thesis_opportunity = market_thesis_engine.evaluate_trade_opportunity(
-                graph=_liq_graph,
-                direction=setup.direction,
-                entry_price=entry_price,
-                atr=ind.atr if ind.atr else 0,
-                symbol=symbol,
-                timeframe=timeframe,
-            )
-
-            if _thesis_opportunity:
-                trade_plan.market_thesis = _thesis_opportunity.thesis
-                trade_plan.liquidity_path = _thesis_opportunity.expected_path
-                trade_plan.scenario_score = _thesis_opportunity.scenario_score
-                trade_plan.scenario_stability = _thesis_stability
-                trade_plan.thesis_source = "market_thesis"
-
-                logger.info(
-                    f"[SHADOW] Market Thesis: {symbol} {timeframe} | "
-                    f"direction={_thesis_opportunity.direction} | "
-                    f"score={_thesis_opportunity.scenario_score:.0f} | "
-                    f"stability={_thesis_stability:.2f} | "
-                    f"target={_thesis_opportunity.expected_target:.4f} | "
-                    f"invalidation={_thesis_opportunity.invalidation:.4f} | "
-                    f"rr=1:{_thesis_opportunity.expected_rr:.1f}"
-                )
-
-                if _thesis_opportunity.thesis.score_breakdown:
-                    bd = _thesis_opportunity.thesis.score_breakdown.breakdown()
-                    logger.info(
-                        f"[SHADOW] Score breakdown: OB={bd['ob']:.1f} "
-                        f"Sweep={bd['sweep']:.1f} BOS={bd['bos']:.1f} "
-                        f"FVG={bd['fvg']:.1f} Liq={bd['liquidity']:.1f} "
-                        f"HTF={bd['htf']:.1f} total={bd['total']:.1f}"
-                    )
-
-            # Evaluate all ranked scenarios for comparison
-            _scenarios = market_thesis_engine.evaluate_scenarios(
-                graph=_liq_graph,
-                direction=setup.direction,
-                entry_price=entry_price,
-                atr=ind.atr if ind.atr else 0,
-                symbol=symbol,
-                timeframe=timeframe,
-            )
-            if _scenarios:
-                logger.info(
-                    f"[SHADOW] Scenarios ranked: "
-                    + " | ".join(
-                        f"#{s.alternative_rank + 1} score={s.score:.1f} "
-                        f"conf={s.confidence:.0f} rr=1:{s.expected_rr:.1f}"
-                        for s in _scenarios[:3]
-                    )
-                )
-            else:
-                logger.debug(f"[SHADOW] No thesis for {symbol} {timeframe}")
-
-        except Exception as e:
-            logger.debug(f"[SHADOW] Market Thesis Engine error for {symbol} {timeframe}: {e}")
-
-        # ═══ Phase 1.7: Hypothesis Engine + Decision Engine ═══
-        # NEW PIPELINE: generates all hypotheses, Decision Engine selects winner.
-        # Runs in parallel with existing shadow mode for comparison.
-
-        _hypothesis_set = None
-        _decision = None
-
-        try:
-            from strategy.hypothesis import HypothesisSet
-            from strategy.decision_engine import DecisionEngine, MarketState
-
-            if _liq_graph is not None:
-                # 1. Build HypothesisSet (all competing hypotheses)
-                _hypothesis_set = market_thesis_engine.build_hypothesis_set(
-                    graph=_liq_graph,
-                    direction=None,  # both buy and sell
-                    atr=ind.atr if ind.atr else 0,
-                    current_bar=_dynamic_bar_counters.get(_cache_key, 0),
-                )
-
-                # 2. Build MarketState from phase assessment
-                if _phase_assessment:
-                    _market_state = MarketState.from_assessment(_phase_assessment)
-                else:
-                    from strategy.market_phase_engine import MarketPhase
-                    _market_state = MarketState(
-                        phase=MarketPhase.COMPRESSION,
-                        phase_confidence=0.5,
-                        narrative_weights={},
-                    )
-
-                # 3. Decision Engine selects winner
-                _decision_engine = DecisionEngine()
-                _decision = _decision_engine.decide(
-                    hypothesis_set=_hypothesis_set,
-                    market_state=_market_state,
-                )
-
-                if _decision.trade and _decision.hypothesis:
-                    h = _decision.hypothesis
-                    logger.info(
-                        f"[HYPOTHESIS] {symbol} {timeframe} | "
-                        f"direction={h.direction} | "
-                        f"narrative={h.narrative_type} | "
-                        f"quality={h.quality:.0f} | "
-                        f"confidence={h.confidence:.2f} | "
-                        f"decay={h.decay_factor:.2f} | "
-                        f"utility={_decision.utility:.3f} | "
-                        f"phase={_market_state.phase.value} | "
-                        f"hypotheses={len(_hypothesis_set)}"
-                    )
-                    # Store hypothesis in trace for ScenarioMemory tracking
-                    trace.set_hypothesis(
-                        hypothesis_id=h.id,
-                        narrative_type=h.narrative_type,
-                        direction=h.direction,
-                        quality=h.quality,
-                        confidence=h.confidence,
-                        decay_factor=h.decay_factor,
-                        utility=_decision.utility,
-                        entry_price=h.entry_price,
-                        invalidation_price=h.invalidation_price,
-                        target_price=h.target_price,
-                        rr_ratio=h.rr_ratio,
-                        phase=_market_state.phase.value,
-                    )
-                    # Record expected metrics for future outcome tracking
-                    scenario_memory.record_expected(
-                        symbol=symbol,
-                        hypothesis_name=h.name,
-                        narrative_type=h.narrative_type,
-                        direction=h.direction,
-                        expected_rr=h.expected_rr,
-                        expected_p_tp=h.expected_p_tp,
-                        expected_quality=h.quality,
-                        expected_confidence=h.confidence,
-                    )
-                else:
-                    logger.debug(
-                        f"[HYPOTHESIS] {symbol} {timeframe} | "
-                        f"NO TRADE: {_decision.rejection_reason} | "
-                        f"reasons={_decision.reasons}"
-                    )
-
-                # Log top hypotheses for debugging
-                _top = _hypothesis_set.top(3)
-                if _top:
-                    _top_str = " | ".join(
-                        f"{h.direction}:{h.narrative_type} "
-                        f"q={h.quality:.0f} c={h.confidence:.2f} "
-                        f"d={h.decay_factor:.2f}"
-                        for h in _top
-                    )
-                    logger.debug(f"[HYPOTHESIS] Top: {_top_str}")
-
-        except Exception as e:
-            logger.debug(f"[HYPOTHESIS] Engine error for {symbol} {timeframe}: {e}")
-
-        # ═══ Phase 1.65: Scenario Engine (SHADOW MODE) ═══
-
-        _new_scenarios = []
-        _new_evaluations = []
-        try:
-            if _liq_graph is not None:
-                _new_scenarios = _scenario_engine.detect_scenarios(
-                    graph=_liq_graph,
-                    structure=structure,
-                    phase=_phase_assessment,
-                    direction=setup.direction,
-                )
-
-                if _new_scenarios:
-                    # Estimate probability for each scenario
-                    from strategy.probability_engine import probability_engine
-                    for scenario in _new_scenarios[:5]:  # top 5
-                        eval_result = probability_engine.estimate_scenario(
-                            features=features,
-                            scenario=scenario,
-                        )
-                        _new_evaluations.append(eval_result)
-
-                    logger.info(
-                        f"[SHADOW] ScenarioEngine: {symbol} {timeframe} | "
-                        f"detected={len(_new_scenarios)} "
-                        f"evaluated={len(_new_evaluations)} | "
-                        + " | ".join(
-                            f"{s.name}(p={e.probability:.2f})"
-                            for s, e in zip(_new_scenarios[:3], _new_evaluations[:3])
-                        )
-                    )
-
-                    # Record observations in ScenarioMemory
-                    for scenario in _new_scenarios:
-                        scenario_memory.record_observation(symbol, scenario.name)
-
-                    # Update TradeThesisManager
-                    _current_thesis = _thesis_manager.update(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        scenarios=_new_scenarios,
-                        evaluations=_new_evaluations,
-                        bar=len(_df_clean),
-                        price=entry_price,
-                    )
-                    if _current_thesis:
-                        logger.info(
-                            f"[SHADOW] Thesis: {symbol} {timeframe} | "
-                            f"status={_current_thesis.status} "
-                            f"dir={_current_thesis.direction} "
-                            f"scenario={_current_thesis.scenario.name} "
-                            f"p={_current_thesis.evaluation.probability:.2f} "
-                            f"age={_current_thesis.age_bars}"
-                        )
-
-        except Exception as e:
-            logger.debug(f"[SHADOW] ScenarioEngine error for {symbol} {timeframe}: {e}")
-
-        # ═══ Phase 2: Feature Builder ═══
+        # ═══ Phase 2: Analytics (regime, context, MTF) ═══
 
         regime = _detect_regime(ind, df, symbol, timeframe)
-        from risk.volatility_regime import classify_volatility
-        vol_regime = classify_volatility(ind.atr, ind.close)
+        atr_pct = (ind.atr / ind.close * 100) if ind.atr and ind.close > 0 else 0.0
 
         # MTF alignment (analytics — not a gate)
         mtf_aligned = False
@@ -1031,68 +816,39 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             except Exception as e:
                 logger.debug(f"Context enrichment skipped for {symbol}: {e}")
 
-        # OB state multiplier (mitigation factor for Probability Engine)
-        _ob_state_multiplier = 1.0
-        if order_blocks and setup.has_ob and setup.direction:
-            _rel_obs = [ob for ob in order_blocks
-                        if ob.type == ('bullish' if setup.direction == 'buy' else 'bearish')]
-            if _rel_obs:
-                _nearest_ob = min(_rel_obs, key=lambda ob: abs(ob.midpoint - setup.ob_midpoint))
-                from liquidity.ob_state import get_ob_state, get_ob_multiplier, OBState
-                _ob_state = get_ob_state(_df_clean, _nearest_ob.high, _nearest_ob.low, _nearest_ob.type)
-                if _ob_state == OBState.BROKEN:
-                    _ob_state_multiplier = 0.0
-                else:
-                    _ob_state_multiplier = get_ob_multiplier(_ob_state)
+        # ═══ Phase 3: Inline Probability Estimation ═══
 
-        # Build features
-        features = feature_builder.build(
-            setup=setup,
-            ind=ind,
-            structure=structure,
-            regime=regime,
-            vol_regime=vol_regime,
-            mtf_aligned=mtf_aligned,
-            mtf_count=mtf_count,
-            context_score=context_score_val,
-            fear_greed=fear_greed_val,
-            funding_rate=funding_rate_val,
-            sl=sl,
-            tp=tp,
-            entry_price=entry_price,
-            candle_quality=candle_quality,
-            is_reversal=is_reversal,
-            htf_bias_penalty=_htf_bias_penalty,
-            ob_state_multiplier=_ob_state_multiplier,
-            smt_divergence_score=_smt_to_score(_smt_result),
-        )
+        # Simple rule-based P(TP) from Pattern Engine components + context
+        _components_score = setup.components_count if setup.detected else 0
+        p_tp = 0.45  # baseline
+        # Components boost
+        if _components_score >= 4:
+            p_tp += 0.15
+        elif _components_score >= 3:
+            p_tp += 0.08
+        # Context boost
+        if context_score_val > 0:
+            p_tp += min(context_score_val * 0.1, 0.10)
+        elif context_score_val < 0:
+            p_tp += max(context_score_val * 0.1, -0.10)
+        # HTF bias boost
+        if _htf_result and _htf_result.direction == setup.direction:
+            p_tp += 0.05
+        # MTF alignment boost
+        if mtf_aligned:
+            p_tp += 0.03
+        # MSS quality boost
+        if setup.mss_score > 70:
+            p_tp += 0.05
+        p_tp = max(0.15, min(0.85, p_tp))
 
-        # ═══ Phase 3: Probability Engine ═══
-
-        probability = probability_engine.predict(features)
-
-        # Apply zone quality multiplier
-        if config.premium_discount and _zone_quality_multiplier != 1.0:
-            probability.p_tp = min(probability.p_tp * _zone_quality_multiplier, 1.0)
+        confidence = min(0.85, p_tp)
 
         logger.info(
-            f"Probability: P(TP)={probability.p_tp:.1%} | "
-            f"RR={probability.expected_rr:.2f} | PF={probability.profit_factor:.2f} | "
-            f"model={probability.model_type} | {symbol} {timeframe}"
+            f"Probability (inline): P(TP)={p_tp:.1%} | "
+            f"components={_components_score} | context={context_score_val:.2f} | "
+            f"{symbol} {timeframe}"
         )
-
-        # ═══ Phase 3.5: Probability selector (opt-in) ═══
-        # When config.min_p_tp > 0 the Probability Engine becomes an actual selector:
-        # setups below the P(TP) floor are dropped here. Default 0.0 = disabled (current
-        # behavior, where p_tp only feeds Kelly sizing in the Risk Engine).
-        if config.min_p_tp > 0.0 and probability.p_tp < config.min_p_tp:
-            reason = f"P(TP)={probability.p_tp:.1%} < min {config.min_p_tp:.1%}"
-            _current_funnel.log_gate(symbol, timeframe, "probability", "BLOCKED", reason)
-            trace.blocked("probability", reason)
-            trace.set_version(VERSION, build_config_snapshot())
-            await trace.save(db)
-            logger.info(f"Probability BLOCKED: {symbol} {timeframe} — {reason}")
-            return None
 
         # ═══ Phase 4: Risk Engine ═══
 
@@ -1104,16 +860,16 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         )
 
         risk_decision = risk_engine.evaluate(
-            features=features,
-            probability=probability,
             portfolio=portfolio_state,
             entry_price=entry_price,
             sl=sl,
             tp=tp,
-            scenario_score=_thesis_score,
-            scenario_stability=_thesis_stability,
+            atr_pct=atr_pct,
+            p_tp=p_tp,
+            confidence=confidence,
             mss_quality=setup.mss_score,
             atr=ind.atr if ind.atr else 0.0,
+            sl_source=sl_source,
         )
 
         if not risk_decision.should_trade:
@@ -1129,45 +885,13 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                                  f"risk={risk_decision.risk_pct:.2f}%")
         trace.passed("risk_engine")
 
-        # ═══ Phase 4.5: Entry Trigger Check (new pipeline) ═══
-        # Check if price is in the entry zone for the winning hypothesis
-        if _decision and _decision.trade and _decision.hypothesis:
-            from strategy.entry_trigger import EntryTrigger
-            entry_trigger = EntryTrigger()
-
-            # Get bid/ask for spread check
-            _ticker_for_trigger = await exchange_client.fetch_ticker_full(symbol)
-            _bid = _ticker_for_trigger.get("bid") if _ticker_for_trigger else None
-            _ask = _ticker_for_trigger.get("ask") if _ticker_for_trigger else None
-
-            trigger_result = entry_trigger.check(
-                hypothesis=_decision.hypothesis,
-                current_price=entry_price,
-                bid=_bid,
-                ask=_ask,
-            )
-
-            if not trigger_result.triggered:
-                _current_funnel.log_gate(symbol, timeframe, "entry_trigger", "BLOCKED",
-                                         trigger_result.reason)
-                trace.blocked("entry_trigger", trigger_result.reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                logger.info(
-                    f"EntryTrigger BLOCKED: {symbol} {timeframe} — "
-                    f"{trigger_result.reason}"
-                )
-                return None
-
-            _current_funnel.log_gate(symbol, timeframe, "entry_trigger", "PASS")
-            trace.passed("entry_trigger")
-
         # ═══ Phase 5: Build SignalResult ═══
 
         signal_type = SignalType.BUY if setup.direction == "buy" else SignalType.SELL
 
-        reasons = features.to_reasoning()
-        reasons.append(f"P(TP)={probability.p_tp:.1%}")
+        reasons = []
+        reasons.append(f"components={setup.components_count}")
+        reasons.append(f"P(TP)={p_tp:.1%}")
         reasons.append(f"Risk={risk_decision.risk_pct:.2f}%")
 
         result = SignalResult(
@@ -1179,7 +903,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             sl=risk_decision.sl_price,
             tp=risk_decision.tp_price,
             reasons=reasons,
-            score=features.components_count,
+            score=setup.components_count,
             _has_trigger=setup.has_trigger,
             _has_leading_trigger=setup.has_trigger,
             _regime=regime.regime if regime else None,
@@ -1194,9 +918,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         # Attach probability data for display (capped at 85%)
         result._confidence_v2 = type('Obj', (object,), {
-            'confidence_pct': min(85.0, probability.p_tp * 100),
-            'quality': probability.quality_label,
-            'total_score': probability.expected_rr,
+            'confidence_pct': min(85.0, p_tp * 100),
+            'quality': "moderate" if p_tp >= 0.5 else "weak",
+            'total_score': 0.0,
             'factors': [],
         })()
 
@@ -1234,7 +958,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         # ═══ Phase 7: Save to DB ═══
 
-        factor_fingerprint = "|".join(sorted(features.to_vector().keys()))
+        factor_fingerprint = f"components={setup.components_count}|regime={regime.regime if regime else 'none'}"
 
         # Calculate entry candle open time from dataframe
         _entry_candle_open = None
@@ -1248,7 +972,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         # Fetch execution snapshot data
         _ticker = await exchange_client.fetch_ticker_full(symbol)
         _tick_size = exchange_client.get_tick_size(symbol)
-        _atr = features.atr if hasattr(features, 'atr') else None
+        _atr = ind.atr
         _last_candle = df.iloc[-1] if df is not None and len(df) > 0 else None
 
         saved_signal = await db.save_signal(
@@ -1262,7 +986,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             reasons=result.reasons,
             confirmed=False,
             factor_fingerprint=factor_fingerprint,
-            confidence_v2_pct=probability.p_tp * 100,
+            confidence_v2_pct=p_tp * 100,
             confidence_v2_factors=[],
             entry_candle_open=_entry_candle_open,
             # Execution snapshot
@@ -1313,10 +1037,15 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         )
         trace.set_execution_snapshot(_exec_snapshot)
 
-        _trace_features = features.to_vector()
-        _trace_features["p_tp"] = probability.p_tp
-        _trace_features["expected_rr"] = probability.expected_rr
-        _trace_features["risk_pct"] = risk_decision.risk_pct
+        _trace_features = {
+            "components": setup.components_count,
+            "atr_pct": atr_pct,
+            "context_score": context_score_val,
+            "mtf_aligned": mtf_aligned,
+            "p_tp": p_tp,
+            "expected_rr": 0.0,
+            "risk_pct": risk_decision.risk_pct,
+        }
         trace.set_features(_trace_features)
         trace.set_version(VERSION)
         await trace.save(db, signal_id=saved_signal.id)
@@ -1341,7 +1070,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         _current_funnel.passed += 1
         logger.info(
             f"Signal: {result.signal.value} {symbol} {timeframe} | "
-            f"P(TP)={probability.p_tp:.1%} RR={risk_decision.rr_ratio:.2f} "
+            f"P(TP)={p_tp:.1%} RR={risk_decision.rr_ratio:.2f} "
             f"risk={risk_decision.risk_pct:.2f}%"
         )
         return result

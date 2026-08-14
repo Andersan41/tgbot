@@ -442,7 +442,7 @@ def create_app() -> web.Application:
     @web.middleware
     async def no_cache_middleware(request, handler):
         response = await handler(request)
-        if not request.path.startswith("/api/"):
+        if not request.path.startswith("/api/") and not request.path.startswith("/webhook/"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
         return response
@@ -453,6 +453,10 @@ def create_app() -> web.Application:
     app.router.add_get("/api/filters", api_filters_get)
     app.router.add_post("/api/filters", api_filters_post)
     app.router.add_get("/api/open-trades", api_open_trades)
+
+    # Webhook (TradingView)
+    from web.webhook import webhook_handler
+    app.router.add_post("/webhook/tradingview", webhook_handler)
 
     # WebSocket
     app.router.add_get("/ws", ws_handler)

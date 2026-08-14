@@ -22,9 +22,6 @@ from typing import Literal, Optional
 
 from loguru import logger
 
-from strategy.feature_builder import SetupFeatures
-from strategy.probability_engine import TradeProbability
-
 
 @dataclass
 class PortfolioState:
@@ -49,8 +46,6 @@ class RiskDecision:
     kelly_fraction: float = 0.0
     volatility_adjustment: float = 1.0
     probability_confidence: float = 0.0
-    scenario_score_adjustment: float = 1.0   # multiplier from ScenarioScore
-    scenario_stability_adjustment: float = 1.0  # multiplier from scenario_stability
 
 
 class RiskEngine:
@@ -69,7 +64,7 @@ class RiskEngine:
         max_risk_pct: float = 1.0,
         max_active_signals: int = 3,
         max_portfolio_risk_pct: float = 3.0,
-        sl_min_atr_multiplier: float = 2.0,
+        sl_min_atr_multiplier: float = 1.5,
     ):
         self.min_rr_ratio = min_rr_ratio
         self.sl_absolute_min_pct = sl_absolute_min_pct
@@ -83,37 +78,36 @@ class RiskEngine:
 
     def evaluate(
         self,
-        features: SetupFeatures,
-        probability: TradeProbability,
         portfolio: PortfolioState,
         entry_price: float,
         sl: float,
         tp: float,
-        scenario_score: float = 0.0,
-        scenario_stability: float = 0.0,
-        hypothesis: Optional[object] = None,
+        atr_pct: float = 0.0,
+        p_tp: float = 0.5,
+        confidence: float = 0.5,
         mss_quality: float = 0.0,
         atr: float = 0.0,
+        sl_source: Optional[str] = None,
     ) -> RiskDecision:
         """Evaluate risk and size the position.
 
         Args:
-            features: SetupFeatures from FeatureBuilder
-            probability: TradeProbability from ProbabilityEngine
             portfolio: current portfolio state
             entry_price: entry price
             sl: stop loss price
             tp: take profit price
-            scenario_score: scenario quality score [0, 100] from MarketThesisEngine
-            scenario_stability: scenario stability [0, 1] from DynamicTradeThesis
-            hypothesis: optional Hypothesis from DecisionEngine (new pipeline)
+            atr_pct: ATR as percentage of price (for volatility scaling)
+            p_tp: probability of take profit [0, 1]
+            confidence: model confidence [0, 1]
+            mss_quality: MSS score from Pattern Engine [0, 100]
+            atr: raw ATR value
+            sl_source: source of SL calculation (bos, ob, fractal, atr)
 
         Returns:
             RiskDecision with should_trade, risk_pct, and details.
         """
-        # === HARD GATES ===
+        # === DATA VALIDITY (only true hard gate) ===
 
-        # 1. Data integrity
         if entry_price <= 0 or sl <= 0 or tp <= 0:
             return RiskDecision(
                 should_trade=False,
@@ -132,80 +126,46 @@ class RiskEngine:
         rr_ratio = reward_dist / risk_dist
         sl_distance_pct = risk_dist / entry_price * 100
 
-        # 2. R:R minimum
+        # === SOFT GATES (log violations, don't block — Kelly sizing handles them) ===
+
+        _structural_sources = {"sweep_extreme", "ob_boundary", "swing_point", "bos_level", "structural"}
+        _is_structural = sl_source and sl_source in _structural_sources
+
         if rr_ratio < self.min_rr_ratio:
-            return RiskDecision(
-                should_trade=False,
-                rr_ratio=rr_ratio,
-                rejection_reason=f"RR={rr_ratio:.2f} < {self.min_rr_ratio}",
-            )
+            logger.info(f"Risk soft gate: RR={rr_ratio:.2f} < {self.min_rr_ratio} (proceeding via Kelly)")
 
-        # 3. SL absolute limits
         if sl_distance_pct < self.sl_absolute_min_pct:
-            return RiskDecision(
-                should_trade=False,
-                rr_ratio=rr_ratio,
-                rejection_reason=f"SL too tight: {sl_distance_pct:.2f}% < {self.sl_absolute_min_pct}%",
-            )
+            logger.info(f"Risk soft gate: SL tight {sl_distance_pct:.2f}% < {self.sl_absolute_min_pct}% (proceeding via Kelly)")
 
-        if sl_distance_pct > self.sl_absolute_max_pct:
-            return RiskDecision(
-                should_trade=False,
-                rr_ratio=rr_ratio,
-                rejection_reason=f"SL too wide: {sl_distance_pct:.2f}% > {self.sl_absolute_max_pct}%",
-            )
+        if not _is_structural and sl_distance_pct > self.sl_absolute_max_pct:
+            logger.info(f"Risk soft gate: SL wide {sl_distance_pct:.2f}% > {self.sl_absolute_max_pct}% (proceeding via Kelly)")
 
-        # 3b. SL minimum ATR multiplier (prevent tight SL on volatile symbols)
-        if atr > 0 and entry_price > 0:
-            atr_pct = atr / entry_price * 100
-            min_sl_from_atr = atr_pct * self.sl_min_atr_multiplier
+        if atr > 0 and entry_price > 0 and not _is_structural:
+            atr_pct_calc = atr / entry_price * 100
+            min_sl_from_atr = atr_pct_calc * self.sl_min_atr_multiplier
             if sl_distance_pct < min_sl_from_atr:
-                return RiskDecision(
-                    should_trade=False,
-                    rr_ratio=rr_ratio,
-                    rejection_reason=f"SL too tight vs ATR: {sl_distance_pct:.2f}% < {self.sl_min_atr_multiplier}x ATR ({min_sl_from_atr:.2f}%)",
-                )
+                logger.info(f"Risk soft gate: SL tight vs ATR {sl_distance_pct:.2f}% < {self.sl_min_atr_multiplier}x ATR (proceeding via Kelly)")
 
         # === POSITION SIZING ===
 
         # Kelly-inspired: f = (p * b - q) / b
-        p = probability.p_tp
+        p = p_tp
         q = 1 - p
         b = rr_ratio
         kelly = (p * b - q) / b if b > 0 else 0
         kelly = max(0.0, min(kelly, 0.20))  # cap at 20% (half-Kelly)
 
         # Scale by model confidence
-        kelly *= probability.confidence
+        kelly *= confidence
 
         # Final risk = min(kelly, base_risk)
         risk_pct = min(kelly * 100, self.base_risk_pct)
 
-        # Scenario score scaling (from MarketThesisEngine)
-        # Higher scenario quality → larger position (up to 1.2x)
-        # Lower scenario quality → smaller position (down to 0.6x)
-        scenario_adj = 1.0
-        if scenario_score > 0:
-            # Map [0, 100] → [0.6, 1.2]
-            scenario_adj = 0.6 + (scenario_score / 100.0) * 0.6
-            scenario_adj = max(0.6, min(1.2, scenario_adj))
-        risk_pct *= scenario_adj
-
-        # Scenario stability scaling (from DynamicTradeThesis)
-        # High stability (confirmed nodes) → higher risk tolerance (up to 1.15x)
-        # Low stability (decaying/invalidated) → reduced risk (down to 0.7x)
-        stability_adj = 1.0
-        if scenario_stability > 0:
-            # Map [0, 1] → [0.7, 1.15]
-            stability_adj = 0.7 + max(0.0, min(1.0, scenario_stability)) * 0.45
-            stability_adj = max(0.7, min(1.15, stability_adj))
-        risk_pct *= stability_adj
-
         # Volatility adjustment
         vol_adj = 1.0
-        if features.atr_pct > 4.0:
+        if atr_pct > 4.0:
             vol_adj = 0.5
-        elif features.atr_pct > 2.5:
+        elif atr_pct > 2.5:
             vol_adj = 0.75
         risk_pct *= vol_adj
 
@@ -228,10 +188,8 @@ class RiskEngine:
         logger.info(
             f"Risk decision: risk={risk_pct:.2f}% | "
             f"RR={rr_ratio:.2f} | SL={sl_distance_pct:.2f}% | "
-            f"P(TP)={probability.p_tp:.1%} | Kelly={kelly:.3f} | "
-            f"vol_adj={vol_adj:.2f} | mss_adj={mss_adj:.2f} | "
-            f"scenario_adj={scenario_adj:.2f} | "
-            f"stability_adj={stability_adj:.2f}"
+            f"P(TP)={p_tp:.1%} | Kelly={kelly:.3f} | "
+            f"vol_adj={vol_adj:.2f} | mss_adj={mss_adj:.2f}"
         )
 
         return RiskDecision(
@@ -242,9 +200,7 @@ class RiskEngine:
             tp_price=tp,
             kelly_fraction=round(kelly, 4),
             volatility_adjustment=vol_adj,
-            probability_confidence=probability.confidence,
-            scenario_score_adjustment=round(scenario_adj, 4),
-            scenario_stability_adjustment=round(stability_adj, 4),
+            probability_confidence=confidence,
         )
 
 

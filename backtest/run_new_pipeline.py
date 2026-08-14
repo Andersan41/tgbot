@@ -530,6 +530,7 @@ async def run_symbol(symbol: str, timeframe: str, candles: int) -> SymbolResult:
                 sl=sl,
                 tp=tp,
                 mss_quality=setup.mss_score if setup.has_mss else 0.0,
+                sl_source=trade_plan.sl_source,
             )
         except Exception as e:
             logger.debug(f"Risk engine failed: {e}")

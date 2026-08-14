@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from strategy.hypothesis import Hypothesis
+# from strategy.hypothesis import Hypothesis  # DELETED module (type hint is safe via __future__ annotations)
 
 
 # ── Entry Trigger Result ───────────────────────────────────────────

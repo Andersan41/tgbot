@@ -23,7 +23,7 @@ from typing import Optional
 
 from loguru import logger
 
-from strategy.scenario_engine import MarketScenario, ScenarioEvaluation
+# from strategy.scenario_engine import MarketScenario, ScenarioEvaluation  # DELETED module
 
 
 # ══════════════════════════════════════════════════════════════════

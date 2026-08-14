@@ -53,6 +53,19 @@ class TradeEngine:
         atr = ind.atr if ind.atr and ind.atr > 0 else entry * cfg.atr_fallback_pct / 100
         signal = SignalType.BUY if direction == "buy" else SignalType.SELL
 
+        # ═══ FVG ENTRY: use median (50%) of active FVG as entry price ═══
+        if fvgs:
+            for f in fvgs:
+                f_dir = "buy" if f.type == "bullish" else "sell" if f.type == "bearish" else f.type
+                if f.is_active and f_dir == direction:
+                    fvg_median = (f.top + f.bottom) / 2.0
+                    entry = round(fvg_median, 8)
+                    logger.debug(
+                        f"FVG entry: using median {entry:.4f} "
+                        f"(top={f.top:.4f}, bottom={f.bottom:.4f}, type={f.type})"
+                    )
+                    break
+
         # Per-TF ATR overrides
         atr_sl = cfg.atr_multiplier_sl
         atr_tp = cfg.atr_multiplier_tp

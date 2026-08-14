@@ -60,7 +60,7 @@ for _mod in (
 ):
     logger.disable(_mod)
 
-from config.settings import config, VERSION
+from config.settings import config, VERSION, STRATEGY_MODE, StrategyMode
 from backtest.cache_ohlcv import load_cached, load_cached_max
 from backtest.run_funnel import _build_ind_values, _row_has_valid_indicators
 
@@ -76,7 +76,7 @@ from liquidity.sweep import detect_sweeps
 from liquidity.order_blocks import detect_order_blocks
 from liquidity.fvg import detect_fvg
 from liquidity.candle_quality import analyze_last_candle
-from market_structure.structure import analyze_structure
+from market_structure.structure import analyze_structure, calc_premium_discount_score
 from market_structure.htf_bias_v2 import get_htf_bias_v2, HTFBiasResult
 
 TIMEFRAME = "1h"
@@ -270,6 +270,22 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         if not setup.detected or not setup.direction:
             continue
 
+        # ── Direction / Symbol filter (same as live) ──
+        if setup.direction == "sell":
+            continue
+        if symbol == "WIF/USDT" and setup.direction == "buy":
+            continue
+
+        # ── Confluence Mode (v3.0) ──
+        # Active only when STRATEGY_MODE == "confluence"
+        if STRATEGY_MODE == StrategyMode.CONFLUENCE:
+            # Reversal block: WR 3.6% across 360d
+            if setup.setup_type == "reversal":
+                continue
+            # OB required for BOS continuation: WR 93.7% with OB
+            if setup.setup_type == "continuation" and not setup.has_ob:
+                continue
+
         # ── Phase 1.4: setup-type structural gates (same as live) ──
         if setup.setup_type == "reversal":
             if not setup.has_sweep:
@@ -337,6 +353,13 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         )
         # Override wall-clock session with the bar's own session (no look-ahead / no drift).
         features.session = _session_for_ts(ts)
+        # Compute PD score from structure window (look-back only, no look-ahead)
+        try:
+            pd_window = df.iloc[max(0, i - 59):i + 1]
+            pd_score = calc_premium_discount_score(pd_window, setup.direction)
+        except Exception:
+            pd_score = 0.5
+        features.premium_discount_score = pd_score
         feat_vector = features.to_vector()
 
         # ── Phase 3: rules P(TP) baseline (recorded, not used as a filter) ──
@@ -386,7 +409,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             "risk_reason": risk_reason,
             "strategy_version": VERSION,
         }
-        rows.append({**meta, **feat_vector, **label})
+        rows.append({**feat_vector, **label, **meta})
 
     return rows
 

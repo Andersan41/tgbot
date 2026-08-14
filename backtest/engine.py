@@ -42,12 +42,9 @@ from data.exchange_client import exchange_client
 from indicators.engine import IndicatorEngine, IndicatorValues
 from strategy.signal_engine import SignalType, SignalResult
 from strategy.pattern_engine import pattern_engine, ICTSetup
-from strategy.feature_builder import feature_builder, SetupFeatures
-from strategy.probability_engine import probability_engine, TradeProbability
 from strategy.trade_engine import trade_engine
 from risk.engine import risk_engine, PortfolioState, RiskDecision
 from risk.market_regime import RegimeDetector, MarketRegime
-from risk.volatility_regime import classify_volatility, VolatilityRegime
 from liquidity.sweep import detect_sweeps
 from liquidity.order_blocks import detect_order_blocks
 from liquidity.fvg import detect_fvg
@@ -107,6 +104,10 @@ class FunnelData:
     symbol: str
     steps: dict = field(default_factory=dict)
     total_signals_processed: int = 0
+    signal_engine_score_distribution: dict = field(default_factory=dict)
+    passed_score_distribution: dict = field(default_factory=dict)
+    passed_sl_sources: dict = field(default_factory=dict)
+    sl_shifted: int = 0
 
 
 # Pipeline funnel steps (in order — first match wins)
@@ -457,6 +458,12 @@ class BacktestEngine:
                             if self.instrument:
                                 _funnel_counts["SETUP_TYPE_GATE"] += 1
                             continue
+                        if not setup.has_sweep:
+                            reject_stats.setup_type_gate += 1
+                            reject_stats.total_rejected += 1
+                            if self.instrument:
+                                _funnel_counts["SETUP_TYPE_GATE"] += 1
+                            continue
 
                 # === Phase 1.45: HTF Bias Gate ===
                 if self.bt_config.enable_htf_bias_gate and _htf_result:
@@ -493,36 +500,23 @@ class BacktestEngine:
                 sl = trade_plan.sl
                 tp = trade_plan.tp
 
-                # === Regime + Volatility ===
-                vol_regime = classify_volatility(
-                    float(ind.atr) if ind.atr else 0.0,
-                    float(ind.close) if ind.close else 1.0,
-                )
+                # === Phase 2: Analytics (inline) ===
+                atr_pct = (float(ind.atr) / float(ind.close) * 100) if ind.atr and ind.close > 0 else 0.0
 
-                # === Phase 2: Feature Builder ===
-                features = feature_builder.build(
-                    setup=setup,
-                    ind=ind,
-                    structure=structure,
-                    regime=regime_obj,
-                    vol_regime=vol_regime,
-                    mtf_aligned=False,
-                    mtf_count=0,
-                    context_score=None,
-                    fear_greed=None,
-                    funding_rate=None,
-                    sl=sl,
-                    tp=tp,
-                    entry_price=entry_price,
-                    candle_quality=candle_quality,
-                    is_reversal=setup.is_reversal,
-                )
-
-                # === Phase 3: Probability Engine ===
-                probability = probability_engine.predict(features)
+                # === Phase 3: Inline Probability ===
+                _components_score = setup.components_count if setup.detected else 0
+                p_tp = 0.45
+                if _components_score >= 4:
+                    p_tp += 0.15
+                elif _components_score >= 3:
+                    p_tp += 0.08
+                if setup.mss_score > 70:
+                    p_tp += 0.05
+                p_tp = max(0.15, min(0.85, p_tp))
+                confidence = min(0.85, p_tp)
 
                 # Optional probability gate
-                if self.bt_config.enable_probability_gate and probability.p_tp < self.bt_config.min_p_tp:
+                if self.bt_config.enable_probability_gate and p_tp < self.bt_config.min_p_tp:
                     reject_stats.total_rejected += 1
                     if self.instrument:
                         _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
@@ -530,14 +524,16 @@ class BacktestEngine:
 
                 # === Phase 4: Risk Engine ===
                 risk_decision = risk_engine.evaluate(
-                    features=features,
-                    probability=probability,
                     portfolio=PortfolioState(),
                     entry_price=entry_price,
                     sl=sl,
                     tp=tp,
+                    atr_pct=atr_pct,
+                    p_tp=p_tp,
+                    confidence=confidence,
                     mss_quality=setup.mss_score,
                     atr=float(ind.atr) if ind.atr else 0.0,
+                    sl_source=trade_plan.sl_source,
                 )
 
                 if not risk_decision.should_trade:

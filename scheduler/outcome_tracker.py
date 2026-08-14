@@ -15,7 +15,7 @@ from loguru import logger
 from data.exchange_client import exchange_client
 from storage.database import db
 from config.settings import config
-from strategy.scenario_memory import scenario_memory, ScenarioOutcomeRecord
+# from strategy.scenario_memory import scenario_memory, ScenarioOutcomeRecord  # DELETED module
 
 
 OUTCOME_CHECK_INTERVAL_SECONDS = int(

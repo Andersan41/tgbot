@@ -374,11 +374,9 @@ async def hypotheses_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     timeframe = args[1] if len(args) > 1 else "1h"
 
     # Get cached graph and thesis from scanner
-    from scheduler.scanner import _dynamic_graphs, _dynamic_theses
-    from strategy.hypothesis import compute_utility
-
+    # NOTE: _dynamic_graphs and _dynamic_theses were removed (shadow mode deleted)
     cache_key = f"{symbol}_{timeframe}"
-    thesis = _dynamic_theses.get(cache_key)
+    thesis = None  # Shadow mode removed
 
     if thesis is None:
         await update.message.reply_text(
