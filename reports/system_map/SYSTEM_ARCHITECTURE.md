@@ -1,49 +1,65 @@
 # SYSTEM ARCHITECTURE — Trading Signal Bot
 
 > **Reverse Engineering Document** — No code changes. Pure analysis.
-> Generated: 2026-06-27
+> Generated: 2026-06-27. Updated: 2026-08-14 (sync with `scan_symbol_v2`).
 
 ## Quick Start: How a Signal Reaches Telegram
 
-A signal must pass **~26 sequential checks** across 5 scoring layers. First BLOCKED = signal dies.
+A signal must pass **10 sequential gates** in `scan_symbol_v2` (`scheduler/scanner.py:216`).
+First BLOCKED = signal dies. Canonical order — `storage/trace.py:31-35`:
 
 ```
-Scheduler (cron :02,:17,:32,:47)
-  → Scanner (per symbol × timeframe)
-    → 6 pre-engine gates
-      → Signal Engine (10 internal sub-gates)
-        → 13 post-engine gates
-          → Save to DB
-            → Telegram
+cooldown → portfolio_risk → indicators → pattern_engine → structure_alignment →
+sweep_required → regime_block → sl_tp → risk_engine → dedup
 ```
+
+```
+Scheduler (cron minute=config.scheduler.scan_minutes, default 2,17,32,47)
+  → run_scan_cycle (scanner.py:1542) — circuit breaker → symbols × TFs
+    → scan_symbol_v2 (scanner.py:216) — 10 gates + phase filters
+      → Pattern Engine (trigger + confirmation, no indicators)
+        → Feature Builder (~35 features) → Probability Engine → Risk Engine
+          → Save to DB → Telegram → Outcome tracker → Circuit breaker
+```
+
+Phase filters inside `scan_symbol_v2` (opt-in/configured):
+direction/symbol filter (Rec 3, default SELL + WIF-BUY blocked), news filter
+(Rec 4a, opt-in), confluence mode (`STRATEGY_MODE=confluence`), HTF Bias V2,
+Premium/Discount (off), min P(TP).
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    SCHEDULER LAYER                       │
-│  APScheduler CronTrigger → :02, :17, :32, :47          │
-│  Circuit Breaker (3 consecutive losses → 30min pause)   │
+│  APScheduler CronTrigger → config.scheduler.scan_minutes│
+│  Circuit Breaker (3 losses → 30min pause)               │
+│  Shadow mode (SHADOW_ENABLED → run_shadow_cycle)        │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
 │                    SCANNER LAYER                         │
-│  22 gates in sequential funnel                          │
+│  10 gates in sequential funnel (scan_symbol_v2)         │
 │  Parallel: symbols × timeframes via asyncio.gather      │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│                 SIGNAL ENGINE LAYER                      │
-│  Weighted Factor Model (7 factors)                      │
-│  Trigger → Confirmation → Verdict pipeline              │
-│  10 internal sub-gates                                  │
+│                 PATTERN ENGINE LAYER                     │
+│  ICT setups: trigger (BOS/sweep) + confirmation (OB/FVG)│
+│  Direction from BOS (primary) or sweep (secondary)      │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│                  SCORING LAYER                           │
-│  Context Scorer (6 factors, -1.0 to 1.0)               │
-│  Confidence V2 (10 factors, -100 to 100)               │
-│  Dynamic Risk (position sizing)                         │
+│                  CONTEXT LAYER                           │
+│  ContextScorer → ContextScore [-1,1] (never blocks)     │
+│  F&G, CoinGecko, Binance Futures funding/OI/LS, news    │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│                   RISK LAYER                             │
+│  Risk Engine hard gates (R:R, SL abs limits, portfolio, │
+│  max active signals) + Kelly sizing; dynamic risk,      │
+│  regime/volatility gates                                │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
@@ -54,106 +70,31 @@ Scheduler (cron :02,:17,:32,:47)
 └─────────────────────────────────────────────────────────┘
 ```
 
-## The 5 Scoring Systems
+## Key Numbers (current)
 
-| # | System | Range | Purpose | Gates? |
-|---|--------|-------|---------|--------|
-| 1 | Signal Engine Score | 0-7 | Technical quality → sizing | Yes (min_score=2) |
-| 2 | Score Verdict | strong/moderate/weak | Dynamic risk gate | Yes (weak→blocked) |
-| 3 | Context Verdict | CONFIRMED/WEAK/CONFLICTED/BLOCKED | Market context filter | Yes (3 sub-gates) |
-| 4 | Confidence V2 | -100 to 100 | Quality display | **NO** (display only) |
-| 5 | Dynamic Risk | effective_risk_pct | Position sizing | Yes (weak→blocked) |
-
-**Critical Insight**: Confidence V2 does NOT gate signals. A signal with confidence=10% ("weak") can still be traded at full risk if score_verdict="strong".
-
-## Factor Reuse Map (Double Counting)
-
-Factors used in multiple scoring systems:
-
-| Factor | Signal Engine | Context | Conf V2 | Risk | Gates | Total |
-|--------|:---:|:---:|:---:|:---:|:---:|:---:|
-| BTC EMA200 | — | — | ✔ | ✔ | ✔ (2 gates) | 4 |
-| ADX | ✔ | — | ✔ | — | ✔ | 3 |
-| Funding | — | ✔ | ✔ | — | ✔ | 3 |
-| Volume | ✔ | — | ✔ | — | — | 2 |
-| Structure/BOS | ✔ | — | ✔ | — | ✔ | 3 |
-| MTF | — | — | ✔ | — | ✔ | 2 |
-| EMA | ✔ | — | — | — | ✔ | 2 |
-| RSI | ✔ | — | ✔ | — | — | 2 |
-| MACD | ✔ | — | ✔ | — | — | 2 |
-| ETH | — | — | — | ✔ | ✔ | 2 |
-
-## Gate Execution Order
-
-| # | Gate | Fail Mode | Can Skip? |
-|---|------|-----------|-----------|
-| 0 | Circuit Breaker | OPEN | Yes (exception = pass) |
-| 1 | Cooldown | OPEN | Yes |
-| 2 | Portfolio Risk | OPEN | Yes |
-| 3 | BTC Global Trend | OPEN | Yes (no data = pass) |
-| 4 | Indicators | **CLOSED** | No (None = blocked) |
-| 5 | Confirm TF | OPEN | Yes |
-| 6 | Signal Engine | **CLOSED** | No (NO_SIGNAL = blocked) |
-| 7 | Distance Filter | OPEN | Yes |
-| 8 | TP Path | OPEN | Yes (disabled default) |
-| 9 | MTF Alignment | OPEN | Yes |
-| 10 | BTC Correlation | OPEN | Yes |
-| 11 | ETH Correlation | OPEN | Yes |
-| 12 | Volatility | OPEN | Yes |
-| 13a | Context Timeout | **CLOSED** | No (fail closed) |
-| 13b | Context Block | OPEN | Yes |
-| 13c | Context Min Verdict | OPEN | Yes |
-| 14 | News Filter | OPEN | Yes (disabled default) |
-| 15 | SL Distance | OPEN | Yes |
-| 16 | R:R Guard | OPEN | Yes |
-| 17 | No-Trade Zones | OPEN | Yes |
-| 18 | Dynamic Risk | OPEN | Yes |
-| 19 | Dedup | OPEN | Yes |
-
-## Key Numbers
-
-- **Max Signal Score**: 115 (sum of all Signal Engine weights)
-- **Effective Min Score for Trading**: 4 (Signal Engine allows 2, but Dynamic Risk blocks < 4)
-- **Context Timeout**: 10s (fail closed)
-- **Context Cache TTL**: 1800s (30min)
-- **BTC Global Trend Cache**: 3600s (1h)
-- **BTC Correlation Cache**: 3600s (1h)
-- **Cooldown**: max(45min, TF_min × 2.0)
-- **Circuit Breaker**: 3 consecutive losses → 30min pause
-
-## Known Architectural Issues
-
-1. **Score Disagreement**: Signal Engine "strong" ≠ Confidence V2 "strong". They use different factors and weights.
-2. **BTC Triple-Gating**: Daily EMA200 + 4h EMA200 + Context BTC factor = 3 BTC filters.
-3. **Dead Config**: 10+ config parameters exist but are never used in production.
-4. **Alt Context Blindness**: CoinGecko data only works for BTC/ETH. Alts get no price_change_7d, no trending status.
-5. **Score 2-3 Limbo**: Signal Engine produces signals with score 2-3 that are immediately killed by Dynamic Risk.
+- **Gates**: 10 canonical (`storage/trace.py:31-35`)
+- **R:R minimum**: Risk Engine ≥ 1.2
+- **SL absolute limits**: 0.25%–5.0%
+- **Portfolio risk cap**: ≤3%
+- **Max active signals**: 3
+- **Cooldown**: max(45min, TF_min × 2.0) — persisted in SQLite
+- **Circuit Breaker**: 3 consecutive losses → 30min pause (window 60min)
+- **P(TP) model**: rules fallback → ML (XGBoost/RandomForest) after 100+ outcomes
+- **Quality label**: strong ≥0.65 / moderate ≥0.50 / weak
 
 ## Files Index
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| scheduler/scanner.py | 1485 | Main pipeline — 22 gates |
-| strategy/signal_engine.py | 943 | Signal decision — 10 sub-gates |
-| indicators/engine.py | 240 | Technical indicators |
-| config/settings.py | 816 | All parameters |
-| scoring/confidence_v2.py | 303 | 10-factor confidence |
-| context/scorer.py | 312 | 6-factor context scoring |
-| context/analyzer.py | 167 | Context data collection |
-| risk/dynamic_risk.py | 298 | Position sizing + structural SL/TP |
-| risk/volatility_regime.py | 70 | Volatility classification |
-| risk/market_regime.py | 229 | Regime detection |
-| risk/no_trade_zones.py | 98 | No-trade conditions |
-| market_structure/structure.py | 324 | BOS/CHoCH + MTF alignment |
-| market_structure/distance_filter.py | ~100 | S/R distance check |
-| market_structure/tp_path.py | ~100 | TP path quality |
-| derivatives/btc_correlation.py | 131 | BTC 4h EMA200 + structure |
-| derivatives/eth_correlation.py | ~120 | ETH structure + momentum |
-| derivatives/funding.py | 74 | Funding classification |
-| derivatives/open_interest.py | 83 | OI pattern detection |
-| liquidity/sweep.py | ~200 | Liquidity sweep detection |
-| liquidity/order_blocks.py | ~200 | Order block detection |
-| liquidity/fvg.py | ~100 | Fair value gap detection |
-| scheduler/circuit_breaker.py | 87 | Loss circuit breaker |
-| storage/database.py | ~400 | SQLite persistence |
-| bot/notifier.py | ~150 | Telegram formatting |
+| File | Purpose |
+|------|---------|
+| scheduler/scanner.py | Main pipeline — `scan_symbol_v2` (10 gates), `run_scan_cycle` |
+| strategy/pattern_engine.py | Pure ICT pattern detection |
+| strategy/feature_builder.py | ~35 features → flat vector |
+| strategy/probability_engine.py | P(TP), expected RR, PF (rules/ML) |
+| risk/engine.py | Risk Engine — hard gates + Kelly sizing |
+| storage/trace.py | DecisionTraceBuilder — GATE_ORDER, FEATURE_KEYS |
+| storage/database.py | SQLite persistence (signals, outcomes, cooldown) |
+| scheduler/tasks.py | APScheduler (scan + daily report) |
+| scheduler/shadow.py | Shadow/paper mode |
+| scheduler/outcome_tracker.py | TP/SL/EXPIRED closes, PnL after costs |
+| scheduler/circuit_breaker.py | Loss circuit breaker |
+| bot/notifier.py | Telegram formatting |

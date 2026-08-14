@@ -24,8 +24,8 @@ in `pytest.ini`; use `@pytest.mark.asyncio` on async tests.
 ## Plan & architecture
 
 `plan/00index.md` is the entry point — full module tree, singletons, and pipeline live in
-`plan/01-architecture.md`, `plan/07-scheduler.md`, `plan/11-pipeline.md`. Update those files
-when behavior changes, not this one.
+`plan/01-architecture.md`, `plan/07-scheduler.md`, `plan/11-pipeline.md`. Environment reference
+is `plan/14-env-config.md`. Update those files when behavior changes, not this one.
 
 ## Signal logic (new pipeline — scan_symbol_v2)
 
@@ -46,8 +46,9 @@ when behavior changes, not this one.
 **Old pipeline** (`scan_symbol`) still exists for backward compatibility.
 `run_scan_cycle()` calls `scan_symbol_v2()`.
 
-- Cooldown per `symbol_timeframe` is `SIGNAL_COOLDOWN_MINUTES` (default 45), in-memory only —
-  resets on restart.
+- Cooldown per `symbol_timeframe` is `SIGNAL_COOLDOWN_MINUTES` (default 45), effective cooldown =
+  `max(base, tf_minutes × multiplier)` (`SIGNAL_COOLDOWN_TF_MULTIPLIER`, default 2.0). **Persisted in
+  SQLite** (`db.get_cooldown` / `db.set_cooldown`) — survives restarts.
 - Context never blocks: `ContextScore` provides a score [-1, 1] for the Probability Engine.
 - BTC/ETH correlation removed as gates — become secondary features.
 - 15m confirmation TF removed entirely.
@@ -59,10 +60,12 @@ when behavior changes, not this one.
 
 ## Scheduler
 
-- `scan_all_tfs` (cron `:02, :17, :32, :47`) → `run_scan_cycle()` over all `primary_timeframes`.
+- `scan_all_tfs` (cron `SCAN_MINUTES`, default `:02, :17, :32, :47` via `config.scheduler`) →
+  `run_scan_cycle()` over all `primary_timeframes`.
 - Каждые 15 минут сканируются все таймфреймы (1h, 4h).
-- Cooldown 45 мин защищает от дублей.
+- Cooldown 45 мин защищает от дублей (persisted in SQLite).
 - `cmd_scan` (admin `/scan`) → `run_scan_cycle()` over all `primary_timeframes`.
+- `SHADOW_ENABLED=true` запускает shadow-сравнение после каждого цикла (`scheduler/shadow.py`).
 
 ## Project-specific gotchas
 
@@ -88,6 +91,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHANNEL_ID=
 SYMBOLS=BTC/USDT,ETH/USDT
 PRIMARY_TIMEFRAMES=1h,4h
-BINANCE_API_KEY=
-BINANCE_API_SECRET=
+EXCHANGE_API_KEY=
+EXCHANGE_API_SECRET=
+MARKET_TYPE=swap
 ```

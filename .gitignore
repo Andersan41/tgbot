@@ -18,3 +18,27 @@ env/
 logs/*.log
 logs/*.zip
 venv/
+
+# Rec 6: БД, ML-модели, тестовые артефакты
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.pkl
+*.parquet
+*.csv
+*.log
+*.zip
+.pytest_cache/
+full_test_output.txt
+err.txt
+out.txt
+stdout.txt
+/tests/tmp*/
+_reports_out/
+ohlcv_cache/
+
+# Экспериментальные артефакты обучения (Rec 6)
+reports/feasibility/dataset_summary.json
+reports/feasibility/train_metrics.json
+reports/funnel/funnel_full_new1.json
