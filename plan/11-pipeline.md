@@ -110,6 +110,29 @@ Pattern Engine → Feature Builder → Probability Engine → Risk Engine → Te
 
 - `data/exchange_client.py` — ccxt (sync в run_in_executor); `_symbol_map`:
   `BTC/USDT` → `BTC/USDT:USDT` для `market_type == "swap"`; `fetch_ohlcv` **дроп последней свечи**.
+  `fetch_ohlcv(symbol, tf, limit, drop_last, end_time)` — `end_time` (→ `endTime` в params) для
+  загрузки истории; `since` передаётся kwarg'ом ccxt (→ `startTime`).
+- **Исторический кэш (backtest `--source=local`)**: `backtest/cache_ohlcv.py` хранит unified-свечи
+  15m в `ohlcv_cache/{SYMBOL}_{market}_15m.parquet` (zstd, колонки
+  `[timestamp(UTC), open, high, low, close, volume]`).
+  - **Backward-пагинация через `endTime`** (`_fetch_backward`): каждый батч запрашивается с
+    `endTime`, следующий идёт строго до самой старой свечи предыдущего (минус 1ms). `since`
+    не используется для истории: **BingX игнорирует `since` и хранит 15m только ~6 мес**;
+    Binance отдаёт 3+ года. Стопы: пустой батч / `len < page_size` (история закончилась) /
+    самая старая свеча ≤ `start_ms` (цель достигнута) / `endTime` не продвинулся назад.
+  - `fetch_full_history()` — полная загрузка за `--years` порциями `HISTORY_PAGE_SIZE=998`;
+    ретраи только на `ccxt.NetworkError`/`RateLimitExceeded` (backoff 1,2,4,8 c, макс 5 попыток);
+    после успеха пишет sidecar-маркер `.done`.
+  - `update_history()` — инкрементальное доливание от `last_ts+1ms` (backward от now до кэша);
+    нет файла/пуст/**нет маркера `.done`** → полная `fetch_full_history` (само-лечит частичные файлы).
+  - `_history_is_complete()` (CLI) — полный, если есть маркер `.done` **и** свежайшая свеча
+    не старше 3 дней (глубина не проверяется: для BingX полный файл ~6 мес, а не 3 года).
+  - `backtest/resampler.py` — `resample_ohlcv` 15m→`1h/2h/4h/1D/W-MON` (pandas 3: `'h'`, недели
+    по понедельникам).
+  - CLI: `python -m backtest.download_history --symbols ... --years 3` (semaphore 2,
+    пропускает завершённые файлы).
+  - Крон: `update_history_cache` каждые 15 мин (`scheduler/tasks.py`), ERROR в Telegram после 3 сбоев.
+  - `BacktestEngine(--source local)` читает кэш и ресемплит; нет файла → fallback на live.
 - `indicators/engine.py` — pandas-ta: `SUPERT_…`/`SUPERTd_…`, `ADX_…`/`DMP_…`/`DMN_…`.
 - `market_structure/structure.py` — MSS: sweep ≤5 свечей + displacement ≥1 ATR + reclaim ≤2.
 - `market_structure/htf_bias_v2.py` — W1→D1→H4→H1, `get_tf_bias` ≥55 баров, EMA21/55.

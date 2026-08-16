@@ -23,22 +23,27 @@ class ExchangeClient:
         self._symbol_map: dict[str, str] = {}
 
     def _build_symbol_map(self):
-        """Строим маппинг bot symbol -> ccxt symbol для swap рынков.
+        """Строим маппинг bot symbol -> ccxt symbol для деривативных рынков.
 
-        BingX swap markets используют формат BTC/USDT:USDT (с settle currency),
-        а бот работает с BTC/USDT. Маппинг нужен для прозрачной конвертации.
+        Swap (perpetual) использует формат BTC/USDT:USDT, expiring futures —
+        BTC/USDT:USDT-260926 (с датой истечения). Для spot маппинг не нужен:
+        символы совпадают (BTC/USDT).
         """
         self._symbol_map = {}
-        if config.exchange.market_type != "swap":
+        if config.exchange.market_type == "spot":
             return
+        market_key = "swap" if config.exchange.market_type == "swap" else "future"
         for sym, m in self._exchange.markets.items():
-            if m.get("swap") and m.get("active", True):
-                # BTC/USDT:USDT -> ищем matching bot symbol "BTC/USDT"
+            if m.get(market_key) and m.get("active", True):
+                # BTC/USDT:USDT[-260926] -> ищем matching bot symbol "BTC/USDT"
                 bot_sym = sym.split(":")[0]
                 if bot_sym not in self._symbol_map:
                     self._symbol_map[bot_sym] = sym
         if self._symbol_map:
-            logger.info(f"Symbol map: {len(self._symbol_map)} swap pairs mapped")
+            logger.info(
+                f"Symbol map: {len(self._symbol_map)} "
+                f"{config.exchange.market_type} pairs mapped"
+            )
 
     def _resolve_symbol(self, symbol: str) -> str:
         """Конвертируем bot symbol в ccxt symbol (если есть маппинг)."""
@@ -125,12 +130,25 @@ class ExchangeClient:
         timeframe: str,
         limit: int = 200,
         max_retries: int = 3,
+        since: int | None = None,
+        drop_last: bool = True,
+        end_time: int | None = None,
     ) -> Optional[list]:
         """Sync fetch_ohlcv — вызывается через run_in_executor
 
         Встроенные повторные попытки при сетевых ошибках.
         RateLimitExceeded/DDoSProtection получают больше попыток.
-        BadSymbol/BadRequest не ретраятся.
+        BadSymbol/BadRequest не ретраются.
+
+        ``since`` — UNIX timestamp в миллисекундах; биржа вернёт свечи,
+        начиная с этой даты (передаётся как kwarg ccxt → ``startTime``).
+        ``end_time`` — UNIX timestamp в миллисекундах; биржа вернёт свечи,
+        заканчивающиеся не позже этой даты (``endTime`` param). Используется
+        загрузчиком истории: BingX не поддерживает ``since``-пагинацию
+        для глубокой истории, но корректно работает с ``endTime``.
+        ``drop_last=True`` отбрасывает последнюю (самую старую в ответе ccxt)
+        свечу — нужно для живых запросов, где последняя свеча может быть
+        незавершённой. При загрузке истории установите ``drop_last=False``.
         """
         ccxt_symbol = self._resolve_symbol(symbol)
         if ccxt_symbol not in self._available_symbols:
@@ -140,10 +158,20 @@ class ExchangeClient:
             )
             return None
 
+        params: dict = {}
+        if end_time is not None:
+            params["endTime"] = end_time
+
         last_error = None
         for attempt in range(max_retries):
             try:
-                return self._exchange.fetch_ohlcv(ccxt_symbol, timeframe, limit=limit)
+                raw = self._exchange.fetch_ohlcv(
+                    ccxt_symbol, timeframe, since=since, limit=limit,
+                    params=params,
+                )
+                if raw and drop_last:
+                    raw = raw[:-1]
+                return raw
             except (ccxt_sync.BadSymbol, ccxt_sync.BadRequest) as e:
                 logger.warning(
                     f"Invalid symbol/request for {symbol} {timeframe}: {e}"
@@ -274,17 +302,32 @@ class ExchangeClient:
         symbol: str,
         timeframe: str,
         limit: int = 200,
+        since: int | None = None,
+        drop_last: bool = True,
+        end_time: int | None = None,
     ) -> Optional[pd.DataFrame]:
         """
         Получаем OHLCV свечи и возвращаем как DataFrame.
         Колонки: timestamp, open, high, low, close, volume
         Для futures: также добавляем taker_buy_volume (index 9 из Binance API).
+
+        ``since`` — UNIX timestamp в миллисекундах; биржа вернёт свечи, начиная
+        с этой даты (ccxt kwarg → ``startTime``).
+        ``end_time`` — UNIX timestamp в миллисекундах; биржа вернёт свечи, не
+        позже этой даты (``endTime`` param). Используется загрузчиком истории,
+        т.к. BingX не отдаёт глубокую историю через ``since``.
+        ``drop_last=True`` (по умолчанию) отбрасывает последнюю свечу — она может
+        быть незавершённой. Для середины истории передайте ``drop_last=False``,
+        чтобы не терять валидные свечи.
         """
         await self._ensure_markets_loaded()
 
         async with self._semaphore:
             raw = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self._fetch_ohlcv_raw(symbol, timeframe, limit)
+                None, lambda: self._fetch_ohlcv_raw(
+                    symbol, timeframe, limit, since=since, drop_last=False,
+                    end_time=end_time,
+                )
             )
             if raw is None:
                 return None
@@ -302,7 +345,8 @@ class ExchangeClient:
             if taker_buy_volumes and len(taker_buy_volumes) == len(raw):
                 df["taker_buy_volume"] = taker_buy_volumes[:len(raw)]
 
-            df = df.iloc[:-1]
+            if drop_last and len(df) > 1:
+                df = df.iloc[:-1]
 
         logger.debug(f"Fetched {len(df)} candles: {symbol} {timeframe}")
         return df
@@ -390,6 +434,83 @@ class ExchangeClient:
         logger.debug(f"Paginated fetch {symbol}: total {len(result)} candles, "
                       f"{result.index[0]} to {result.index[-1]}")
         return result
+
+    async def fetch_ohlcv_since(
+        self,
+        symbol: str,
+        timeframe: str,
+        since_ms: int,
+        limit: int = 998,
+        max_batches: int = 1000,
+    ) -> list[dict]:
+        """Forward pagination starting from ``since_ms`` until exchange runs out.
+
+        Используется загрузчиком истории (backtest/cache_ohlcv.py) для
+        построения полного 3-летнего ряда свечей. Каждый батч запрашивается
+        с ``since = last_ts_ms + 1``; цикл останавливается, когда биржа
+        возвращает пустой или дублирующийся батч.
+
+        Returns:
+            Список свечей [ts_ms, o, h, l, c, v] (без последней незавершённой).
+        """
+        await self._ensure_markets_loaded()
+        ccxt_symbol = self._resolve_symbol(symbol)
+        if ccxt_symbol not in self._available_symbols:
+            logger.warning(
+                f"Symbol {symbol} (ccxt: {ccxt_symbol}) not available for since-fetch"
+            )
+            return []
+
+        all_candles: list[list] = []
+        since = since_ms
+        batch_num = 0
+        last_ts: int | None = None
+
+        while batch_num < max_batches:
+            batch_num += 1
+            raw = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda s=since, l=limit: self._fetch_ohlcv_raw(
+                    symbol, timeframe, limit=l, since=s, drop_last=False,
+                ),
+            )
+            if not raw:
+                logger.debug(
+                    f"since-fetch {symbol} {timeframe}: empty batch at since={since}, "
+                    f"{len(all_candles)} candles so far"
+                )
+                break
+
+            first_ts = int(raw[0][0])
+            new_last_ts = int(raw[-1][0])
+
+            # защита от зацикливания: если батч дублирует предыдущий — стоп
+            if last_ts is not None and new_last_ts <= last_ts:
+                logger.warning(
+                    f"since-fetch {symbol} {timeframe}: duplicate batch "
+                    f"(last_ts={last_ts} == new_last={new_last_ts}), stopping"
+                )
+                break
+
+            all_candles.extend(raw)
+            last_ts = new_last_ts
+
+            # следующий батч — после последней полученной свечи
+            since = new_last_ts + 1
+
+            if len(raw) < limit:
+                # биржа выдала меньше лимита — история закончилась
+                break
+
+            # rate limit: не чаще 1 запроса в 50 мс (enableRateLimit на exchange
+            # уже включён, но делаем явную паузу для safety)
+            await asyncio.sleep(0.05)
+
+        logger.debug(
+            f"since-fetch {symbol} {timeframe}: {len(all_candles)} candles "
+            f"in {batch_num} batches"
+        )
+        return all_candles
 
     async def fetch_all_symbols(
         self,

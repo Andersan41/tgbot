@@ -267,6 +267,9 @@ class BacktestEngine:
         market_type: Optional[str] = None,
         bt_config: Optional[BacktestConfig] = None,
         instrument: bool = False,
+        source: Literal["live", "local"] = "live",
+        start_date: Optional[pd.Timestamp] = None,
+        end_date: Optional[pd.Timestamp] = None,
     ):
         self.symbol = symbol
         self.timeframe = timeframe
@@ -275,8 +278,12 @@ class BacktestEngine:
         self.market_type = market_type
         self.bt_config = bt_config or BacktestConfig()
         self.instrument = instrument
+        self.source = source
+        self.start_date = start_date
+        self.end_date = end_date
         self.funnel_data: Optional[FunnelData] = None
         self._indicator_engine = IndicatorEngine()
+        self._local_data: Optional[tuple[pd.DataFrame, Optional[dict]]] = None
 
     async def run(self) -> BacktestResult:
         """Run the full backtest pipeline."""
@@ -286,6 +293,16 @@ class BacktestEngine:
             elif self.market_type == "spot":
                 config.exchange.market_type = "spot"
 
+        if self.source == "local":
+            df, htf = self._load_local()
+            if df is not None:
+                self._local_data = (df, htf)
+                return await self._run_backtest()
+            logger.warning(
+                f"--source=local: no local cache for {self.symbol}, "
+                f"falling back to live exchange"
+            )
+
         await exchange_client.connect()
 
         try:
@@ -293,10 +310,58 @@ class BacktestEngine:
         finally:
             await exchange_client.close()
 
+    def _load_local(self) -> tuple[Optional[pd.DataFrame], Optional[dict]]:
+        """Load OHLCV from the unified 15m cache, resampled to ``self.timeframe``.
+
+        Returns ``(df, htf)`` where ``htf`` maps tf → DataFrame for HTF Bias V2
+        (1w/1d/4h), or ``(None, None)`` when the cache file is missing.
+        """
+        from backtest.cache_ohlcv import BASE_TIMEFRAME, load_unified, unified_cache_path
+        from backtest.resampler import resample_ohlcv
+
+        market = self.market_type or config.exchange.market_type
+        path = unified_cache_path(self.symbol, market, BASE_TIMEFRAME)
+        if not path.exists():
+            return None, None
+
+        df_15m = load_unified(self.symbol, market, BASE_TIMEFRAME)
+        if df_15m is None or len(df_15m) == 0:
+            return None, None
+
+        if self.timeframe == BASE_TIMEFRAME:
+            df = df_15m
+        else:
+            df = resample_ohlcv(df_15m, self.timeframe)
+
+        if self.start_date is not None:
+            df = df[df.index >= self.start_date]
+        if self.end_date is not None:
+            df = df[df.index <= self.end_date]
+
+        limit = max(config.trading.candles_limit + 100, 200)
+        if len(df) > limit:
+            df = df.iloc[-limit:]
+
+        htf: dict = {}
+        for tf in ("1w", "1d", "4h"):
+            if tf == self.timeframe:
+                htf[tf] = df
+            else:
+                htf[tf] = resample_ohlcv(df_15m, tf)
+        logger.info(
+            f"--source=local: {self.symbol} {self.timeframe} from "
+            f"{path.name} ({len(df):,} candles, {df.index[0]} → {df.index[-1]})"
+        )
+        return df, htf
+
     async def _run_backtest(self) -> BacktestResult:
         """Internal: fetch data and walk through candles."""
         limit = max(config.trading.candles_limit + 100, 200)
-        df = await exchange_client.fetch_ohlcv(self.symbol, self.timeframe, limit=limit)
+        htf: Optional[dict] = None
+        if self.source == "local" and self._local_data is not None:
+            df, htf = self._local_data
+        else:
+            df = await exchange_client.fetch_ohlcv(self.symbol, self.timeframe, limit=limit)
         if df is None or len(df) < 100:
             return BacktestResult(symbol=self.symbol, timeframe=self.timeframe)
 
@@ -317,10 +382,13 @@ class BacktestEngine:
         _htf_result: Optional[HTFBiasResult] = None
         if config.htf_bias_v2:
             try:
-                df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
-                df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
-                df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
-                _htf_result = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
+                if htf is not None:
+                    _htf_result = get_htf_bias_v2(htf.get("1w"), htf.get("1d"), htf.get("4h"), df)
+                else:
+                    df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
+                    df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
+                    df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
+                    _htf_result = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
             except Exception:
                 _htf_result = None
 
@@ -924,46 +992,69 @@ async def send_to_telegram(text: str):
 # ---------------------------------------------------------------------------
 
 async def main():
-    symbol = sys.argv[1].upper() if len(sys.argv) > 1 else "BTC/USDT"
-    tf = (sys.argv[2] if len(sys.argv) > 2 else "1h").lower()
-    candle_limit = int(sys.argv[3]) if len(sys.argv) > 3 else 336
+    import argparse
 
-    send_tg = "--telegram" in sys.argv
-    market_type = None
-    for arg in sys.argv[4:]:
+    parser = argparse.ArgumentParser(
+        prog="backtest.engine",
+        description="Consolidated backtest engine (live or local cache source).",
+    )
+    parser.add_argument(
+        "positional", nargs="*",
+        help="[symbol] [timeframe] [candle_limit] [future|futures|spot]",
+    )
+    parser.add_argument("--telegram", action="store_true", help="Send result to Telegram")
+    parser.add_argument("--preset", type=str, default=None,
+                        help="Preset: baseline / full / optimized")
+    parser.add_argument("--market", type=str, default=None,
+                        choices=["future", "futures", "spot"])
+    parser.add_argument("--source", type=str, default="local",
+                        choices=["live", "local"],
+                        help="Data source: local cache (ohlcv_cache/) or live exchange")
+    parser.add_argument("--start-date", type=str, default=None,
+                        help="Filter data from this date (YYYY-MM-DD, local source)")
+    parser.add_argument("--end-date", type=str, default=None,
+                        help="Filter data to this date (YYYY-MM-DD, local source)")
+    args = parser.parse_args()
+
+    positional = args.positional
+    symbol = positional[0].upper() if len(positional) > 0 else "BTC/USDT"
+    tf = (positional[1].lower() if len(positional) > 1 else "1h")
+    candle_limit = int(positional[2]) if len(positional) > 2 else 336
+
+    market_type = args.market
+    for arg in positional[3:]:
         if arg.lower() in ("future", "futures", "spot"):
             market_type = arg.lower()
 
-    # Parse --preset <name>
     bt_config = BacktestConfig()
-    if "--preset" in sys.argv:
-        preset_idx = sys.argv.index("--preset")
-        if preset_idx + 1 < len(sys.argv):
-            preset_name = sys.argv[preset_idx + 1].lower()
-            bt_config = get_preset_config(preset_name)
-            print(f"Using preset: {preset_name}")
-            print(f"  Flags: {bt_config}")
-        else:
-            print("Error: --preset requires a name (baseline, task1_only, ..., full)")
-            sys.exit(1)
+    if args.preset:
+        bt_config = get_preset_config(args.preset.lower())
+        print(f"Using preset: {args.preset.lower()}")
+        print(f"  Flags: {bt_config}")
 
     symbol = _normalize_symbol(symbol)
     config.trading.candles_limit = candle_limit
 
-    print(f"Running backtest: {symbol} {tf} ({candle_limit} candles)...")
+    start_date = pd.Timestamp(args.start_date, tz="UTC") if args.start_date else None
+    end_date = pd.Timestamp(args.end_date, tz="UTC") if args.end_date else None
+
+    print(f"Running backtest: {symbol} {tf} ({candle_limit} candles), source={args.source}...")
 
     engine = BacktestEngine(
         symbol=symbol,
         timeframe=tf,
-        send_telegram=send_tg,
+        send_telegram=args.telegram,
         market_type=market_type,
         bt_config=bt_config,
+        source=args.source,
+        start_date=start_date,
+        end_date=end_date,
     )
     result = await engine.run()
 
     print_result(result)
 
-    if send_tg:
+    if args.telegram:
         print("\nSending to Telegram...")
         await send_to_telegram(format_telegram(result))
         print("Done.")

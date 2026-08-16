@@ -14,12 +14,14 @@ class TaskScheduler:
     def __init__(self, notify_callback):
         self._scheduler = AsyncIOScheduler(timezone="UTC")
         self._notify_callback = notify_callback
+        self._history_failures = 0
 
     def setup(self):
         """Настраиваем расписание.
 
         1. Сканирование каждые 15 минут
         2. Ежедневный отчёт в 00:05 UTC
+        3. Обновление кэша 15m-истории каждые 15 минут
         """
         sc = config.scheduler
         self._scheduler.add_job(
@@ -41,7 +43,20 @@ class TaskScheduler:
             coalesce=True,
         )
 
-        logger.info("Scheduler configured: scanning every 15 min, daily report at 00:05 UTC")
+        # Keep the 15m history cache current (used by --source=local backtests)
+        self._scheduler.add_job(
+            self._update_history_job,
+            CronTrigger(minute="*/15"),
+            id="update_history_cache",
+            name="Update 15m OHLCV history cache",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        logger.info(
+            "Scheduler configured: scanning every 15 min, daily report at 00:05 UTC, "
+            "history cache update every 15 min"
+        )
 
     async def _scan_job(self, timeframes: list[str] | None = None):
         logger.info(f"Scheduler triggered: starting scan (tfs={timeframes})")
@@ -77,6 +92,41 @@ class TaskScheduler:
                 logger.info("Daily report summary sent to Telegram")
         except Exception as e:
             logger.error(f"Daily report job error: {e}", exc_info=True)
+
+    async def _update_history_job(self):
+        """Incrementally update the 15m OHLCV history cache for all symbols.
+
+        Не роняет scheduler при ошибках; после 3 сбоев подряд шлёт ERROR
+        в Telegram через bot/notifier.send_error_alert.
+        """
+        from backtest.cache_ohlcv import BASE_TIMEFRAME, update_history
+        from bot.notifier import send_error_alert
+        from config.settings import get_active_symbols
+
+        symbols = get_active_symbols()
+        if not symbols:
+            return
+        logger.info(f"Scheduler: updating 15m OHLCV history for {len(symbols)} symbols")
+        for symbol in symbols:
+            try:
+                added = await update_history(
+                    symbol,
+                    timeframe=BASE_TIMEFRAME,
+                    market_type=config.exchange.market_type,
+                )
+                self._history_failures = 0
+                logger.info(f"History update {symbol}: +{added} candles")
+            except Exception as e:
+                self._history_failures += 1
+                logger.error(f"History update failed for {symbol}: {e}", exc_info=True)
+                if self._history_failures >= 3:
+                    try:
+                        await send_error_alert(
+                            f"OHLCV history update failed 3x in a row: {e}"
+                        )
+                    except Exception:
+                        logger.exception("Failed to send history-update error alert")
+                    self._history_failures = 0
 
     def start(self):
         self._scheduler.start()

@@ -24,13 +24,13 @@ config/
   settings.py               # центральная конфигурация (VERSION, StrategyMode, классы)
   logger.py                 # loguru (console + bot.log + logs/logs.txt + error sink)
 data/
-  exchange_client.py        # ccxt (sync в run_in_executor), _symbol_map (swap), drop последней свечи
+  exchange_client.py        # ccxt (sync в run_in_executor), _symbol_map (swap), drop последней свечи; fetch_ohlcv(drop_last, end_time) — endTime для истории
 storage/
   database.py               # SQLite (Signal, DecisionTrace, cooldown, outcomes, candidates)
   trace.py                  # DecisionTraceBuilder; GATE_ORDER (:31-35), FEATURE_KEYS
 scheduler/
   scanner.py                # scan_symbol_v2 (production), run_scan_cycle, воронка гейтов
-  tasks.py                  # APScheduler (scan_all_tfs каждые 15 мин, daily_report 00:05 UTC)
+  tasks.py                  # APScheduler (scan_all_tfs каждые 15 мин, daily_report 00:05 UTC, update_history_cache */15)
   shadow.py                 # shadow-режим (SHADOW_ENABLED=true) — A/B сравнение
   outcome_tracker.py        # закрытие сигналов (SL/TP/EXPIRED), PnL после издержек
   circuit_breaker.py        # 3 убытка → пауза 30 мин
@@ -82,7 +82,12 @@ bot/
   notifier.py, handlers.py, admin.py, menu.py, rate_limit.py
 web/server.py               # aiohttp WebSocket-дашборд
 monitoring/metrics.py       # Prometheus: signals_total, scan_duration, context_errors
-backtest/engine.py          # CLI backtest с parity к live
+backtest/
+  engine.py                # CLI backtest: --source live|local (читает 15m-кэш + ресемплинг)
+  resampler.py             # resample_ohlcv 15m→1h/2h/4h/1d/1w (pandas 3: '1h','1D','W-MON')
+  cache_ohlcv.py           # unified 15m parquet-кэш (ohlcv_cache/), fetch_full_history / update_history
+  download_history.py      # CLI: python -m backtest.download_history (3 года 15m, semaphore)
+  __main__.py              # точка входа для download_history
 analytics/                  # daily_report, gate_funnel, performance, calibration, и др.
 ```
 

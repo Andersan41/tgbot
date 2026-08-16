@@ -10,6 +10,12 @@
 |-----|---------|----------|
 | `scan_all_tfs` | `CronTrigger(minute=config.scheduler.scan_minutes)` (`tasks.py:25-32`); default `SCAN_MINUTES=2,17,32,47` | `run_scan_cycle` по всем `primary_timeframes`; `max_instances=1`, `coalesce=True` |
 | `daily_report` | 00:05 UTC (`tasks.py:34-42`) | `analytics/daily_report` → summary в Telegram |
+| `update_history_cache` | `CronTrigger(minute="*/15")` (`tasks.py:46-54`) | инкрементальное обновление 15m-кэша `ohlcv_cache/` (backtest `--source=local`) |
+
+`_update_history_job` (`tasks.py:96-129`):
+- для каждого активного символа → `backtest.cache_ohlcv.update_history()` (+N свечей).
+- не роняет scheduler при ошибках; после **3 сбоев подряд** шлёт ERROR в Telegram через
+  `bot.notifier.send_error_alert` и сбрасывает счётчик (`_history_failures`).
 
 `_scan_job` (`tasks.py:46-57`):
 - `run_scan_cycle(notify_callback, blocked_callback=send_signal_blocked, timeframes)`

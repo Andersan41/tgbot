@@ -19,7 +19,7 @@ MARKET_TYPE=swap
 
 | Ключ | Default | Описание |
 |------|---------|----------|
-| `EXCHANGE` | `bingx` | ccxt-ид биржи |
+| `EXCHANGE` | `bingx` | ccxt-ид биржи. Для `--years 3` истории 15m ставьте `binance` (BingX хранит 15m только ~6 мес; Binance отдаёт 3+ года). Свечи с обеих бирж консистентны |
 | `EXCHANGE_API_KEY` / `BINANCE_API_KEY` | — | ключ (читается универсальный или бирже-специфичный) |
 | `EXCHANGE_API_SECRET` / `BINANCE_API_SECRET` | — | секрет |
 | `USE_TESTNET` | `false` | тестнет |
@@ -168,3 +168,10 @@ MARKET_TYPE=swap
 > `LiquidityConfig`, `DerivativesConfig`, `RiskConfig`, `ScoringConfig`, `SchedulerConfig`,
 > `RateLimitConfig`, `NotifierConfig`, `SupportResistanceConfig`, `WebConfig`,
 > `PatternEngineConfig`, `ProbabilityConfig`, `RiskEngineConfig`, `DirectionFilterConfig`.
+
+## Исторический кэш OHLCV (backtest --source=local)
+
+Новых env-ключей нет. Параметры — константы `backtest/cache_ohlcv.py`:
+`OHLCV_CACHE_DIR=ohlcv_cache/`, `BASE_TIMEFRAME=15m`, `PARQUET_COMPRESSION=zstd`,
+`HISTORY_PAGE_SIZE=998`, `HISTORY_RETRY_ATTEMPTS=5`, `HISTORY_RETRY_BACKOFF=[1,2,4,8]`.
+Глубина по умолчанию — 3 года (флаг `--years` CLI).
