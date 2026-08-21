@@ -5,7 +5,9 @@ aiohttp: раздача статики + WebSocket хэндлеры.
 Периодически рассчитывает индикаторы и broadcast updates всем клиентам.
 """
 import asyncio
+import base64
 import json
+import os
 import time
 from pathlib import Path
 from typing import Set, Dict, Any, Optional
@@ -16,6 +18,11 @@ from loguru import logger
 from config.settings import config, FILTER_TOGGLE_KEYS, _set_nested_config, _get_nested_config
 
 STATIC_DIR = Path(__file__).parent / "public"
+BACKTEST_STATIC_DIR = Path(__file__).parent / "static"
+
+# Dashboard basic auth (risk audit #6)
+DASHBOARD_USER = os.getenv("DASHBOARD_USER", "")
+DASHBOARD_PASS = os.getenv("DASHBOARD_PASS", "")
 
 # Глобальное состояние
 _clients: Set[web.WebSocketResponse] = set()
@@ -133,6 +140,13 @@ def _compute_sr_levels(df, symbol: str, timeframe: str) -> Dict[str, Any]:
     }
 
 
+def _compute_whale(df) -> Dict[str, Any]:
+    """Рассчитать whale-аномалии объёма (Z-Score, VWAP, Tier 1/2/3)."""
+    from whale.detector import detect_whale_signals
+    state = detect_whale_signals(df)
+    return state.to_dict()
+
+
 async def _build_payload(symbol: str) -> Dict[str, Any]:
     """Собрать полный payload для отправки клиенту."""
     try:
@@ -153,6 +167,7 @@ async def _build_payload(symbol: str) -> Dict[str, Any]:
         liquidity = _compute_liquidity(df, symbol, tf)
         sr_levels = _compute_sr_levels(df, symbol, tf)
         signal_info = _compute_signal_light(df, symbol, tf)
+        whale_info = _compute_whale(df)
 
         # Price history for chart (последние 20 свечей)
         price_history = []
@@ -175,6 +190,7 @@ async def _build_payload(symbol: str) -> Dict[str, Any]:
             "levels": sr_levels,
             "signal": signal_info,
             "priceHistory": price_history,
+            "whale": whale_info,
         }
     except Exception as e:
         import traceback
@@ -242,6 +258,20 @@ def _compute_signal_light(df, symbol: str, timeframe: str) -> Dict[str, Any]:
     }
 
 
+async def broadcast_signal_event(signal_data: dict):
+    """Отправить событие нового сигнала всем WebSocket клиентам."""
+    if not _clients:
+        return
+    msg = json.dumps({"type": "signal", **signal_data}, default=str)
+    stale = set()
+    for ws in _clients:
+        try:
+            await ws.send_str(msg)
+        except Exception:
+            stale.add(ws)
+    _clients.difference_update(stale)
+
+
 async def _broadcast_loop():
     """Фоновая задача: рассылает обновления каждые N секунд."""
     from storage.database import db
@@ -297,6 +327,51 @@ async def index_handler(request):
     if index_path.exists():
         return web.FileResponse(index_path)
     return web.Response(text="Dashboard not built yet", status=404)
+
+
+async def backtest_handler(request):
+    """GET /backtest — страница офлайн-бэктеста."""
+    backtest_path = BACKTEST_STATIC_DIR / "backtest.html"
+    if backtest_path.exists():
+        return web.FileResponse(backtest_path)
+    return web.Response(text="Backtest page not built", status=404)
+
+
+def _check_basic_auth(request) -> bool:
+    """Проверяем Basic Auth (Authorization: Basic base64(user:pass))."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth[6:]).decode("utf-8")
+    except Exception:
+        return False
+    user, _, password = decoded.partition(":")
+    return user == DASHBOARD_USER and password == DASHBOARD_PASS
+
+
+@web.middleware
+async def backtest_auth_middleware(request, handler):
+    """Basic Auth для /api/backtest/* и /backtest.
+
+    Если DASHBOARD_USER/DASHBOARD_PASS не заданы — dev-режим, пропускаем
+    всё, но логируем WARNING один раз.
+    """
+    path = request.path
+    if not (path == "/backtest" or path.startswith("/api/backtest/")):
+        return await handler(request)
+
+    if not DASHBOARD_USER or not DASHBOARD_PASS:
+        logger.warning("Dashboard auth disabled (DASHBOARD_USER/DASHBOARD_PASS not set)")
+        return await handler(request)
+
+    if not _check_basic_auth(request):
+        return web.Response(
+            status=401,
+            text="Authentication required",
+            headers={"WWW-Authenticate": 'Basic realm="dashboard"'},
+        )
+    return await handler(request)
 
 
 # ─── WebSocket handler ──────────────────────────────────────────────────
@@ -434,6 +509,63 @@ async def api_open_trades(request):
         return web.json_response({"trades": [], "error": str(e)})
 
 
+async def api_whale_test(request):
+    """POST /api/whale-test — отправить тестовый whale-сигнал всем клиентам."""
+    try:
+        data = await request.json() if request.content_length else {}
+    except Exception:
+        data = {}
+
+    tier = data.get("tier", 3)
+    direction = data.get("direction", "buy")
+    classification = data.get("classification", "INIT")
+    count = min(int(data.get("count", 1)), 5)
+
+    import time
+    now_ms = int(time.time() * 1000)
+    z_base = {1: 2.5, 2: 3.5, 3: 5.0}.get(tier, 5.0)
+
+    signals = []
+    for i in range(count):
+        signals.append({
+            "tier": tier,
+            "direction": direction if i % 2 == 0 else ("sell" if direction == "buy" else "buy"),
+            "classification": classification if i % 2 == 0 else ("ABS" if classification == "INIT" else "INIT"),
+            "z_score": round(z_base + i * 0.3, 2),
+            "volume": round(50000 + i * 10000, 2),
+            "volume_sma": 15000.0,
+            "price": round(100 + i * 2, 4),
+            "bar_index": 190 + i,
+            "timestamp": now_ms - (count - i) * 300000,
+        })
+
+    whale_payload = {
+        "z_score": round(z_base, 2),
+        "z_score_abs": round(z_base, 2),
+        "vwap": round(100.5, 4),
+        "volume": round(50000, 2),
+        "volume_sma": 15000.0,
+        "signals": signals,
+        "tier1_count": sum(1 for s in signals if s["tier"] == 1),
+        "tier2_count": sum(1 for s in signals if s["tier"] == 2),
+        "tier3_count": sum(1 for s in signals if s["tier"] == 3),
+    }
+
+    # Отправить всем подключённым клиентам
+    msg = json.dumps({"type": "whale_test", "whale": whale_payload}, default=str)
+    stale = set()
+    sent = 0
+    for ws in _clients:
+        try:
+            await ws.send_str(msg)
+            sent += 1
+        except Exception:
+            stale.add(ws)
+    _clients.difference_update(stale)
+
+    return web.json_response({"ok": True, "sent_to": sent, "signals": len(signals)})
+
+
 # ─── App factory ────────────────────────────────────────────────────────
 
 def create_app() -> web.Application:
@@ -447,12 +579,18 @@ def create_app() -> web.Application:
             response.headers["Pragma"] = "no-cache"
         return response
 
-    app = web.Application(middlewares=[no_cache_middleware])
+    app = web.Application(middlewares=[no_cache_middleware, backtest_auth_middleware])
 
     # API
     app.router.add_get("/api/filters", api_filters_get)
     app.router.add_post("/api/filters", api_filters_post)
     app.router.add_get("/api/open-trades", api_open_trades)
+    app.router.add_post("/api/whale-test", api_whale_test)
+
+    # Backtest API + page
+    from web.backtest_api import setup_backtest_routes
+    setup_backtest_routes(app)
+    app.router.add_get("/backtest", backtest_handler)
 
     # Webhook (TradingView)
     from web.webhook import webhook_handler
@@ -465,6 +603,8 @@ def create_app() -> web.Application:
     if STATIC_DIR.exists():
         app.router.add_static("/css/", STATIC_DIR / "css", show_index=False)
         app.router.add_static("/js/", STATIC_DIR / "js", show_index=False)
+    if BACKTEST_STATIC_DIR.exists():
+        app.router.add_static("/static/backtest/", BACKTEST_STATIC_DIR, show_index=False)
 
     # Index
     app.router.add_get("/", index_handler)

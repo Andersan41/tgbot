@@ -111,7 +111,8 @@ async def cmd_symbols(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ручной запуск сканирования. /scan — все токены, /scan ZRO — один токен."""
     from scheduler.scanner import run_scan_cycle
-    from bot.notifier import send_signal, send_signal_blocked
+    from bot.notifier import send_signal_blocked
+    from web.signal_events import dual_notify
 
     if context.args:
         raw = context.args[0].upper().strip()
@@ -127,7 +128,7 @@ async def cmd_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("🔍 Запускаю сканирование...")
         try:
-            await run_scan_cycle(send_signal, blocked_callback=send_signal_blocked)
+            await run_scan_cycle(dual_notify, blocked_callback=send_signal_blocked)
             await update.message.reply_text("✅ Сканирование завершено.")
         except Exception as e:
             logger.error(f"Manual scan error: {e}", exc_info=True)

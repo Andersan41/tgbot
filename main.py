@@ -53,6 +53,7 @@ from bot.notifier import send_signal, send_error_alert
 from scheduler.tasks import TaskScheduler
 from context.fetcher import context_fetcher
 from web.server import start_web_server
+from web.signal_events import dual_notify
 
 
 async def main():
@@ -112,7 +113,7 @@ async def main():
     setup_error_sink(app.bot)
 
     # Настраиваем планировщик
-    scheduler = TaskScheduler(notify_callback=send_signal)
+    scheduler = TaskScheduler(notify_callback=dual_notify)
     scheduler.setup()
     scheduler.start()
 
