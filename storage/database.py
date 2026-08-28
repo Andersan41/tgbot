@@ -303,6 +303,10 @@ class Database:
 
     async def _migrate(self):
         """Добавляем отсутствующие колонки в существующие таблицы."""
+        # PRAGMA is SQLite-specific; skip for PostgreSQL/other engines
+        if self._engine.name != "sqlite":
+            logger.debug(f"Skipping PRAGMA migrations for engine: {self._engine.name}")
+            return
         async with self._engine.connect() as conn:
             # signals.factor_fingerprint (Task 6.1)
             result = await conn.execute(
@@ -931,7 +935,7 @@ class Database:
                 for later_gate in gate_order[gate_idx + 1:]:
                     later_col = gate_col_map[later_gate]
                     later_val = getattr(t, later_col, None)
-                    if later_val is False:
+                    if later_val is not True:
                         all_later_pass = False
                         break
                 if all_later_pass and t.signal_generated:

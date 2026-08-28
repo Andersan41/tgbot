@@ -231,18 +231,22 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         try:
             sweeps = detect_sweeps(_df_clean, lookback=50)
         except Exception:
+            logger.debug("replay: detect_sweeps failed", exc_info=True)
             sweeps = []
         try:
             order_blocks = detect_order_blocks(_df_clean, lookback=100)
         except Exception:
+            logger.debug("replay: detect_order_blocks failed", exc_info=True)
             order_blocks = []
         try:
             candle_quality = analyze_last_candle(_df_clean, atr_value=ind.atr)
         except Exception:
+            logger.debug("replay: analyze_last_candle failed", exc_info=True)
             candle_quality = None
         try:
             fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
         except Exception:
+            logger.debug("replay: detect_fvg failed", exc_info=True)
             fvgs = []
 
         _disp_atr = 0.0
@@ -260,6 +264,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
                 atr_value=ind.atr if ind.atr else 0.0,
             )
         except Exception:
+            logger.debug("replay: analyze_structure failed", exc_info=True)
             structure = None
 
         # ── Phase 1: Pattern Engine ──
@@ -310,6 +315,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             htf_result: HTFBiasResult = get_htf_bias_v2(df_1w, df_1d, df_4h, df_1h)
             htf_dir = htf_result.direction
         except Exception:
+            logger.debug("replay: get_htf_bias_v2 failed", exc_info=True)
             htf_dir = "neutral"
 
         if htf_dir in ("bullish", "bearish"):
@@ -338,6 +344,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             )
             sl, tp = trade_plan.sl, trade_plan.tp
         except Exception:
+            logger.debug("replay: build_trade_plan failed", exc_info=True)
             sl, tp = None, None
         if sl is None or tp is None:
             continue
@@ -362,6 +369,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             pd_window = df.iloc[max(0, i - 59):i + 1]
             pd_score = calc_premium_discount_score(pd_window, setup.direction)
         except Exception:
+            logger.debug("replay: calc_premium_discount_score failed", exc_info=True)
             pd_score = 0.5
         features.premium_discount_score = pd_score
         feat_vector = features.to_vector()
@@ -371,6 +379,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             probability = probability_engine.predict(features)
             p_tp_rules = float(probability.p_tp)
         except Exception:
+            logger.debug("replay: probability_engine.predict failed", exc_info=True)
             probability = None
             p_tp_rules = float("nan")
 
