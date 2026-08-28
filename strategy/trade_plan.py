@@ -28,8 +28,17 @@ class TargetScore:
 
     @property
     def score(self) -> float:
-        """Composite score: strength × RR × path clarity."""
-        rr_factor = min(1.0, self.rr_ratio / 3.0)  # normalize RR to [0,1]
+        """Composite score: strength × RR × path clarity.
+
+        RR scaling uses log formula: ln(1+rr)/ln(6), capped at 1.0.
+        RR=1→0.39, RR=2→0.61, RR=3→0.77, RR=5→1.0, RR=10→capped.
+        Old linear: RR>=3 all scored 1.0 — no incentive for higher targets.
+        """
+        import math
+        if self.rr_ratio > 0:
+            rr_factor = min(1.0, math.log(1.0 + self.rr_ratio) / math.log(6.0))
+        else:
+            rr_factor = 0.0
         path_factor = 1.0 if self.path_clear else 0.5
         return round(self.strength * rr_factor * path_factor, 3)
 

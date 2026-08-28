@@ -240,7 +240,7 @@ async def run_one_fast(symbol: str, *, cached_1h, cached_15m) -> FunnelData:
         confirm_df = cached_15m.copy()
         indicator_engine.calculate(confirm_df, symbol, confirm_tf)
 
-    warmup = 80
+    warmup = max(80, config.trading.candles_limit // 2)
     _funnel_counts: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
     _funnel_engine_scores: dict[int, int] = {}
     _funnel_passed_scores: dict[int, int] = {}

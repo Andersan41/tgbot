@@ -424,6 +424,8 @@ class DerivativesConfig:
     funding_strong_threshold: float = float(os.getenv("FUNDING_STRONG_THRESHOLD", "0.0003"))
     # Зона нейтрального funding
     funding_neutral_zone: float = float(os.getenv("FUNDING_NEUTRAL_ZONE", "0.0001"))
+    # Backtest-модель: стоимость funding за один 8h-интервал удержания (%, conservative — всегда платим)
+    funding_rate_pct_8h: float = float(os.getenv("FUNDING_RATE_PCT_8H", "0.01"))
     # Порог moderate OI change (%)
     oi_moderate_threshold: float = float(os.getenv("OI_MODERATE_THRESHOLD", "0.5"))
     # Порог strong OI change (%)
@@ -603,6 +605,8 @@ class PatternEngineConfig:
     require_bos_or_sweep: bool = os.getenv("PATTERN_REQUIRE_BOS_OR_SWEEP", "true").lower() == "true"
     # OB proximity threshold (% from midpoint to consider "near")
     ob_proximity_pct: float = float(os.getenv("PATTERN_OB_PROXIMITY_PCT", "2.0"))
+    # FVG proximity threshold (% from current price to FVG median to use as entry)
+    fvg_proximity_pct: float = float(os.getenv("PATTERN_FVG_PROXIMITY_PCT", "5.0"))
     # Require displacement candle for reversal setups (sweep + MSS is enough when false)
     reversal_require_displacement: bool = os.getenv("REVERSAL_REQUIRE_DISPLACEMENT", "false").lower() == "true"
 
@@ -639,6 +643,9 @@ class RiskEngineConfig:
     """Risk Engine — Layer 3 capital protection."""
 
     # Minimum R:R ratio (hard gate)
+    # DEPRECATED (dead): single RR gate source is `trading.min_rr_threshold`
+    # (used by risk/engine.py, trade_engine.py, funnel, edge_discovery).
+    # Kept for config snapshot compatibility only — changing this value has no effect.
     min_rr_ratio: float = float(os.getenv("RISK_ENGINE_MIN_RR", "2.0"))
     # Absolute SL minimum % (hard gate)
     sl_absolute_min_pct: float = float(os.getenv("RISK_ENGINE_SL_MIN_PCT", "0.4"))
@@ -677,7 +684,7 @@ class AppConfig:
     risk_engine: RiskEngineConfig = field(default_factory=RiskEngineConfig)
 
     # ─── Feature Flags (Phase 1) ─────────────────────────────────────────
-    htf_hard_gate: bool = os.getenv("HTF_HARD_GATE", "false").lower() == "true"
+    htf_hard_gate: bool = os.getenv("HTF_HARD_GATE", "true").lower() == "true"
     external_liquidity_tp: bool = os.getenv("EXTERNAL_LIQUIDITY_TP", "true").lower() == "true"
     ob_mitigation: bool = os.getenv("OB_MITIGATION", "true").lower() == "true"
     confidence_cap: bool = os.getenv("CONFIDENCE_CAP", "true").lower() == "true"
@@ -685,7 +692,8 @@ class AppConfig:
 
     # ─── Feature Flags (Phase 2 — HTF Bias V2 + Premium/Discount) ──────
     htf_bias_v2: bool = os.getenv("HTF_BIAS_V2", "true").lower() == "true"
-    premium_discount: bool = os.getenv("PREMIUM_DISCOUNT", "true").lower() == "true"
+    # OFF by default: A/B показал ухудшение (PF 1.28→0.91). Пересмотреть после 500+ live-сделок.
+    premium_discount: bool = os.getenv("PREMIUM_DISCOUNT", "false").lower() == "true"
 
     # ─── Feature Flags (Phase 3 — signal-recovery diagnostics) ─────────
     # Each flag defaults to the CURRENT live behavior; flipping it changes gating.
@@ -703,6 +711,21 @@ class AppConfig:
     # Minimum P(TP) required to emit a signal (0.0 = disabled, current behavior). When > 0
     # the Probability Engine becomes an actual selector rather than sizing-only input.
     min_p_tp: float = float(os.getenv("MIN_P_TP", "0.45"))
+    # Backtest execution model for FVG-based entries. The product decision on
+    # whether the bot auto-executes is NOT made yet, so backtests must support
+    # the alternatives side-by-side:
+    #   "median_immediate" — current behavior: fill at the FVG median on the
+    #       signal bar even if price never traded there (phantom fills).
+    #   "close"            — fill at the signal bar's close (mirrors live P&L
+    #       tracking, which computes from signal.close_price).
+    #   "limit_pending"    — resting limit at the FVG median: fill only when a
+    #       LATER bar actually touches the median; expire when the FVG leaves
+    #       the active set or `execution_pending_max_bars` elapse.
+    execution_model: str = os.getenv("EXECUTION_MODEL", "median_immediate")
+    # Max bars a pending limit order stays alive before it expires unfilled.
+    execution_pending_max_bars: int = int(os.getenv("EXECUTION_PENDING_MAX_BARS", "50"))
+    # Max bars a trade can stay open before forced close at current price (0 = disabled).
+    max_trade_duration_bars: int = int(os.getenv("MAX_TRADE_DURATION_BARS", "72"))
 
     # URL базы данных
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db")
@@ -735,6 +758,8 @@ class AppConfig:
     # ─── Portfolio Risk Gate ─────────────────────────────────────────────
     # Максимальное число одновременно открытых сигналов
     max_active_signals: int = int(os.getenv("MAX_ACTIVE_SIGNALS", "3"))
+    # Максимальное число открытых сигналов на один символ
+    max_active_signals_per_symbol: int = int(os.getenv("MAX_ACTIVE_SIGNALS_PER_SYMBOL", "1"))
     # Максимальный суммарный риск открытых позиций (%)
     max_portfolio_risk_pct: float = float(os.getenv("MAX_PORTFOLIO_RISK_PCT", "3.0"))
 
@@ -849,6 +874,7 @@ FILTER_PARAM_KEYS: dict[str, tuple[str, type]] = {
     "structure_swing_window": ("market_structure.structure_swing_window", int),
     # Derivatives params
     "funding_strong_threshold": ("derivatives.funding_strong_threshold", float),
+    "funding_rate_pct_8h": ("derivatives.funding_rate_pct_8h", float),
     "oi_moderate_threshold": ("derivatives.oi_moderate_threshold", float),
     "oi_strong_threshold": ("derivatives.oi_strong_threshold", float),
     # Risk params

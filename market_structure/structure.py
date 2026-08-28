@@ -230,11 +230,12 @@ def _find_swing_points(
     data = df.tail(lookback)
     offset = len(df) - len(data)  # offset from original df index
 
-    for i in range(swing_window, len(data) - swing_window):
-        high_window = data["high"].iloc[i - swing_window : i + swing_window + 1]
-        low_window = data["low"].iloc[i - swing_window : i + swing_window + 1]
+    highs = data["high"].to_numpy(dtype=float)
+    lows = data["low"].to_numpy(dtype=float)
+    index = data.index
 
-        ts = data.index[i]
+    for i in range(swing_window, len(data) - swing_window):
+        ts = index[i]
         if hasattr(ts, "to_pydatetime"):
             ts = ts.to_pydatetime()
         if ts.tzinfo is None:
@@ -242,19 +243,19 @@ def _find_swing_points(
 
         candle_idx = offset + i  # absolute index in original df
 
-        if data["high"].iloc[i] == high_window.max():
+        if highs[i] == highs[i - swing_window: i + swing_window + 1].max():
             swings.append(
                 SwingPoint(
-                    price=float(data["high"].iloc[i]),
+                    price=float(highs[i]),
                     timestamp=ts,
                     type="high",
                     candle_index=candle_idx,
                 )
             )
-        if data["low"].iloc[i] == low_window.min():
+        if lows[i] == lows[i - swing_window: i + swing_window + 1].min():
             swings.append(
                 SwingPoint(
-                    price=float(data["low"].iloc[i]),
+                    price=float(lows[i]),
                     timestamp=ts,
                     type="low",
                     candle_index=candle_idx,

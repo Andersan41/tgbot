@@ -1,387 +1,512 @@
 """
-test_backtest_parity.py — Validates that backtest engine post-signal processing
-matches the live pipeline (scheduler/scanner.py) exactly.
+test_backtest_parity.py — Validates that the backtest engine and the live scanner
+share the SAME signal-evaluation logic.
 
-Tests individual processing steps rather than the full async pipeline,
-since scanner.py requires exchange connection and database.
+Both callers use strategy/signal_evaluator.py:
+  - estimate_p_tp()          (scanner Phase 3 / backtest Phase 3)
+  - apply_symbol_overrides() (scanner Phase 1.46 / backtest)
+  - htf_opposition()         (scanner Phase 1.45 / backtest)
+
+These tests exercise the shared functions with mocked inputs (no exchange, no DB).
 """
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import config
-from risk.dynamic_risk import calculate_structural_sl, calculate_structural_tp
-from risk.market_regime import RegimeDetector, MarketRegime
-from strategy.signal_engine import SignalType
+from indicators.engine import IndicatorValues
+from risk.engine import PortfolioState, risk_engine
+from strategy.pattern_engine import ICTSetup
+from strategy.signal_evaluator import (
+    apply_symbol_overrides,
+    dedup_block_window,
+    entry_zone_touched,
+    estimate_p_tp,
+    get_cooldown_minutes,
+    htf_opposition,
+)
+from strategy.trade_plan import TradePlan
 
 
-class TestStructuralSLParity:
-    """Verify structural SL calculation matches scanner.py logic."""
+def make_ind(adx: float = 30.0, atr: float = 500.0, close: float = 50000.0) -> IndicatorValues:
+    return IndicatorValues(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        close=close,
+        high=close + 100.0,
+        low=close - 100.0,
+        volume=1000.0,
+        ema_fast=close * 0.999,
+        ema_slow=close * 0.997,
+        ema_trend=close * 0.995,
+        ema_fast_prev=close * 0.998,
+        ema_slow_prev=close * 0.998,
+        rsi=55.0,
+        macd=1.0,
+        macd_signal=0.5,
+        macd_hist=0.5,
+        macd_hist_prev=0.2,
+        adx=adx,
+        dmi_plus=25.0,
+        dmi_minus=20.0,
+        atr=atr,
+        supertrend=close * 0.99,
+        supertrend_direction=1,
+        volume_sma=1000.0,
+    )
 
-    def test_structural_sl_buy_with_sweeps(self):
-        """BUY signal: structural SL should be below entry."""
-        from datetime import datetime, timezone
-        from liquidity.sweep import SweepEvent
-        from liquidity.order_blocks import OrderBlock
 
-        entry = 50000.0
-        sweep = SweepEvent(
-            type="bullish", swept_level=49500, sweep_low=49200,
-            sweep_high=49600, reclaim_candles=2, volume_ratio=3.0,
-            timestamp=datetime.now(timezone.utc),
+def make_setup(
+    direction: str = "buy",
+    setup_type: str = "continuation",
+    components: int = 2,
+    mss_score: float = 60.0,
+    overall_quality: float = 70.0,
+    has_bos: bool = True,
+    has_sweep: bool = True,
+    has_mss: bool = True,
+) -> ICTSetup:
+    return ICTSetup(
+        detected=True,
+        direction=direction,
+        setup_type=setup_type,
+        has_sweep=has_sweep,
+        has_bos=has_bos,
+        has_mss=has_mss,
+        mss_score=mss_score,
+        overall_quality=overall_quality,
+        components_found=[f"c{i}" for i in range(components)],
+    )
+
+
+def make_plan(sl_distance_pct: float = 2.0) -> TradePlan:
+    return TradePlan(
+        direction="buy",
+        symbol="BTC/USDT",
+        timeframe="1h",
+        entry_price=50000.0,
+        sl=49000.0,
+        tp=53000.0,
+        sl_source="bos",
+        sl_distance_pct=sl_distance_pct,
+        tp_distance_pct=6.0,
+        is_valid=True,
+    )
+
+
+def htf_result(direction: str):
+    return SimpleNamespace(direction=direction)
+
+
+class TestEstimatePTp:
+    """Scanner Phase 3 / backtest Phase 3 must use the exact same formula."""
+
+    def test_baseline_two_components(self):
+        p_tp, conf = estimate_p_tp(setup=make_setup(components=2))
+        assert p_tp == pytest.approx(0.45)
+        assert conf == pytest.approx(0.45)
+
+    def test_components_boost(self):
+        p3, _ = estimate_p_tp(setup=make_setup(components=3))
+        p4, _ = estimate_p_tp(setup=make_setup(components=4))
+        assert p3 == pytest.approx(0.45 + 0.08)
+        assert p4 == pytest.approx(0.45 + 0.15)
+
+    def test_context_boost(self):
+        p_pos, _ = estimate_p_tp(setup=make_setup(), context_score=0.8)
+        p_neg, _ = estimate_p_tp(setup=make_setup(), context_score=-1.0)
+        assert p_pos == pytest.approx(0.45 + 0.08)
+        assert p_neg == pytest.approx(0.45 - 0.10)
+
+    def test_htf_alignment_boost(self):
+        aligned, _ = estimate_p_tp(setup=make_setup(direction="buy"), htf_result=htf_result("bullish"))
+        opposed, _ = estimate_p_tp(setup=make_setup(direction="buy"), htf_result=htf_result("bearish"))
+        assert aligned == pytest.approx(0.45 + 0.05)
+        assert opposed == pytest.approx(0.45)
+
+    def test_htf_penalty_applied(self):
+        p_tp, _ = estimate_p_tp(
+            setup=make_setup(),
+            htf_result=htf_result("bearish"),
+            htf_penalty=config.htf_bias_continuation_penalty,
         )
-        ob = OrderBlock(
-            type="bullish", low=49000, high=49300,
-            timestamp=datetime.now(timezone.utc),
+        assert p_tp == pytest.approx(0.45 * config.htf_bias_continuation_penalty)
+
+    def test_mtf_and_mss_boost(self):
+        p_tp, _ = estimate_p_tp(setup=make_setup(mss_score=80), mtf_aligned=True)
+        assert p_tp == pytest.approx(0.45 + 0.03 + 0.05)
+
+    def test_clamped(self):
+        lo, _ = estimate_p_tp(setup=make_setup(components=4), context_score=1.0, htf_penalty=0.01)
+        hi, _ = estimate_p_tp(
+            setup=make_setup(components=4, mss_score=90),
+            context_score=1.0,
+            htf_result=htf_result("bullish"),
+            mtf_aligned=True,
+        )
+        assert lo == pytest.approx(0.15)
+        assert hi == pytest.approx(0.83)
+
+
+class TestApplySymbolOverrides:
+    """Scanner Phase 1.46 / backtest overrides — real fields, no AttributeError."""
+
+    def test_no_overrides_pass(self, monkeypatch):
+        monkeypatch.setattr(config.trading, "symbol_overrides", {})
+        blocked, reason = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(), setup=make_setup(), trade_plan=make_plan(),
+        )
+        assert not blocked
+        assert reason == ""
+
+    def test_adx_min(self, monkeypatch):
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"adx_min": 35.0}},
+        )
+        blocked, reason = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(adx=30.0), setup=make_setup(), trade_plan=make_plan(),
+        )
+        assert blocked
+        assert "ADX" in reason
+
+    def test_max_sl_pct_uses_trade_plan(self, monkeypatch):
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"max_sl_pct": 1.5}},
+        )
+        blocked, reason = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(), setup=make_setup(), trade_plan=make_plan(sl_distance_pct=2.0),
+        )
+        assert blocked
+        assert "SL" in reason
+
+    def test_max_atr_pct(self, monkeypatch):
+        ind = make_ind(atr=500.0, close=50000.0)  # atr_pct = 1.0
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"max_atr_pct": 0.5}},
+        )
+        blocked, reason = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=ind, setup=make_setup(), trade_plan=make_plan(),
+        )
+        assert blocked
+        assert "ATR" in reason
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"max_atr_pct": 2.0}},
+        )
+        blocked, _ = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=ind, setup=make_setup(), trade_plan=make_plan(),
+        )
+        assert not blocked
+
+    def test_min_quality_uses_overall_quality(self, monkeypatch):
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"min_quality": 80.0}},
+        )
+        blocked, reason = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(), setup=make_setup(overall_quality=70.0),
+            trade_plan=make_plan(),
+        )
+        assert blocked
+        assert "quality" in reason
+
+    def test_block_setup_types(self, monkeypatch):
+        monkeypatch.setattr(
+            config.trading, "symbol_overrides",
+            {"BTC/USDT": {"block_setup_types": ["SELL_continuation"]}},
+        )
+        blocked, _ = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(), setup=make_setup(direction="sell"),
+            trade_plan=make_plan(),
+        )
+        assert blocked
+        blocked, _ = apply_symbol_overrides(
+            symbol="BTC/USDT", ind=make_ind(), setup=make_setup(direction="buy"),
+            trade_plan=make_plan(),
+        )
+        assert not blocked
+
+
+class TestHTFOpposition:
+    """Scanner Phase 1.45 / backtest HTF gate & penalty decision."""
+
+    def test_neutral(self):
+        assert htf_opposition(make_setup(), "neutral") == (False, False)
+        assert htf_opposition(make_setup(), None) == (False, False)
+
+    def test_continuation_opposed_no_gate(self, monkeypatch):
+        monkeypatch.setattr(config, "htf_hard_gate", False)
+        opposed, hard = htf_opposition(make_setup(direction="buy"), "bearish")
+        assert opposed and not hard
+
+    def test_continuation_opposed_hard_gate(self, monkeypatch):
+        monkeypatch.setattr(config, "htf_hard_gate", True)
+        opposed, hard = htf_opposition(make_setup(direction="buy", setup_type="continuation"), "bearish")
+        assert opposed and hard
+
+    def test_reversal_opposed_never_hard_blocks(self, monkeypatch):
+        monkeypatch.setattr(config, "htf_hard_gate", True)
+        opposed, hard = htf_opposition(
+            make_setup(direction="buy", setup_type="reversal", has_sweep=True), "bearish",
+        )
+        assert opposed and not hard
+
+    def test_aligned_no_opposition(self, monkeypatch):
+        monkeypatch.setattr(config, "htf_hard_gate", True)
+        assert htf_opposition(make_setup(direction="buy"), "bullish") == (False, False)
+
+
+class TestLiveBacktestParity:
+    """End-to-end: identical inputs → identical P(TP) and risk decision."""
+
+    def test_shared_pipeline_is_deterministic(self):
+        setup = make_setup(components=3, mss_score=80)
+        plan = make_plan()
+
+        # Live scanner: estimate_p_tp + risk_engine.evaluate
+        p_tp_live, conf_live = estimate_p_tp(
+            setup=setup, context_score=0.0, htf_result=htf_result("bullish"),
+            htf_penalty=1.0, mtf_aligned=False,
+        )
+        dec_live = risk_engine.evaluate(
+            portfolio=PortfolioState(),
+            entry_price=plan.entry_price, sl=plan.sl, tp=plan.tp,
+            atr_pct=1.0, p_tp=p_tp_live, confidence=conf_live,
+            mss_quality=setup.mss_score, atr=500.0, sl_source=plan.sl_source,
         )
 
-        sl = calculate_structural_sl(
-            direction="BUY", entry=entry,
-            sweeps=[sweep], order_blocks=[ob],
-            atr=500.0, close=entry,
+        # Backtest: same shared call, same parameters
+        p_tp_bt, conf_bt = estimate_p_tp(
+            setup=setup, context_score=0.0, htf_result=htf_result("bullish"),
+            htf_penalty=1.0, mtf_aligned=False,
         )
-        assert sl < entry, "BUY SL must be below entry"
-
-    def test_structural_sl_sell_with_sweeps(self):
-        """SELL signal: structural SL should be above entry."""
-        from datetime import datetime, timezone
-        from liquidity.sweep import SweepEvent
-        from liquidity.order_blocks import OrderBlock
-
-        entry = 50000.0
-        sweep = SweepEvent(
-            type="bearish", swept_level=50500, sweep_low=50400,
-            sweep_high=50800, reclaim_candles=2, volume_ratio=3.0,
-            timestamp=datetime.now(timezone.utc),
-        )
-        ob = OrderBlock(
-            type="bearish", low=50700, high=51000,
-            timestamp=datetime.now(timezone.utc),
+        dec_bt = risk_engine.evaluate(
+            portfolio=PortfolioState(),
+            entry_price=plan.entry_price, sl=plan.sl, tp=plan.tp,
+            atr_pct=1.0, p_tp=p_tp_bt, confidence=conf_bt,
+            mss_quality=setup.mss_score, atr=500.0, sl_source=plan.sl_source,
         )
 
-        sl = calculate_structural_sl(
-            direction="SELL", entry=entry,
-            sweeps=[sweep], order_blocks=[ob],
-            atr=500.0, close=entry,
+        assert p_tp_live == p_tp_bt
+        assert conf_live == conf_bt
+        assert dec_live.should_trade == dec_bt.should_trade
+        assert dec_live.risk_pct == dec_bt.risk_pct
+        assert dec_bt.should_trade
+
+    def test_htf_penalty_flows_into_risk_sizing(self, monkeypatch):
+        """An opposed HTF bias lowers P(TP) → smaller risk sizing in both callers."""
+        monkeypatch.setattr(config, "htf_hard_gate", False)
+        setup = make_setup(direction="buy", components=2)
+        plan = make_plan()
+        penalty = config.htf_bias_continuation_penalty
+
+        aligned_ptp, _ = estimate_p_tp(setup=setup, htf_result=htf_result("bullish"), htf_penalty=1.0)
+        opposed_ptp, _ = estimate_p_tp(setup=setup, htf_result=htf_result("bearish"), htf_penalty=penalty)
+
+        assert opposed_ptp < aligned_ptp
+
+        dec_aligned = risk_engine.evaluate(
+            portfolio=PortfolioState(), entry_price=plan.entry_price, sl=plan.sl, tp=plan.tp,
+            atr_pct=1.0, p_tp=aligned_ptp, confidence=aligned_ptp,
+            mss_quality=setup.mss_score, atr=500.0, sl_source=plan.sl_source,
         )
-        assert sl > entry, "SELL SL must be above entry"
-
-    def test_structural_sl_fallback_to_atr(self):
-        """No structural levels: should fall back to ATR-based SL."""
-        entry = 50000.0
-        sl = calculate_structural_sl(
-            direction="BUY", entry=entry,
-            sweeps=[], order_blocks=[],
-            atr=500.0, close=entry,
+        dec_opposed = risk_engine.evaluate(
+            portfolio=PortfolioState(), entry_price=plan.entry_price, sl=plan.sl, tp=plan.tp,
+            atr_pct=1.0, p_tp=opposed_ptp, confidence=opposed_ptp,
+            mss_quality=setup.mss_score, atr=500.0, sl_source=plan.sl_source,
         )
-        # ATR-based: entry - atr * atr_multiplier_sl (1.5 default)
-        expected = entry - 500.0 * config.trading.atr_multiplier_sl
-        assert abs(sl - expected) < 0.01
-
-    def test_structural_sl_improves_risk_check(self):
-        """Scanner.py only applies structural SL if it improves risk (shorter distance)."""
-        from datetime import datetime, timezone
-        from liquidity.sweep import SweepEvent
-
-        entry = 50000.0
-        atr_sl = entry - 500.0 * config.trading.atr_multiplier_sl  # ATR-based SL
-        current_dist = abs(entry - atr_sl)
-
-        # Create a sweep that gives a structural SL closer to entry
-        sweep = SweepEvent(
-            type="bullish", swept_level=49800, sweep_low=49750,
-            sweep_high=49900, reclaim_candles=2, volume_ratio=3.0,
-            timestamp=datetime.now(timezone.utc),
-        )
-        structural_sl = calculate_structural_sl(
-            direction="BUY", entry=entry,
-            sweeps=[sweep], order_blocks=[],
-            atr=500.0, close=entry,
-        )
-        structural_dist = abs(entry - structural_sl)
-
-        # The scanner.py logic: accept if structural_dist <= current_dist
-        if structural_dist <= current_dist and structural_sl != atr_sl:
-            # Structural SL accepted (improves risk)
-            final_sl = structural_sl
-        else:
-            final_sl = atr_sl
-
-        # Verify: final SL should be the one with shorter distance
-        assert abs(entry - final_sl) <= current_dist
+        assert dec_opposed.risk_pct <= dec_aligned.risk_pct
 
 
-class TestSLDistanceGuardParity:
-    """Verify SL distance guard matches scanner.py logic."""
+# ---------------------------------------------------------------------------
+# Cooldown / Dedup parity (live Phase-6 gate ⇄ backtest) — bit-in-bit, no copy
+# ---------------------------------------------------------------------------
 
-    def test_sl_too_close_shifts_outward(self):
-        """If SL is too close, shift to min distance (scanner.py lines 901-906)."""
-        entry = 50000.0
-        sl = 49900.0  # 0.2% away — below min_sl_distance_pct (1.0%)
-        min_dist = config.trading.min_sl_distance_pct
-
-        sl_dist_pct = abs(entry - sl) / entry * 100
-        if sl_dist_pct < min_dist:
-            # Shift SL to exactly min_dist
-            new_sl = entry * (1 - min_dist / 100)
-            sl = round(new_sl, 8)
-
-        final_dist = abs(entry - sl) / entry * 100
-        assert final_dist >= min_dist - 0.001
-
-    def test_sl_too_far_rejects(self):
-        """If SL is too far, signal is rejected (scanner.py lines 912-921)."""
-        entry = 50000.0
-        sl = 44000.0  # 12% away — above max_sl_distance_pct (10.0%)
-        max_dist = config.trading.max_sl_distance_pct
-
-        sl_dist_pct = abs(entry - sl) / entry * 100
-        rejected = sl_dist_pct > max_dist
-        assert rejected
+from datetime import datetime, timedelta, timezone
 
 
-class TestRRFilterParity:
-    """Verify RR filter matches scanner.py logic (lines 923-938)."""
+class TestCooldownDedupParity:
+    """Both callers invoke the SAME function (strategy/signal_evaluator.py).
 
-    def test_rr_below_threshold_rejects(self):
-        """RR below min_rr_threshold → signal rejected."""
-        entry = 50000.0
-        sl = 49000.0  # 2% risk
-        tp = 50150.0  # 0.3% reward → RR = 0.15
-
-        risk = abs(entry - sl)
-        reward = abs(tp - entry)
-        rr = reward / risk if risk > 0 else 0
-        min_rr = config.trading.min_rr_threshold
-
-        assert rr < min_rr, f"RR {rr:.2f} should be below threshold {min_rr}"
-
-    def test_rr_above_threshold_passes(self):
-        """RR above min_rr_threshold → signal passes."""
-        entry = 50000.0
-        sl = 49000.0  # 2% risk
-        tp = 53000.0  # 6% reward → RR = 3.0
-
-        risk = abs(entry - sl)
-        reward = abs(tp - entry)
-        rr = reward / risk if risk > 0 else 0
-        min_rr = config.trading.min_rr_threshold
-
-        assert rr >= min_rr, f"RR {rr:.2f} should be >= threshold {min_rr}"
-
-
-class TestStopHuntBufferParity:
-    """Verify stop hunt buffer matches scanner.py logic (lines 583-596).
-
-    Buffer must be applied ONLY when structural SL was accepted (replaced ATR SL).
-    Buffer must NOT be applied when structural SL was rejected (ATR SL kept).
-    Buffer must NOT be applied when sl_source is 'bos' (structural SL skipped).
+    The live scanner and the backtest engine must never hold divergent copies —
+    scanner.py imports dedup_block_window directly (verified in
+    test_scanner_uses_shared_dedup). These tests pin the exact semantics,
+    including the LINK 07-02 cluster case (4h-spaced same-direction entries).
     """
 
-    def test_buffer_applied_when_structural_sl_accepted(self):
-        """When structural SL is accepted, buffer is applied to the structural SL."""
-        entry = 50000.0
-        atr_sl = 48500.0  # original ATR-based SL
-        structural_sl = 48700.0  # structural SL (closer to entry, accepted)
-        buffer_pct = config.trading.stop_hunt_buffer_pct / 100.0
+    def test_cooldown_formula(self):
+        # max(base, tf_minutes × multiplier); 1h → 240 min (matches .env: base=240, mult=1.0)
+        assert get_cooldown_minutes("1h", 240, 1.0) == 240
+        # default-shaped config: 1h → max(45, 60×2)=120
+        assert get_cooldown_minutes("1h", 45, 2.0) == 120
+        # 15m with multiplier 2.0 → max(45, 15×2)=45
+        assert get_cooldown_minutes("15m", 45, 2.0) == 45
 
-        is_buy = True
-        # Simulate scanner.py logic: accept structural SL
-        structural_sl_applied = False
-        current_dist = abs(entry - atr_sl)
-        structural_dist = abs(entry - structural_sl)
-        if structural_dist <= current_dist and structural_sl != atr_sl:
-            result_sl = structural_sl
-            structural_sl_applied = True
-        else:
-            result_sl = atr_sl
+    def test_same_direction_within_cooldown_blocked(self):
+        now = datetime(2026, 7, 2, 0, 0, tzinfo=timezone.utc)
+        last = now - timedelta(minutes=30)  # same-dir re-entry after 30m on 1h
+        assert dedup_block_window(last, now, "BUY", "BUY", "1h", 240, 1.0) is not None
 
-        # Buffer applied only when structural SL was accepted
-        if structural_sl_applied and config.trading.stop_hunt_buffer_pct > 0:
-            buffered_sl = round(result_sl * (1 - buffer_pct), 8) if is_buy else round(result_sl * (1 + buffer_pct), 8)
-        else:
-            buffered_sl = result_sl
+    def test_same_direction_at_cooldown_boundary_passes(self):
+        # The LINK 07-02 case: entries at 00:00 / 04:00 / 08:00 — exactly 240m apart,
+        # elapsed == cooldown → NOT blocked (identical in live and backtest).
+        now = datetime(2026, 7, 2, 4, 0, tzinfo=timezone.utc)
+        last = datetime(2026, 7, 2, 0, 0, tzinfo=timezone.utc)
+        assert dedup_block_window(last, now, "BUY", "BUY", "1h", 240, 1.0) is None
 
-        # Buffer was applied to structural SL (48700), not ATR SL (48500)
-        assert structural_sl_applied
-        assert buffered_sl < structural_sl
-        assert buffered_sl == round(structural_sl * (1 - buffer_pct), 8)
+    def test_same_direction_past_cooldown_passes(self):
+        now = datetime(2026, 7, 2, 8, 0, tzinfo=timezone.utc)
+        last = datetime(2026, 7, 2, 0, 0, tzinfo=timezone.utc)
+        assert dedup_block_window(last, now, "BUY", "BUY", "1h", 240, 1.0) is None
 
-    def test_buffer_not_applied_when_structural_sl_rejected(self):
-        """When structural SL is rejected (worse risk), buffer is NOT applied to ATR SL."""
-        entry = 50000.0
-        atr_sl = 48500.0  # original ATR-based SL (closer to entry)
-        structural_sl = 47000.0  # structural SL (further from entry, rejected)
-        buffer_pct = config.trading.stop_hunt_buffer_pct / 100.0
+    def test_cross_direction_half_cooldown(self):
+        now = datetime(2026, 7, 2, 0, 0, tzinfo=timezone.utc)
+        # cross-dir within half cooldown (120m) → blocked
+        last = now - timedelta(minutes=60)
+        assert dedup_block_window(last, now, "BUY", "SELL", "1h", 240, 1.0) is not None
+        # cross-dir past half but within full → passes
+        last = now - timedelta(minutes=180)
+        assert dedup_block_window(last, now, "BUY", "SELL", "1h", 240, 1.0) is None
 
-        is_buy = True
-        # Simulate scanner.py logic: reject structural SL (worse risk)
-        structural_sl_applied = False
-        current_dist = abs(entry - atr_sl)
-        structural_dist = abs(entry - structural_sl)
-        if structural_dist <= current_dist and structural_sl != atr_sl:
-            result_sl = structural_sl
-            structural_sl_applied = True
-        else:
-            result_sl = atr_sl
+    def test_scanner_uses_shared_dedup(self):
+        """BUG-19 guard: scanner must not carry its own dedup copy."""
+        import scheduler.scanner as sc
 
-        # Buffer NOT applied when structural SL was rejected
-        if structural_sl_applied and config.trading.stop_hunt_buffer_pct > 0:
-            buffered_sl = round(result_sl * (1 - buffer_pct), 8) if is_buy else round(result_sl * (1 + buffer_pct), 8)
-        else:
-            buffered_sl = result_sl
+        from strategy.signal_evaluator import dedup_block_window, get_cooldown_minutes
 
-        # Buffer was NOT applied — SL stays as ATR-based
-        assert not structural_sl_applied
-        assert buffered_sl == atr_sl
-
-    def test_buffer_not_applied_to_bos_sl(self):
-        """Buffer not applied when sl_source is 'bos' (structural SL skipped)."""
-        sl_source = "bos"
-        skip_structural_sl = sl_source == "bos"
-        assert skip_structural_sl
-
-    def test_buffer_not_applied_when_no_structural_levels(self):
-        """When no structural levels found, new_sl == atr_sl, no buffer applied."""
-        entry = 50000.0
-        atr_sl = 48500.0
-        # calculate_structural_sl returns ATR-based SL when no sweeps/OBs
-        new_sl = atr_sl  # same as ATR SL (fallback)
-        buffer_pct = config.trading.stop_hunt_buffer_pct / 100.0
-
-        structural_sl_applied = False
-        current_dist = abs(entry - atr_sl)
-        structural_dist = abs(entry - new_sl)
-        if structural_dist <= current_dist and new_sl != atr_sl:
-            result_sl = new_sl
-            structural_sl_applied = True
-        else:
-            result_sl = atr_sl
-
-        if structural_sl_applied and config.trading.stop_hunt_buffer_pct > 0:
-            buffered_sl = round(result_sl * (1 - buffer_pct), 8)
-        else:
-            buffered_sl = result_sl
-
-        assert not structural_sl_applied
-        assert buffered_sl == atr_sl
+        assert sc.dedup_block_window is dedup_block_window
+        assert sc.get_cooldown_minutes is get_cooldown_minutes
 
 
-class TestConfirmTFParity:
-    """Verify confirm TF logic matches scanner.py (lines 307-334)."""
+class TestEntryZoneParity:
+    """require_entry_zone gate — shared function, correct direction logic.
 
-    def test_entry_price_from_confirm_tf(self):
-        """When confirm TF succeeds, entry_price = confirm TF close."""
-        ind_close = 50000.0  # primary TF close
-        confirm_close = 50050.0  # confirm TF close
+    The scanner, backtest engine and offline funnels must all call the SAME
+    entry_zone_touched() from strategy/signal_evaluator.py (mirroring the
+    test_scanner_uses_shared_dedup pattern) so a parity-gap can never appear.
 
-        confirm_ok = True  # simulate successful confirmation
-        if confirm_ok:
-            entry_price = confirm_close
-        else:
-            entry_price = ind_close
+    The direction logic is deliberate and matches liquidity/fvg.py:_is_fvg_filled:
+      BUY  (bullish FVG) → bar_low  <= fvg.top    (price retraced from above)
+      SELL (bearish FVG) → bar_high >= fvg.bottom (price retraced from below)
+    Swapping it would block the correct side and let phantom fills through.
+    """
 
-        assert entry_price == confirm_close
+    @staticmethod
+    def _fvg(type_, top, bottom, filled=False):
+        from datetime import datetime, timezone
+        return SimpleNamespace(
+            type=type_, top=top, bottom=bottom, is_active=not filled,
+            filled=filled, timestamp=datetime.now(timezone.utc), index=0,
+        )
 
-    def test_entry_price_fallback_to_primary(self):
-        """When confirm TF fails, entry_price = primary TF close."""
-        ind_close = 50000.0
-        confirm_close = 50050.0
+    def test_buy_touched_from_above(self):
+        f = self._fvg("bullish", top=101.0, bottom=99.0)
+        assert entry_zone_touched("buy", [f], bar_high=102.0, bar_low=100.5) is True
 
-        confirm_ok = False
-        if confirm_ok:
-            entry_price = confirm_close
-        else:
-            entry_price = ind_close
+    def test_buy_not_reached(self):
+        # BUY needs price to dip INTO the gap (bar_low <= top). bar_low=101.5
+        # stays above top=101 → zone never touched → reject.
+        f = self._fvg("bullish", top=101.0, bottom=99.0)
+        assert entry_zone_touched("buy", [f], bar_high=102.0, bar_low=101.5) is False
 
-        assert entry_price == ind_close
+    def test_sell_touched_from_below(self):
+        f = self._fvg("bearish", top=101.0, bottom=99.0)
+        assert entry_zone_touched("sell", [f], bar_high=99.5, bar_low=98.0) is True
 
+    def test_sell_not_reached(self):
+        f = self._fvg("bearish", top=101.0, bottom=99.0)
+        assert entry_zone_touched("sell", [f], bar_high=98.5, bar_low=97.0) is False
 
-class TestBOSBugFixParity:
-    """Verify BOS SL side-of-entry validation (signal_engine.py fix)."""
+    def test_wrong_direction_fvg_ignored(self):
+        f = self._fvg("bullish", top=101.0, bottom=99.0)
+        # SELL signal but only a bullish FVG present → no matching zone → pass
+        assert entry_zone_touched("sell", [f], bar_high=100.0, bar_low=98.0) is True
 
-    def test_bos_sl_above_entry_for_buy_is_invalid(self):
-        """BUY signal with BOS level above entry → BOS SL invalid, fall to ATR."""
-        entry = 50000.0
-        bos_level = 51000.0  # BOS level above entry
-        sl = round(bos_level * 0.995, 8)  # = 50745.0
+    def test_filled_fvg_skipped(self):
+        f = self._fvg("bearish", top=101.0, bottom=99.0, filled=True)
+        assert entry_zone_touched("sell", [f], bar_high=98.0, bar_low=97.0) is True
 
-        # Validation: for BUY, sl must be < entry
-        assert sl > entry, "BOS SL is above entry — should be invalid"
+    def test_no_fvgs_passes(self):
+        assert entry_zone_touched("buy", [], bar_high=100.0, bar_low=99.0) is True
 
-        # After fix: falls through to ATR-based SL
-        # This confirms the bug exists and the fix catches it
+    def test_scanner_uses_shared_entry_zone(self):
+        """Parity guard: scanner must call the same entry_zone_touched()."""
+        import scheduler.scanner as sc
 
-    def test_bos_sl_below_entry_for_buy_is_valid(self):
-        """BUY signal with BOS level below entry → BOS SL valid."""
-        entry = 50000.0
-        bos_level = 49500.0  # BOS level below entry
-        sl = round(bos_level * 0.995, 8)  # = 49252.5
+        from strategy.signal_evaluator import entry_zone_touched
 
-        assert sl < entry, "BOS SL should be below entry for BUY"
+        assert sc.entry_zone_touched is entry_zone_touched
 
+    def test_engine_uses_shared_entry_zone(self):
+        """Parity guard: backtest engine must call the same entry_zone_touched()."""
+        import backtest.engine as be
 
-class TestCommissionParity:
-    """Verify commission/slippage modeling."""
+        from strategy.signal_evaluator import entry_zone_touched
 
-    def test_commission_reduces_net_pnl(self):
-        fee_pct = config.trading.exchange_fee_pct / 100.0
-        slip_pct = config.trading.slippage_pct / 100.0
-        total_cost = (fee_pct * 2 + slip_pct * 2) * 100
-
-        gross_pnl = 2.0  # 2% gross
-        net_pnl = gross_pnl - total_cost
-        assert net_pnl < gross_pnl
-        assert total_cost > 0
-
-    def test_default_commission_matches_binance(self):
-        """Default 0.05% per side = 0.1% round trip."""
-        assert config.trading.exchange_fee_pct == 0.05
+        assert be.entry_zone_touched is entry_zone_touched
 
 
-class TestPipelineStepOrder:
-    """Verify the backtest engine applies steps in the same order as scanner.py."""
+class TestIndicatorPrecomputeParity:
+    """The O(n) backtest path (precompute + values_at) must equal the legacy
+    per-window calculate() bit-for-bit — otherwise results change."""
 
-    def test_step_order_matches(self):
-        """
-        Scanner.py order (after signal evaluation):
-        1. FVG detection + TP recalc
-        2. Structural SL recalc
-        3. Stop hunt buffer
-        4. SL distance guard
-        5. RR filter
-        6. News filter
-        7. MTF alignment
-        8. Context enrichment
-        9. Confidence V2
+    _FIELDS = [
+        "close", "high", "low", "volume",
+        "ema_fast", "ema_slow", "ema_trend", "ema_fast_prev", "ema_slow_prev",
+        "rsi", "macd", "macd_signal", "macd_hist", "macd_hist_prev",
+        "adx", "dmi_plus", "dmi_minus", "atr",
+        "supertrend", "supertrend_direction", "volume_sma",
+    ]
 
-        Backtest engine order:
-        1. FVG detection + TP recalc
-        2. Structural SL recalc
-        3. Stop hunt buffer
-        4. SL distance guard
-        5. RR filter
-        6. News filter (documented exclusion)
-        """
-        scanner_order = [
-            "fvg_tp_recalc",
-            "structural_sl",
-            "stop_hunt_buffer",
-            "sl_distance_guard",
-            "rr_filter",
-            "mtf_alignment",
-            "context_enrichment",
-        ]
-        backtest_order = [
-            "fvg_tp_recalc",
-            "structural_sl",
-            "stop_hunt_buffer",
-            "sl_distance_guard",
-            "rr_filter",
-        ]
-        # First 6 steps must match exactly
-        for i, (s, b) in enumerate(zip(scanner_order, backtest_order)):
-            assert s == b, f"Step {i}: scanner={s} != backtest={b}"
+    def _make_df(self):
+        import numpy as np
+        import pandas as pd
+
+        n = max(160, config.trading.candles_limit // 2 + 20)
+        rng = np.random.default_rng(7)
+        idx = pd.date_range("2026-01-01", periods=n, freq="h", tz="UTC")
+        close = 100 + np.cumsum(rng.normal(0, 1, n))
+        return pd.DataFrame(
+            {
+                "open": close,
+                "high": close + rng.uniform(0.1, 1.0, n),
+                "low": close - rng.uniform(0.1, 1.0, n),
+                "close": close,
+                "volume": rng.uniform(100, 200, n),
+            },
+            index=idx,
+        )
+
+    def test_values_at_matches_calculate(self):
+        from indicators.engine import IndicatorEngine
+
+        df = self._make_df()
+        eng = IndicatorEngine()
+        full = df.copy()
+        assert eng.precompute(full, "TEST/USDT", "1h") is not None
+
+        start = config.trading.candles_limit // 2 + 10
+        for i in [start, start + 10, len(df) - 5, len(df) - 1]:
+            ref = eng.calculate(df.iloc[: i + 1].copy(), "TEST/USDT", "1h")
+            got = eng.values_at(full, "TEST/USDT", "1h", i)
+            assert ref is not None and got is not None
+            for f in self._FIELDS:
+                rv, gv = getattr(ref, f), getattr(got, f)
+                assert abs(rv - gv) < 1e-9, f"row {i} {f}: {rv} vs {gv}"
+
+    def test_values_at_early_bar_none(self):
+        from indicators.engine import IndicatorEngine
+
+        df = self._make_df()
+        eng = IndicatorEngine()
+        full = df.copy()
+        eng.precompute(full, "TEST/USDT", "1h")
+        assert eng.values_at(full, "TEST/USDT", "1h", 0) is None
+        assert eng.values_at(full, "TEST/USDT", "1h", 2) is None

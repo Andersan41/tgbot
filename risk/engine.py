@@ -22,6 +22,8 @@ from typing import Literal, Optional
 
 from loguru import logger
 
+from config.settings import config
+
 
 @dataclass
 class PortfolioState:
@@ -132,7 +134,12 @@ class RiskEngine:
         _is_structural = sl_source and sl_source in _structural_sources
 
         if rr_ratio < self.min_rr_ratio:
-            logger.info(f"Risk soft gate: RR={rr_ratio:.2f} < {self.min_rr_ratio} (proceeding via Kelly)")
+            logger.info(f"Risk hard gate: RR={rr_ratio:.2f} < {self.min_rr_ratio} (BLOCKED)")
+            return RiskDecision(
+                should_trade=False,
+                rr_ratio=round(rr_ratio, 2),
+                rejection_reason=f"RR {rr_ratio:.2f} < min {self.min_rr_ratio}",
+            )
 
         if sl_distance_pct < self.sl_absolute_min_pct:
             logger.info(f"Risk soft gate: SL tight {sl_distance_pct:.2f}% < {self.sl_absolute_min_pct}% (proceeding via Kelly)")
@@ -205,4 +212,13 @@ class RiskEngine:
 
 
 # Singleton
-risk_engine = RiskEngine()
+risk_engine = RiskEngine(
+    min_rr_ratio=config.trading.min_rr_threshold,
+    sl_absolute_min_pct=config.risk_engine.sl_absolute_min_pct,
+    sl_absolute_max_pct=config.risk_engine.sl_absolute_max_pct,
+    base_risk_pct=config.risk_engine.base_risk_pct,
+    min_risk_pct=config.risk_engine.min_risk_pct,
+    max_risk_pct=config.risk_engine.max_risk_pct,
+    max_active_signals=config.max_active_signals,
+    max_portfolio_risk_pct=config.max_portfolio_risk_pct,
+)

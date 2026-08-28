@@ -129,9 +129,9 @@ class ContextScorer:
                 score = self._score_oi(delta, signal_direction)
                 weighted_sum += score * w
                 if score > 0:
-                    supporting.append(f"OI+{delta:.1f}%")
+                    supporting.append(f"OI {delta:+.1f}%")
                 elif score < 0:
-                    opposing.append(f"OI+{delta:.1f}%")
+                    opposing.append(f"OI {delta:+.1f}%")
 
         # --- News Sentiment (вес 0.15) ---
         if snapshot.news_sentiment_score is not None:

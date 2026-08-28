@@ -43,6 +43,13 @@ from indicators.engine import IndicatorEngine, IndicatorValues
 from strategy.signal_engine import SignalType, SignalResult
 from strategy.pattern_engine import pattern_engine, ICTSetup
 from strategy.trade_engine import trade_engine
+from strategy.signal_evaluator import (
+    estimate_p_tp,
+    apply_symbol_overrides,
+    htf_opposition,
+    dedup_block_window,
+    entry_zone_touched,
+)
 from risk.engine import risk_engine, PortfolioState, RiskDecision
 from risk.market_regime import RegimeDetector, MarketRegime
 from liquidity.sweep import detect_sweeps
@@ -75,12 +82,52 @@ class BacktestTrade:
     exit_reason: Optional[str] = None
     pnl_pct: float = 0.0
     net_pnl_pct: float = 0.0
+    funding_pct: float = 0.0
     rr: float = 0.0
     regime: str = ""
     signal_score: int = 0
     confidence: float = 0.0
     reasons: list[str] = field(default_factory=list)
     # New pipeline fields
+    p_tp: float = 0.0
+    risk_pct: float = 0.0
+    setup_type: str = ""
+    components: list[str] = field(default_factory=list)
+    # Path quality (updated per-bar while the position is open)
+    mfe_pct: float = 0.0
+    mae_pct: float = 0.0
+    # Per-FVG dedup key: (fvg_type, top, bottom) — prevents re-entry on same FVG
+    fvg_key: Optional[tuple] = None
+
+
+@dataclass
+class PendingOrder:
+    """A resting limit order at the FVG median (execution_model="limit_pending").
+
+    Created when a signal passes every gate, but NOT filled on the signal bar.
+    It fills on the first LATER bar whose low/high actually touches the median,
+    and expires when ``execution_pending_max_bars`` elapse. The FVG reference
+    (type/top/bottom) lets the engine check whether the generating imbalance is
+    still alive; the median-entry property (median inside the gap) means a fully
+    consumed gap already implies the median was touched, so expiry is the primary
+    cancellation path.
+    """
+    symbol: str
+    timeframe: str
+    direction: Literal["BUY", "SELL"]
+    entry_price: float
+    sl: float
+    tp: float
+    sl_source: str = "atr"
+    signal_index: int = 0
+    signal_timestamp: str = ""
+    fvg_type: Optional[str] = None
+    fvg_top: float = 0.0
+    fvg_bottom: float = 0.0
+    regime: str = ""
+    signal_score: int = 0
+    confidence: float = 0.0
+    reasons: list[str] = field(default_factory=list)
     p_tp: float = 0.0
     risk_pct: float = 0.0
     setup_type: str = ""
@@ -95,6 +142,8 @@ class RejectStats:
     setup_type_gate: int = 0
     htf_bias_blocked: int = 0
     risk_engine_rejected: int = 0
+    entry_zone_not_reached: int = 0
+    pending_expired: int = 0
     other_rejected: int = 0
 
 
@@ -115,7 +164,9 @@ FUNNEL_STEPS = [
     "NO_PATTERN",
     "SETUP_TYPE_GATE",
     "HTF_BIAS_BLOCKED",
+    "ENTRY_ZONE",
     "RISK_ENGINE_BLOCKED",
+    "DEDUP",
     "PASSED",
 ]
 
@@ -124,7 +175,9 @@ BACKTEST_ACTIVE: dict[str, bool] = {
     "NO_PATTERN": True,
     "SETUP_TYPE_GATE": True,
     "HTF_BIAS_BLOCKED": True,
+    "ENTRY_ZONE": True,
     "RISK_ENGINE_BLOCKED": True,
+    "DEDUP": True,
     "PASSED": True,
 }
 
@@ -145,12 +198,16 @@ class BacktestResult:
     expectancy: float = 0.0
     sharpe_ratio: float = 0.0
     max_drawdown: float = 0.0
+    max_drawdown_sized: float = 0.0
     total_pnl_pct: float = 0.0
     total_net_pnl_pct: float = 0.0
     signals_generated: int = 0
     signals_rejected: int = 0
     exposure_time_pct: float = 0.0
     avg_trade_duration: float = 0.0
+    sharpe_annualized: float = 0.0
+    avg_mfe_pct: float = 0.0
+    avg_mae_pct: float = 0.0
     reject_stats: RejectStats = field(default_factory=RejectStats)
     trades: list[BacktestTrade] = field(default_factory=list)
     long_stats: dict = field(default_factory=dict)
@@ -171,7 +228,7 @@ class BacktestConfig:
     """
     enable_pattern_engine_gates: bool = True
     enable_probability_gate: bool = False
-    enable_htf_bias_gate: bool = False
+    enable_htf_bias_gate: bool = True
     min_p_tp: float = 0.0
     min_score_for_signal: Optional[int] = None
 
@@ -186,7 +243,7 @@ PRESETS: dict[str, dict[str, bool]] = {
     "full": {
         "enable_pattern_engine_gates": True,
         "enable_probability_gate": False,
-        "enable_htf_bias_gate": False,
+        "enable_htf_bias_gate": True,
     },
     "optimized": {
         "enable_pattern_engine_gates": True,
@@ -284,14 +341,30 @@ class BacktestEngine:
         self.funnel_data: Optional[FunnelData] = None
         self._indicator_engine = IndicatorEngine()
         self._local_data: Optional[tuple[pd.DataFrame, Optional[dict]]] = None
+        self._df_override = False
 
-    async def run(self) -> BacktestResult:
-        """Run the full backtest pipeline."""
+    async def run(self, df: Optional[pd.DataFrame] = None, htf_base: Optional[pd.DataFrame] = None) -> BacktestResult:
+        """Run the full backtest pipeline.
+
+        ``df`` — optional pre-loaded/resampled OHLCV DataFrame (DatetimeIndex
+        UTC, columns open/high/low/close/volume). When provided it is used
+        directly instead of reading from the local cache or the exchange.
+        HTF Bias V2 series (1w/1d/4h) are resampled on the fly: from
+        ``htf_base`` when supplied (preferred — avoids up-sampling the main
+        df, which corrupts HTF series for 1d/1w timeframes), otherwise from
+        ``df`` itself.
+        """
         if self.market_type:
             if self.market_type in ("future", "futures"):
                 config.exchange.market_type = "future"
             elif self.market_type == "spot":
                 config.exchange.market_type = "spot"
+
+        if df is not None:
+            self._local_data = (df, self._build_htf_from_df(df, htf_base))
+            self.source = "local"
+            self._df_override = True
+            return await self._run_backtest()
 
         if self.source == "local":
             df, htf = self._load_local()
@@ -309,6 +382,23 @@ class BacktestEngine:
             return await self._run_backtest()
         finally:
             await exchange_client.close()
+
+    def _build_htf_from_df(self, df: pd.DataFrame, htf_base: Optional[pd.DataFrame] = None) -> dict:
+        """Build the HTF Bias V2 dict (1w/1d/4h) from a supplied DataFrame.
+
+        Prefer ``htf_base`` (e.g. the original 15m frame) when given: building
+        the 4h/1d/1w series from an already-resampled ``df`` would UP-sample
+        for 1d/1w main timeframes and produce empty/garbage HTF series.
+        """
+        from backtest.resampler import resample_ohlcv
+        src = htf_base if htf_base is not None else df
+        htf: dict = {}
+        for tf in ("1w", "1d", "4h"):
+            if tf == self.timeframe:
+                htf[tf] = df
+            else:
+                htf[tf] = resample_ohlcv(src, tf)
+        return htf
 
     def _load_local(self) -> tuple[Optional[pd.DataFrame], Optional[dict]]:
         """Load OHLCV from the unified 15m cache, resampled to ``self.timeframe``.
@@ -365,39 +455,52 @@ class BacktestEngine:
         if df is None or len(df) < 100:
             return BacktestResult(symbol=self.symbol, timeframe=self.timeframe)
 
-        warmup = 80
+        warmup = max(80, config.trading.candles_limit // 2)
         candle_limit = config.trading.candles_limit
-        df = df.iloc[-(candle_limit + 60):] if len(df) > candle_limit + 60 else df
+        if not self._df_override:
+            df = df.iloc[-(candle_limit + 60):] if len(df) > candle_limit + 60 else df
+
+        # Pre-compute indicator columns once (O(n)). Indicators are causal, so the
+        # value at row i equals the per-window value — this eliminates the O(n²)
+        # full recompute that used to happen on every candle.
+        if self._indicator_engine.precompute(df, self.symbol, self.timeframe) is None:
+            return BacktestResult(symbol=self.symbol, timeframe=self.timeframe)
 
         trades: list[BacktestTrade] = []
         reject_stats = RejectStats()
         atr_history: list[float] = []
         ema_spread_history: list[float] = []
         volume_history: list[float] = []
-        in_trade = False
-        ct: Optional[BacktestTrade] = None
+        open_trades: list[BacktestTrade] = []
+        pending_orders: list[PendingOrder] = []
         signals_count = 0
+        last_signal_time: Optional[pd.Timestamp] = None
+        last_signal_direction: Optional[str] = None
+        _traded_fvgs: set[tuple] = set()  # per-FVG dedup: (type, top, bottom)
 
-        # Pre-fetch HTF data for bias (once, not per-candle)
-        _htf_result: Optional[HTFBiasResult] = None
-        if config.htf_bias_v2:
+        # Pre-fetch HTF data for bias.
+        # local path: full HTF history available → compute per-candle (no look-ahead).
+        # live path: fetch current HTF state once (mirrors the live scanner).
+        _htf_once: Optional[HTFBiasResult] = None
+        if config.htf_bias_v2 and htf is None:
             try:
-                if htf is not None:
-                    _htf_result = get_htf_bias_v2(htf.get("1w"), htf.get("1d"), htf.get("4h"), df)
-                else:
-                    df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
-                    df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
-                    df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
-                    _htf_result = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
+                df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
+                df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
+                df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
+                _htf_once = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
             except Exception:
-                _htf_result = None
+                _htf_once = None
 
         # Funnel instrumentation (populated only when self.instrument=True)
         _funnel_counts: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
 
         for i in range(warmup, len(df)):
-            window = df.iloc[:i + 1].copy()
-            ind = self._indicator_engine.calculate(window, self.symbol, self.timeframe)
+            # Analysis window capped at `candle_limit` — mirrors the live scanner,
+            # which fetches exactly candles_limit candles. This is both a parity fix
+            # (backtest no longer sees older history than live) and the main speedup
+            # (O(n×limit) instead of O(n²)).
+            window = df.iloc[max(0, i - candle_limit + 1): i + 1].copy()
+            ind = self._indicator_engine.values_at(df, self.symbol, self.timeframe, i)
             if ind is None:
                 continue
 
@@ -408,50 +511,129 @@ class BacktestEngine:
             )
             volume_history.append(float(ind.volume))
 
-            # --- Exit check ---
-            if in_trade and ct is not None:
+            # --- Pending order processing (execution_model="limit_pending") ---
+            # A resting limit at the FVG median fills only when this bar actually
+            # trades at the median (no phantom fill at an unreached price). A bar
+            # that fills the order can also hit SL/TP on the same bar (fill then
+            # stop/limit) — realistic for a limit order, so fills are processed
+            # BEFORE the exit check below. Expires after execution_pending_max_bars;
+            # a fully consumed gap implies the median was touched (median is
+            # strictly inside the gap), so time expiry is the primary cancellation.
+            if config.execution_model == "limit_pending" and pending_orders:
+                _bar_high = float(ind.high) if ind.high else float(ind.close)
+                _bar_low = float(ind.low) if ind.low else float(ind.close)
+                _alive: list[PendingOrder] = []
+                for po in pending_orders:
+                    _touched = (
+                        (po.direction == "BUY" and _bar_low <= po.entry_price)
+                        or (po.direction == "SELL" and _bar_high >= po.entry_price)
+                    )
+                    if _touched:
+                        open_trades.append(BacktestTrade(
+                            symbol=po.symbol,
+                            timeframe=po.timeframe,
+                            direction=po.direction,
+                            entry_price=po.entry_price,
+                            entry_index=i,
+                            entry_timestamp=str(df.index[i]),
+                            sl=po.sl,
+                            tp=po.tp,
+                            sl_source=po.sl_source,
+                            regime=po.regime,
+                            signal_score=po.signal_score,
+                            confidence=po.confidence,
+                            reasons=list(po.reasons),
+                            p_tp=po.p_tp,
+                            risk_pct=po.risk_pct,
+                            setup_type=po.setup_type,
+                            components=list(po.components),
+                        ))
+                        continue
+                    if (i - po.signal_index) > config.execution_pending_max_bars:
+                        reject_stats.pending_expired += 1
+                        reject_stats.total_rejected += 1
+                        continue
+                    _alive.append(po)
+                pending_orders = _alive
+
+            # --- Exit check (all open positions) ---
+            if open_trades:
                 high, low = float(ind.high), float(ind.low)
-                if ct.direction == "BUY":
-                    if low <= ct.sl:
-                        ct.exit_price = ct.sl
-                        ct.exit_index = i
-                        ct.exit_timestamp = str(df.index[i])
-                        ct.exit_reason = "sl"
-                        trades.append(ct)
-                        in_trade = False
-                        ct = None
-                    elif high >= ct.tp:
-                        ct.exit_price = ct.tp
-                        ct.exit_index = i
-                        ct.exit_timestamp = str(df.index[i])
-                        ct.exit_reason = "tp"
-                        trades.append(ct)
-                        in_trade = False
-                        ct = None
-                else:
-                    if high >= ct.sl:
-                        ct.exit_price = ct.sl
-                        ct.exit_index = i
-                        ct.exit_timestamp = str(df.index[i])
-                        ct.exit_reason = "sl"
-                        trades.append(ct)
-                        in_trade = False
-                        ct = None
-                    elif low <= ct.tp:
-                        ct.exit_price = ct.tp
-                        ct.exit_index = i
-                        ct.exit_timestamp = str(df.index[i])
-                        ct.exit_reason = "tp"
-                        trades.append(ct)
-                        in_trade = False
-                        ct = None
+                _close_price = float(ind.close)
+                remaining: list[BacktestTrade] = []
+                for t in open_trades:
+                    entry = t.entry_price
+                    if t.direction == "BUY":
+                        t.mfe_pct = max(t.mfe_pct, (high - entry) / entry * 100)
+                        t.mae_pct = min(t.mae_pct, (low - entry) / entry * 100)
+                        if low <= t.sl:
+                            t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                        if high >= t.tp:
+                            t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                    else:
+                        t.mfe_pct = max(t.mfe_pct, (entry - low) / entry * 100)
+                        t.mae_pct = min(t.mae_pct, (entry - high) / entry * 100)
+                        if high >= t.sl:
+                            t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                        if low <= t.tp:
+                            t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                    # Max-duration exit: close stale trades at current price
+                    if config.max_trade_duration_bars > 0 and (i - t.entry_index) >= config.max_trade_duration_bars:
+                        t.exit_price, t.exit_index, t.exit_reason = _close_price, i, "max_dur"
+                        t.exit_timestamp = str(df.index[i])
+                        trades.append(t)
+                        continue
+                    remaining.append(t)
+                open_trades = remaining
 
-            # --- New signal ---
-            if not in_trade:
+            # --- New signal (limited by max active positions) ---
+            if len(open_trades) < config.max_active_signals:
+                # Portfolio risk gate (live Phase 0.2): total risk of open positions
+                _open_risk = sum(t.risk_pct for t in open_trades)
+                if _open_risk >= config.max_portfolio_risk_pct:
+                    reject_stats.other_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
                 signals_count += 1
-
-                # Regime detection
                 regime_obj = _compute_regime(ind, atr_history, ema_spread_history, volume_history)
+
+                # === Compression Regime Gate (live Phase 0.4) ===
+                if config.trading.block_compression_regime and regime_obj is not None:
+                    if regime_obj.regime == "compression":
+                        reject_stats.other_rejected += 1
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                        continue
+                    # Block range + high ADX combo (failure cluster pattern)
+                    if regime_obj.regime == "range" and float(ind.adx or 0) >= 26:
+                        if len(window) >= 20:
+                            _recent = window.tail(20)
+                            _range_pct = (_recent["high"].max() - _recent["low"].min()) / _recent["low"].min() * 100
+                            _mid = (_recent["high"].max() + _recent["low"].min()) / 2
+                            _price = float(window["close"].iloc[-1])
+                            _dist_mid = abs(_price - _mid) / _mid * 100
+                            if _range_pct < 1.5 and _dist_mid < 0.3:
+                                reject_stats.other_rejected += 1
+                                reject_stats.total_rejected += 1
+                                if self.instrument:
+                                    _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                                continue
 
                 # === Phase 1: Pattern Detection (ICT) ===
                 _df_clean = window.dropna(subset=["open", "high", "low", "close", "volume"])
@@ -533,18 +715,52 @@ class BacktestEngine:
                                 _funnel_counts["SETUP_TYPE_GATE"] += 1
                             continue
 
-                # === Phase 1.45: HTF Bias Gate ===
-                if self.bt_config.enable_htf_bias_gate and _htf_result:
-                    htf_dir = _htf_result.direction
-                    if htf_dir != 'neutral' and setup.setup_type == "continuation":
-                        direction_map = {"buy": "bullish", "sell": "bearish"}
-                        setup_bias = direction_map.get(setup.direction)
-                        if setup_bias != htf_dir:
+                # === Phase 1.45: HTF Bias (per-candle in local path → no look-ahead) ===
+                # Local path slices HTF history up to the current candle; the
+                # live-fetch path reuses `_htf_once` (mirrors the live scanner,
+                # which also reads the current HTF state).
+                _htf_result: Optional[HTFBiasResult] = _htf_once
+                _htf_penalty = 1.0
+                if config.htf_bias_v2:
+                    if htf is not None:
+                        try:
+                            _ts = df.index[i]
+                            _f1h = df.iloc[:i + 1]
+                            _f4h = htf.get("4h")
+                            _f1d = htf.get("1d")
+                            _f1w = htf.get("1w")
+                            _htf_result = get_htf_bias_v2(
+                                _f1w.loc[:_ts].tail(60) if _f1w is not None and len(_f1w) else None,
+                                _f1d.loc[:_ts].tail(60) if _f1d is not None and len(_f1d) else None,
+                                _f4h.loc[:_ts].tail(60) if _f4h is not None and len(_f4h) else None,
+                                _f1h,
+                            )
+                        except Exception:
+                            _htf_result = None
+                    if self.bt_config.enable_htf_bias_gate and _htf_result is not None:
+                        _opposed, _hard_block = htf_opposition(setup, _htf_result.direction)
+                        if _hard_block:
                             reject_stats.htf_bias_blocked += 1
                             reject_stats.total_rejected += 1
                             if self.instrument:
                                 _funnel_counts["HTF_BIAS_BLOCKED"] += 1
                             continue
+                        if _opposed:
+                            _htf_penalty = config.htf_bias_continuation_penalty
+
+                # === Phase 1.44: Entry Zone (opt-in hard gate, shared with live) ===
+                # require_entry_zone=True: only emit when the current bar actually
+                # traded in the FVG entry zone (no phantom fills at an unreached
+                # FVG median). Shared function = identical decision in live+backtest.
+                if config.require_entry_zone:
+                    bar_high = float(ind.high) if ind.high else float(ind.close)
+                    bar_low = float(ind.low) if ind.low else float(ind.close)
+                    if not entry_zone_touched(setup.direction, fvgs, bar_high, bar_low):
+                        reject_stats.entry_zone_not_reached += 1
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["ENTRY_ZONE"] += 1
+                        continue
 
                 # === Phase 1.5: Trade Plan (SL/TP) ===
                 trade_plan = trade_engine.build_trade_plan(
@@ -564,24 +780,55 @@ class BacktestEngine:
                         _funnel_counts["NO_PATTERN"] += 1
                     continue
 
-                entry_price = float(ind.close)
+                entry_price = float(trade_plan.entry_price)
                 sl = trade_plan.sl
                 tp = trade_plan.tp
+
+                # === Execution model ===
+                # "close": the signal fires at candle close, so the fill price is
+                # the signal bar's close (mirrors live P&L tracking, which computes
+                # from signal.close_price). "median_immediate" (default) keeps the
+                # FVG median even if price never traded there; "limit_pending" keeps
+                # the median as a resting limit and fills only on a later bar's touch.
+                if config.execution_model == "close":
+                    entry_price = float(ind.close) if ind.close else entry_price
 
                 # === Phase 2: Analytics (inline) ===
                 atr_pct = (float(ind.atr) / float(ind.close) * 100) if ind.atr and ind.close > 0 else 0.0
 
-                # === Phase 3: Inline Probability ===
+                # === Direction filter (live Phase 1.35) ===
+                if config.direction_filter.block_all_sell and setup.direction == "sell":
+                    reject_stats.other_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                # === Per-symbol overrides (live Phase 1.46) ===
+                _ov_blocked, _ov_reason = apply_symbol_overrides(
+                    symbol=self.symbol,
+                    ind=ind,
+                    setup=setup,
+                    trade_plan=trade_plan,
+                    atr_pct=atr_pct,
+                )
+                if _ov_blocked:
+                    reject_stats.other_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                # === Phase 3: Inline Probability (shared with live scanner) ===
+                # context_score/mtf_aligned are unavailable historically → 0/False
                 _components_score = setup.components_count if setup.detected else 0
-                p_tp = 0.45
-                if _components_score >= 4:
-                    p_tp += 0.15
-                elif _components_score >= 3:
-                    p_tp += 0.08
-                if setup.mss_score > 70:
-                    p_tp += 0.05
-                p_tp = max(0.15, min(0.85, p_tp))
-                confidence = min(0.85, p_tp)
+                p_tp, confidence = estimate_p_tp(
+                    setup=setup,
+                    context_score=0.0,
+                    htf_result=_htf_result,
+                    htf_penalty=_htf_penalty,
+                    mtf_aligned=False,
+                )
 
                 # Optional probability gate
                 if self.bt_config.enable_probability_gate and p_tp < self.bt_config.min_p_tp:
@@ -592,7 +839,12 @@ class BacktestEngine:
 
                 # === Phase 4: Risk Engine ===
                 risk_decision = risk_engine.evaluate(
-                    portfolio=PortfolioState(),
+                    portfolio=PortfolioState(
+                        active_count=len(open_trades),
+                        total_risk_pct=sum(t.risk_pct for t in open_trades),
+                        max_active_signals=config.max_active_signals,
+                        max_portfolio_risk_pct=config.max_portfolio_risk_pct,
+                    ),
                     entry_price=entry_price,
                     sl=sl,
                     tp=tp,
@@ -615,47 +867,145 @@ class BacktestEngine:
                 sl = risk_decision.sl_price
                 tp = risk_decision.tp_price
 
-                # === Build Trade ===
+                # === Phase 6: Dedup (shared live gate — dedup_block_window in
+                # strategy/signal_evaluator.py; same-dir within effective cooldown,
+                # cross-dir within half cooldown) ===
                 is_buy = setup.direction == "buy"
+                _sig_dir = "BUY" if is_buy else "SELL"
+                if last_signal_time is not None:
+                    window_min = dedup_block_window(
+                        last_signal_time.to_pydatetime(),
+                        df.index[i].to_pydatetime(),
+                        last_signal_direction or "",
+                        _sig_dir,
+                        self.timeframe,
+                        config.signal_cooldown_minutes,
+                        config.signal_cooldown_tf_multiplier,
+                    )
+                    if window_min is not None:
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["DEDUP"] += 1
+                        continue
 
+                # === Build Trade ===
                 if self.instrument:
                     _funnel_counts["PASSED"] += 1
 
-                ct = BacktestTrade(
-                    symbol=self.symbol,
-                    timeframe=self.timeframe,
-                    direction="BUY" if is_buy else "SELL",
-                    entry_price=entry_price,
-                    entry_index=i,
-                    entry_timestamp=str(df.index[i]),
-                    sl=sl,
-                    tp=tp,
-                    sl_source=trade_plan.sl_source or "atr",
-                    regime=regime_obj.regime if regime_obj else "",
-                    signal_score=setup.components_count,
-                    confidence=probability.p_tp * 100,
-                    reasons=list(setup.components_found),
-                    p_tp=probability.p_tp,
-                    risk_pct=risk_decision.risk_pct,
-                    setup_type=setup.setup_type or "",
-                    components=list(setup.components_found),
-                )
-                in_trade = True
+                _ref_fvg = None
+                for _f in fvgs or []:
+                    _f_dir = "buy" if _f.type == "bullish" else "sell" if _f.type == "bearish" else _f.type
+                    if _f.is_active and _f_dir == setup.direction:
+                        _ref_fvg = _f
+                        break
+
+                if config.execution_model == "limit_pending":
+                    # Resting limit at the FVG median: no trade yet — registered and
+                    # filled only when a later bar actually touches the median.
+                    # Per-FVG dedup: while the same FVG (type+top+bottom) already
+                    # has an alive pending, do NOT re-register — one signal per FVG
+                    # (the user's "один сигнал → одна сделка"), which collapses the
+                    # phantom re-entry stacks even after a touch delay.
+                    _fvg_key = None
+                    if _ref_fvg is not None:
+                        _fvg_key = (round(float(_ref_fvg.top), 8), round(float(_ref_fvg.bottom), 8))
+                    _dup = False
+                    if _fvg_key is not None:
+                        for _po in pending_orders:
+                            if _po.fvg_type == _ref_fvg.type and (
+                                round(float(_po.fvg_top), 8), round(float(_po.fvg_bottom), 8)
+                            ) == _fvg_key:
+                                _dup = True
+                                break
+                    if not _dup:
+                        pending_orders.append(PendingOrder(
+                            symbol=self.symbol,
+                            timeframe=self.timeframe,
+                            direction="BUY" if is_buy else "SELL",
+                            entry_price=entry_price,
+                            sl=sl,
+                            tp=tp,
+                            sl_source=trade_plan.sl_source or "atr",
+                            signal_index=i,
+                            signal_timestamp=str(df.index[i]),
+                            fvg_type=_ref_fvg.type if _ref_fvg else None,
+                            fvg_top=float(_ref_fvg.top) if _ref_fvg else 0.0,
+                            fvg_bottom=float(_ref_fvg.bottom) if _ref_fvg else 0.0,
+                            regime=regime_obj.regime if regime_obj else "",
+                            signal_score=setup.components_count,
+                            confidence=p_tp * 100,
+                            reasons=list(setup.components_found),
+                            p_tp=p_tp,
+                            risk_pct=risk_decision.risk_pct,
+                            setup_type=setup.setup_type or "",
+                            components=list(setup.components_found),
+                        ))
+                    else:
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["DEDUP"] += 1
+                else:
+                    # Per-FVG dedup: skip if the same FVG (type+top+bottom) already
+                    # produced a trade that is still open or was recently closed.
+                    _fvg_key = None
+                    if _ref_fvg is not None:
+                        _fvg_key = (
+                            _ref_fvg.type,
+                            round(float(_ref_fvg.top), 8),
+                            round(float(_ref_fvg.bottom), 8),
+                        )
+                    if _fvg_key is not None and _fvg_key in _traded_fvgs:
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["DEDUP"] += 1
+                        continue
+
+                    ct = BacktestTrade(
+                        symbol=self.symbol,
+                        timeframe=self.timeframe,
+                        direction="BUY" if is_buy else "SELL",
+                        entry_price=entry_price,
+                        entry_index=i,
+                        entry_timestamp=str(df.index[i]),
+                        sl=sl,
+                        tp=tp,
+                        sl_source=trade_plan.sl_source or "atr",
+                        regime=regime_obj.regime if regime_obj else "",
+                        signal_score=setup.components_count,
+                        confidence=p_tp * 100,
+                        reasons=list(setup.components_found),
+                        p_tp=p_tp,
+                        risk_pct=risk_decision.risk_pct,
+                        setup_type=setup.setup_type or "",
+                        components=list(setup.components_found),
+                        fvg_key=_fvg_key,
+                    )
+                    if _fvg_key is not None:
+                        _traded_fvgs.add(_fvg_key)
+                    open_trades.append(ct)
+                last_signal_time = df.index[i]
+                last_signal_direction = _sig_dir
 
                 if 0 < self.max_trades <= len(trades):
                     break
 
-        # Close open trade at end of data
-        if in_trade and ct is not None:
-            ct.exit_price = float(df.iloc[-1]["close"])
-            ct.exit_index = len(df) - 1
-            ct.exit_timestamp = str(df.index[-1])
-            ct.exit_reason = "eob"
-            trades.append(ct)
+        # Close open trades at end of data
+        if open_trades:
+            last_close = float(df.iloc[-1]["close"])
+            for t in open_trades:
+                t.exit_price = last_close
+                t.exit_index = len(df) - 1
+                t.exit_timestamp = str(df.index[-1])
+                t.exit_reason = "eob"
+                trades.append(t)
 
         # --- Compute PnL with commission/slippage ---
         fee_pct = config.trading.exchange_fee_pct / 100.0
         slip_pct = config.trading.slippage_pct / 100.0
+        tf_hours = {
+            "1m": 1 / 60, "3m": 3 / 60, "5m": 5 / 60, "15m": 0.25, "30m": 0.5,
+            "1h": 1, "2h": 2, "4h": 4, "6h": 6, "12h": 12, "1d": 24, "1w": 168,
+        }.get(self.timeframe, 1.0)
 
         for t in trades:
             if t.direction == "BUY":
@@ -666,7 +1016,17 @@ class BacktestEngine:
 
             # Commission: 2 sides (entry + exit)
             total_cost_pct = (fee_pct * 2 + slip_pct * 2) * 100
-            t.net_pnl_pct = round(gross - total_cost_pct, 4)
+
+            # Funding (swap): charged for each 8h boundary crossed while holding.
+            # Approximation — assumes funding is always paid (conservative).
+            t.funding_pct = 0.0
+            funding_rate = getattr(config.derivatives, "funding_rate_pct_8h", 0.0) or 0.0
+            if funding_rate > 0 and t.exit_index is not None and t.exit_index >= t.entry_index:
+                dur_hours = (t.exit_index - t.entry_index) * tf_hours
+                periods = int(dur_hours // 8)
+                t.funding_pct = -round(funding_rate * periods, 4)
+
+            t.net_pnl_pct = round(gross - total_cost_pct + t.funding_pct, 4)
 
             risk = abs(t.entry_price - t.sl)
             t.rr = round(abs(t.exit_price - t.entry_price) / risk, 2) if risk > 0 else 0.0
@@ -679,7 +1039,7 @@ class BacktestEngine:
                 total_signals_processed=signals_count,
             )
 
-        return self._build_result(trades, signals_count, reject_stats, len(df))
+        return self._build_result(trades, signals_count, reject_stats, len(df), tf_hours)
 
     def _build_result(
         self,
@@ -687,6 +1047,7 @@ class BacktestEngine:
         signals_count: int,
         reject_stats: RejectStats,
         total_candles: int,
+        tf_hours: float = 1.0,
     ) -> BacktestResult:
         """Build aggregate metrics."""
         total = len(trades)
@@ -715,25 +1076,50 @@ class BacktestEngine:
         avg_rr = sum(rr_values) / total
 
         gross_profit = sum(t.pnl_pct for t in wins) if wins else 0.0
-        gross_loss = abs(sum(t.pnl_pct for t in losses)) if losses else 1.0
-        pf = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+        gross_loss = abs(sum(t.pnl_pct for t in losses)) if losses else 0.0
+        pf = gross_profit / gross_loss if gross_loss > 0 else 0.0
 
         winrate = win_count / total
         avg_win = gross_profit / win_count if win_count > 0 else 0.0
         avg_loss = gross_loss / loss_count if loss_count > 0 else 0.0
         expectancy = winrate * avg_win - (1 - winrate) * avg_loss
 
-        if len(pnl_values) > 1:
-            std = float(np.std(pnl_values, ddof=1))
-            sharpe = (avg_pnl / std) if std > 0 else 0.0
+        if len(net_pnl_values) > 1:
+            std_net = float(np.std(net_pnl_values, ddof=1))
+            sharpe_net = (avg_net_pnl / std_net) if std_net > 0 else 0.0
         else:
-            sharpe = 0.0
+            sharpe_net = 0.0
 
-        # Max drawdown
-        cum = np.cumsum(pnl_values)
-        peak = np.maximum.accumulate(cum)
-        dd = peak - cum
-        max_dd = float(np.max(dd)) if len(dd) > 0 else 0.0
+        # Annualized Sharpe: per-trade Sharpe scaled by trade frequency.
+        # Approximation — per-trade returns are treated as a return stream and
+        # annualized by trades-per-year (equivalent time assumes uniform spacing).
+        days = total_candles * tf_hours / 24.0 if tf_hours > 0 else 0.0
+        trades_per_year = total / days * 365.25 if days > 0 else 0.0
+        sharpe_annualized = sharpe_net * (trades_per_year ** 0.5) if trades_per_year > 0 else 0.0
+
+        # Max drawdown on NET pnl (honest: excludes commission/slippage)
+        cum_net = np.cumsum(net_pnl_values)
+        peak_net = np.maximum.accumulate(cum_net)
+        dd_net = peak_net - cum_net
+        max_dd = float(np.max(dd_net)) if len(dd_net) > 0 else 0.0
+
+        # Sizing-aware equity curve: each trade risks `risk_pct`% of current equity,
+        # with position notional = risk_pct / SL-distance(%). Drawdown reflects real exposure.
+        _equity = 100.0
+        _equity_peak = 100.0
+        sized_max_dd = 0.0
+        for t in trades:
+            _sl_dist = abs(t.entry_price - t.sl) / t.entry_price * 100 if t.entry_price else 0.0
+            if _sl_dist > 0:
+                _equity *= (1 + t.net_pnl_pct * t.risk_pct / _sl_dist / 100.0)
+            _equity_peak = max(_equity_peak, _equity)
+            sized_max_dd = max(sized_max_dd, _equity_peak - _equity)
+
+        # MFE/MAE (path quality): avg best-favorable / worst-adverse excursion
+        _mfe = [t.mfe_pct for t in trades if t.mfe_pct != 0.0]
+        _mae = [t.mae_pct for t in trades if t.mae_pct != 0.0]
+        avg_mfe = float(np.mean(_mfe)) if _mfe else 0.0
+        avg_mae = float(np.mean(_mae)) if _mae else 0.0
 
         # Exposure
         durations = [t.exit_index - t.entry_index for t in trades if t.exit_index is not None]
@@ -754,7 +1140,7 @@ class BacktestEngine:
             d_wr = len(d_w) / len(d_trades) * 100
             d_pf_num = sum(t.pnl_pct for t in d_w)
             d_pf_den = abs(sum(t.pnl_pct for t in d_trades if t.pnl_pct <= 0))
-            d_pf = d_pf_num / d_pf_den if d_pf_den > 0 else float("inf")
+            d_pf = d_pf_num / d_pf_den if d_pf_den > 0 else 0.0
             stats = {
                 "trades": len(d_trades), "winrate": d_wr,
                 "pnl": d_pnl, "net_pnl": d_net, "pf": d_pf,
@@ -791,14 +1177,18 @@ class BacktestEngine:
             avg_rr=round(avg_rr, 2),
             profit_factor=round(pf, 2),
             expectancy=round(expectancy, 4),
-            sharpe_ratio=round(sharpe, 2),
+            sharpe_ratio=round(sharpe_net, 2),
             max_drawdown=round(max_dd, 4),
+            max_drawdown_sized=round(sized_max_dd, 4),
             total_pnl_pct=round(total_pnl, 4),
             total_net_pnl_pct=round(total_net_pnl, 4),
             signals_generated=signals_count,
             signals_rejected=reject_stats.total_rejected,
             exposure_time_pct=round(exposure_pct, 2),
             avg_trade_duration=round(avg_dur, 1),
+            sharpe_annualized=round(sharpe_annualized, 2),
+            avg_mfe_pct=round(avg_mfe, 4),
+            avg_mae_pct=round(avg_mae, 4),
             reject_stats=reject_stats,
             trades=trades,
             long_stats=long_stats,

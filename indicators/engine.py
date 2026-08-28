@@ -112,10 +112,14 @@ class IndicatorValues:
 
 
 class IndicatorEngine:
-    def calculate(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[IndicatorValues]:
-        """
-        Считаем все индикаторы на переданном DataFrame.
-        Возвращает IndicatorValues для последней (закрытой) свечи.
+    _CORE_COLUMNS = ["ema_fast", "ema_slow", "rsi", "adx", "atr"]
+
+    def _compute_columns(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[pd.DataFrame]:
+        """Add indicator columns to df in place (mutates df). Returns df or None if too short.
+
+        Pure causal computation: the value at row i equals the value computed on any
+        window ending at i, so the backtest precomputes columns once (O(n)) instead of
+        re-running every indicator per candle (O(n²)).
         """
         try:
             if len(df) < config.trading.candles_limit // 2:
@@ -196,45 +200,73 @@ class IndicatorEngine:
                 df["supertrend"] = np.nan
                 df["supertrend_dir"] = 0
 
-            # Удаляем строки с NaN
-            df_clean = df.dropna(subset=["ema_fast", "ema_slow", "rsi", "adx", "atr"])
-            if len(df_clean) < 2:
-                logger.warning(f"Not enough clean data for {symbol} {timeframe}")
-                return None
-
-            last = df_clean.iloc[-1]
-            prev = df_clean.iloc[-2]
-
-            return IndicatorValues(
-                symbol=symbol,
-                timeframe=timeframe,
-                close=_safe_float(last["close"]),
-                high=_safe_float(last["high"]),
-                low=_safe_float(last["low"]),
-                volume=_safe_float(last["volume"]),
-                ema_fast=_safe_float(last["ema_fast"]),
-                ema_slow=_safe_float(last["ema_slow"]),
-                ema_trend=_safe_float(last["ema_trend"]),
-                ema_fast_prev=_safe_float(prev["ema_fast"]),
-                ema_slow_prev=_safe_float(prev["ema_slow"]),
-                rsi=_safe_float(last["rsi"]),
-                macd=_safe_float(last.get("macd")),
-                macd_signal=_safe_float(last.get("macd_signal")),
-                macd_hist=_safe_float(last.get("macd_hist")),
-                macd_hist_prev=_safe_float(prev.get("macd_hist")),
-                adx=_safe_float(last["adx"]),
-                dmi_plus=_safe_float(last.get("dmi_plus")),
-                dmi_minus=_safe_float(last.get("dmi_minus")),
-                atr=_safe_float(last["atr"]),
-                supertrend=_safe_float(last.get("supertrend"), _safe_float(last["close"])),
-                supertrend_direction=int(_safe_float(last.get("supertrend_dir"), 0)),
-                volume_sma=_safe_float(last.get("volume_sma"), _safe_float(last["volume"])),
-                volume_delta_pct=_safe_float(last.get("volume_delta_pct"), None) if last.get("volume_delta_pct") is not None else None,
-            )
+            # Удаляем строки с NaN — перенесено в _values_from_clean / calculate.
+            return df
 
         except Exception as e:
             logger.error(f"Indicator calculation error for {symbol} {timeframe}: {e}", exc_info=True)
             return None
+
+    def _values_from_clean(self, df_clean: pd.DataFrame, symbol: str, timeframe: str) -> IndicatorValues:
+        """Build IndicatorValues from a NaN-free DataFrame using its last two rows."""
+        last = df_clean.iloc[-1]
+        prev = df_clean.iloc[-2]
+
+        return IndicatorValues(
+            symbol=symbol,
+            timeframe=timeframe,
+            close=_safe_float(last["close"]),
+            high=_safe_float(last["high"]),
+            low=_safe_float(last["low"]),
+            volume=_safe_float(last["volume"]),
+            ema_fast=_safe_float(last["ema_fast"]),
+            ema_slow=_safe_float(last["ema_slow"]),
+            ema_trend=_safe_float(last["ema_trend"]),
+            ema_fast_prev=_safe_float(prev["ema_fast"]),
+            ema_slow_prev=_safe_float(prev["ema_slow"]),
+            rsi=_safe_float(last["rsi"]),
+            macd=_safe_float(last.get("macd")),
+            macd_signal=_safe_float(last.get("macd_signal")),
+            macd_hist=_safe_float(last.get("macd_hist")),
+            macd_hist_prev=_safe_float(prev.get("macd_hist")),
+            adx=_safe_float(last["adx"]),
+            dmi_plus=_safe_float(last.get("dmi_plus")),
+            dmi_minus=_safe_float(last.get("dmi_minus")),
+            atr=_safe_float(last["atr"]),
+            supertrend=_safe_float(last.get("supertrend"), _safe_float(last["close"])),
+            supertrend_direction=int(_safe_float(last.get("supertrend_dir"), 0)),
+            volume_sma=_safe_float(last.get("volume_sma"), _safe_float(last["volume"])),
+            volume_delta_pct=_safe_float(last.get("volume_delta_pct"), None) if last.get("volume_delta_pct") is not None else None,
+        )
+
+    def calculate(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[IndicatorValues]:
+        """Compute indicators on the provided DataFrame (live path, per-window)."""
+        df = self._compute_columns(df, symbol, timeframe)
+        if df is None:
+            return None
+        df_clean = df.dropna(subset=self._CORE_COLUMNS)
+        if len(df_clean) < 2:
+            logger.warning(f"Not enough clean data for {symbol} {timeframe}")
+            return None
+        return self._values_from_clean(df_clean, symbol, timeframe)
+
+    def precompute(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[pd.DataFrame]:
+        """Backtest path: add indicator columns once on the full series (O(n))."""
+        return self._compute_columns(df, symbol, timeframe)
+
+    def values_at(self, df: pd.DataFrame, symbol: str, timeframe: str, i: int) -> Optional[IndicatorValues]:
+        """Backtest path: IndicatorValues for bar i from precomputed columns.
+
+        Post-warmup guarantee (core periods < warmup): core columns are non-NaN at
+        rows i and i-1, so this equals calculate(df.iloc[:i+1]) without recompute.
+        """
+        if i < 1 or i >= len(df):
+            return None
+        if any(pd.isna(df.iloc[i][c]) for c in self._CORE_COLUMNS):
+            return None
+        if any(pd.isna(df.iloc[i - 1][c]) for c in self._CORE_COLUMNS):
+            return None
+        return self._values_from_clean(df.iloc[i - 1:i + 1], symbol, timeframe)
 
 
 indicator_engine = IndicatorEngine()

@@ -12,6 +12,13 @@ from config.settings import config, get_active_symbols, VERSION, build_config_sn
 from data.exchange_client import exchange_client
 from indicators.engine import IndicatorValues
 from strategy.signal_engine import SignalResult, SignalType
+from strategy.signal_evaluator import (
+    estimate_p_tp,
+    apply_symbol_overrides,
+    get_cooldown_minutes,
+    dedup_block_window,
+    entry_zone_touched,
+)
 from storage.database import db
 from context.analyzer import context_engine
 from context.scorer import context_scorer, ContextVerdict
@@ -24,36 +31,10 @@ from scheduler.circuit_breaker import is_circuit_breaker_active, check_recent_lo
 from storage.trace import DecisionTraceBuilder, ExecutionSnapshot
 
 
-# ── Timeframe-dependent cooldown ───────────────────────────────────────
-_TF_MINUTES = {
-    "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
-    "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440,
-}
-
-
-def _smt_to_score(smt_result) -> float:
-    """Convert SMTResult to numeric score for Probability Engine.
-
-    Returns: -1.0 (bearish SMT) to 1.0 (bullish SMT), 0.0 for None/neutral.
-    """
-    if smt_result is None:
-        return 0.0
-    if smt_result.direction == "bullish":
-        return 1.0
-    elif smt_result.direction == "bearish":
-        return -1.0
-    return 0.0
-
 # ── EMA Spread History for Regime Detection ────────────────────────────
 # Stores rolling EMA spread values per symbol/timeframe across scan cycles.
 # Used by _detect_regime() to compute ema_spread_trend (rising/falling/stable).
 _ema_spread_history: dict[str, list[float]] = {}
-
-
-def get_cooldown_minutes(timeframe: str, base_minutes: int, multiplier: float) -> int:
-    """Effective cooldown = max(base_minutes, timeframe_minutes × multiplier)."""
-    tf_minutes = _TF_MINUTES.get(timeframe, 60)
-    return max(base_minutes, int(tf_minutes * multiplier))
 
 
 # ── Signal Funnel Logging ──────────────────────────────────────────────
@@ -224,6 +205,16 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         _current_funnel.log_gate(symbol, timeframe, "cooldown", "PASS")
 
         # 0.2 Portfolio risk
+        # Per-symbol limit: block if this symbol already has enough open positions
+        max_per_sym = config.max_active_signals_per_symbol
+        sym_active = await db.get_active_signals_count_by_symbol(symbol)
+        if sym_active >= max_per_sym:
+            reason = f"max active signals for {symbol} ({sym_active}/{max_per_sym})"
+            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
+            trace.blocked("portfolio_risk", reason)
+            await trace.save(db)
+            return None
+
         max_sigs = config.max_active_signals
         max_risk = config.max_portfolio_risk_pct
         active_count = await db.get_active_signals_count()
@@ -475,82 +466,93 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             _current_funnel.log_gate(symbol, timeframe, "sweep_continuation", "PASS",
                                      f"sweep_type={setup.sweep_type}")
 
-        # ── Phase 1.46: Per-Symbol Overrides ──
-        _sym_overrides = config.trading.symbol_overrides.get(symbol, {})
-        if _sym_overrides:
-            # ADX minimum override
-            _min_adx = _sym_overrides.get("adx_min")
-            if _min_adx is not None and ind.adx < _min_adx:
-                reason = f"symbol ADX {ind.adx:.1f} < {_min_adx}"
-                _current_funnel.log_gate(symbol, timeframe, "symbol_adx", "BLOCKED", reason)
-                trace.blocked("symbol_adx", reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                return None
-            if _min_adx is not None:
-                _current_funnel.log_gate(symbol, timeframe, "symbol_adx", "PASS")
+        # ── Phase 1.5 (moved before overrides): Build Trade Plan (ICT-based) ──
+        # Built here so per-symbol override gates (max_sl_pct) can use real SL
+        # distance instead of the non-existent setup.sl_distance_pct.
+        from strategy.trade_engine import trade_engine
 
-            # Max SL distance override
-            _max_sl = _sym_overrides.get("max_sl_pct")
-            if _max_sl is not None and setup.sl_distance_pct > _max_sl:
-                reason = f"symbol SL {setup.sl_distance_pct:.1f}% > {_max_sl}%"
-                _current_funnel.log_gate(symbol, timeframe, "symbol_sl", "BLOCKED", reason)
-                trace.blocked("symbol_sl", reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                return None
-            if _max_sl is not None:
-                _current_funnel.log_gate(symbol, timeframe, "symbol_sl", "PASS")
+        trade_plan = trade_engine.build_trade_plan(
+            ind=ind,
+            direction=setup.direction,
+            structure=structure,
+            order_blocks=order_blocks,
+            sweeps=sweeps,
+            fvgs=fvgs,
+            df=_df_clean,
+            timeframe=timeframe,
+        )
 
-            # Max ATR% override
-            _max_atr = _sym_overrides.get("max_atr_pct")
-            if _max_atr is not None and setup.atr_pct > _max_atr:
-                reason = f"symbol ATR% {setup.atr_pct:.2f}% > {_max_atr}%"
-                _current_funnel.log_gate(symbol, timeframe, "symbol_atr", "BLOCKED", reason)
-                trace.blocked("symbol_atr", reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                return None
-            if _max_atr is not None:
-                _current_funnel.log_gate(symbol, timeframe, "symbol_atr", "PASS")
+        sl = trade_plan.sl
+        tp = trade_plan.tp
+        sl_source = trade_plan.sl_source
 
-            # Minimum quality override
-            _min_q = _sym_overrides.get("min_quality")
-            if _min_q is not None and setup.overall_setup_quality < _min_q:
-                reason = f"symbol quality {setup.overall_setup_quality:.0f} < {_min_q}"
-                _current_funnel.log_gate(symbol, timeframe, "symbol_quality", "BLOCKED", reason)
-                trace.blocked("symbol_quality", reason)
-                trace.set_version(VERSION, build_config_snapshot())
-                await trace.save(db)
-                return None
-            if _min_q is not None:
-                _current_funnel.log_gate(symbol, timeframe, "symbol_quality", "PASS")
+        if sl is None or tp is None:
+            _current_funnel.log_gate(symbol, timeframe, "sl_tp", "BLOCKED", "calculation failed")
+            trace.blocked("sl_tp", "SL/TP calculation failed")
+            await trace.save(db)
+            return None
 
-            # Block specific setup types (e.g. ["SELL_continuation"])
-            _blocked = _sym_overrides.get("block_setup_types", [])
-            if _blocked:
-                _st = f"{setup.direction.upper()}_{setup.setup_type}"
-                if _st in _blocked:
-                    reason = f"symbol blocked: {_st}"
-                    _current_funnel.log_gate(symbol, timeframe, "symbol_blocked_type", "BLOCKED", reason)
-                    trace.blocked("symbol_blocked_type", reason)
-                    trace.set_version(VERSION, build_config_snapshot())
-                    await trace.save(db)
-                    return None
-                _current_funnel.log_gate(symbol, timeframe, "symbol_blocked_type", "PASS")
+        entry_price = float(trade_plan.entry_price)
 
-        # ── Entry Armed (OB/FVG zone) ──
-        # Default: soft (log only) — matches current behavior, entry is taken at close.
-        # config.require_entry_zone=True makes it a hard gate: only emit when price is
-        # actually inside the OB/FVG zone, so the bot stops chasing entries mid-move.
-        if not setup.entry_armed:
-            if config.require_entry_zone:
-                reason = "price not in OB/FVG entry zone"
+        # ── Phase 1.51: Live Price Alignment ──
+        # Fetch live ticker and adjust entry/SL/TP to current market price.
+        # Original SL/TP distances are preserved (offset-based adjustment).
+        try:
+            _live_ticker = await exchange_client.fetch_ticker_full(symbol)
+            _live_price = None
+            if _live_ticker:
+                _live_price = _live_ticker.get("last") or _live_ticker.get("bid")
+            if _live_price and _live_price > 0:
+                _candle_close = entry_price
+                _price_offset = _live_price - _candle_close
+                _offset_pct = abs(_price_offset) / _candle_close * 100 if _candle_close > 0 else 0
+
+                if _offset_pct > 0.1:
+                    logger.info(
+                        f"Live price alignment: candle_close={_candle_close:.6f} "
+                        f"live={_live_price:.6f} offset={_price_offset:+.6f} ({_offset_pct:.2f}%)"
+                    )
+
+                entry_price = round(_live_price, 8)
+                sl = round(sl + _price_offset, 8)
+                tp = round(tp + _price_offset, 8)
+            else:
+                logger.warning(f"Live ticker unavailable for {symbol}, using candle close as entry")
+        except Exception as e:
+            logger.warning(f"Failed to fetch live ticker for {symbol}: {e}, using candle close as entry")
+
+        # ── Phase 1.46: Per-Symbol Overrides (shared with backtest) ──
+        _sym_blocked, _sym_reason = apply_symbol_overrides(
+            symbol=symbol,
+            ind=ind,
+            setup=setup,
+            trade_plan=trade_plan,
+            atr_pct=(ind.atr / ind.close * 100) if ind.atr and ind.close > 0 else 0.0,
+        )
+        if _sym_blocked:
+            _current_funnel.log_gate(symbol, timeframe, "symbol_overrides", "BLOCKED", _sym_reason)
+            trace.blocked("symbol_overrides", _sym_reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            return None
+        if _sym_overrides := config.trading.symbol_overrides.get(symbol, {}):
+            _current_funnel.log_gate(symbol, timeframe, "symbol_overrides", "PASS")
+
+        # ── Entry Zone (OB/FVG) — shared hard gate, same as backtest ──
+        # Default: require_entry_zone=False → soft (log only), entry taken at close.
+        # require_entry_zone=True → only emit when the current bar actually traded
+        # in the FVG entry zone (rejects phantom fills at an unreached FVG median).
+        if config.require_entry_zone:
+            _bar_high = float(ind.high) if ind.high else float(ind.close)
+            _bar_low = float(ind.low) if ind.low else float(ind.close)
+            if not entry_zone_touched(setup.direction, fvgs, _bar_high, _bar_low):
+                reason = "price not in FVG entry zone"
                 _current_funnel.log_gate(symbol, timeframe, "entry_zone", "BLOCKED", reason)
                 trace.blocked("entry_zone", reason)
                 trace.set_version(VERSION, build_config_snapshot())
                 await trace.save(db)
                 return None
+        elif not setup.entry_armed:
             logger.debug(
                 f"Entry not armed: {symbol} {timeframe} — "
                 f"price not in OB/FVG zone (signal will fire but entry may be suboptimal)"
@@ -747,32 +749,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             except Exception as e:
                 logger.debug(f"Zone classification failed for {symbol} {timeframe}: {e}")
 
-        # ═══ Phase 1.5: Build Trade Plan (ICT-based) ═══
-
-        from strategy.trade_engine import trade_engine
-
-        trade_plan = trade_engine.build_trade_plan(
-            ind=ind,
-            direction=setup.direction,
-            structure=structure,
-            order_blocks=order_blocks,
-            sweeps=sweeps,
-            fvgs=fvgs,
-            df=_df_clean,
-            timeframe=timeframe,
-        )
-
-        sl = trade_plan.sl
-        tp = trade_plan.tp
-        sl_source = trade_plan.sl_source
-
-        if sl is None or tp is None:
-            _current_funnel.log_gate(symbol, timeframe, "sl_tp", "BLOCKED", "calculation failed")
-            trace.blocked("sl_tp", "SL/TP calculation failed")
-            await trace.save(db)
-            return None
-
-        entry_price = ind.close
+        # ═══ Phase 1.5: Trade Plan (built earlier, before overrides) ═══
+        # `trade_plan`, `sl`, `tp`, `sl_source`, `entry_price` are set above
+        # so per-symbol override gates can use the real SL distance.
 
         # ═══ Phase 2: Analytics (regime, context, MTF) ═══
 
@@ -816,33 +795,18 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             except Exception as e:
                 logger.debug(f"Context enrichment skipped for {symbol}: {e}")
 
-        # ═══ Phase 3: Inline Probability Estimation ═══
+        # ═══ Phase 3: Inline Probability Estimation (shared with backtest) ═══
 
-        # Simple rule-based P(TP) from Pattern Engine components + context
+        # Simple rule-based P(TP) from Pattern Engine components + context.
+        # `estimate_p_tp` also applies the HTF opposition penalty (htf_penalty).
         _components_score = setup.components_count if setup.detected else 0
-        p_tp = 0.45  # baseline
-        # Components boost
-        if _components_score >= 4:
-            p_tp += 0.15
-        elif _components_score >= 3:
-            p_tp += 0.08
-        # Context boost
-        if context_score_val > 0:
-            p_tp += min(context_score_val * 0.1, 0.10)
-        elif context_score_val < 0:
-            p_tp += max(context_score_val * 0.1, -0.10)
-        # HTF bias boost
-        if _htf_result and _htf_result.direction == setup.direction:
-            p_tp += 0.05
-        # MTF alignment boost
-        if mtf_aligned:
-            p_tp += 0.03
-        # MSS quality boost
-        if setup.mss_score > 70:
-            p_tp += 0.05
-        p_tp = max(0.15, min(0.85, p_tp))
-
-        confidence = min(0.85, p_tp)
+        p_tp, confidence = estimate_p_tp(
+            setup=setup,
+            context_score=context_score_val,
+            htf_result=_htf_result,
+            htf_penalty=_htf_bias_penalty,
+            mtf_aligned=mtf_aligned,
+        )
 
         logger.info(
             f"Probability (inline): P(TP)={p_tp:.1%} | "
@@ -894,11 +858,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         reasons.append(f"P(TP)={p_tp:.1%}")
         reasons.append(f"Risk={risk_decision.risk_pct:.2f}%")
 
+        # Use live price for close (consistent with entry_price)
+        _close_for_signal = entry_price if entry_price else ind.close
+
         result = SignalResult(
             signal=signal_type,
             symbol=symbol,
             timeframe=timeframe,
-            close=ind.close,
+            close=_close_for_signal,
             entry_price=entry_price,
             sl=risk_decision.sl_price,
             tp=risk_decision.tp_price,
@@ -925,34 +892,31 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         })()
 
         # ═══ Phase 6: Dedup ═══
+        # Decision logic shared with the backtest engine (dedup_block_window in
+        # strategy/signal_evaluator.py) — guaranteed bit-in-bit parity, no copy.
 
-        dedup_cooldown_minutes = get_cooldown_minutes(
-            timeframe, config.signal_cooldown_minutes, config.signal_cooldown_tf_multiplier
-        )
         last = await db.get_last_signal(symbol, timeframe)
         if last is not None:
             last_sent = last.sent_at or last.created_at
             if last_sent is not None:
                 if last_sent.tzinfo is None:
                     last_sent = last_sent.replace(tzinfo=timezone.utc)
-                same_direction = last.signal_type == result.signal.value
-                within_cooldown = (
-                    datetime.now(timezone.utc) - last_sent
-                ) < timedelta(minutes=dedup_cooldown_minutes)
-                if same_direction and within_cooldown:
+                window_min = dedup_block_window(
+                    last_sent,
+                    datetime.now(timezone.utc),
+                    last.signal_type,
+                    result.signal.value,
+                    timeframe,
+                    config.signal_cooldown_minutes,
+                    config.signal_cooldown_tf_multiplier,
+                )
+                if window_min is not None:
                     elapsed = (datetime.now(timezone.utc) - last_sent).total_seconds() / 60
                     _current_funnel.log_gate(symbol, timeframe, "dedup", "BLOCKED",
-                                             f"same dir, {elapsed:.0f}m < {dedup_cooldown_minutes}m")
-                    trace.blocked("dedup", f"same direction, {elapsed:.0f}m < {dedup_cooldown_minutes}m")
+                                             f"elapsed {elapsed:.0f}m < {window_min}m")
+                    trace.blocked("dedup", f"dedup cooldown {window_min}m")
                     await trace.save(db)
                     return None
-                if not same_direction and within_cooldown:
-                    cross_cooldown = timedelta(minutes=dedup_cooldown_minutes // 2)
-                    if (datetime.now(timezone.utc) - last_sent) < cross_cooldown:
-                        _current_funnel.log_gate(symbol, timeframe, "dedup", "BLOCKED", "cross-dir cooldown")
-                        trace.blocked("dedup", "cross-direction cooldown")
-                        await trace.save(db)
-                        return None
         trace.passed("dedup")
         _current_funnel.log_gate(symbol, timeframe, "dedup", "PASS")
 
@@ -969,8 +933,8 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                     last_candle_ts / 1000, tz=timezone.utc
                 ) if isinstance(last_candle_ts, (int, float)) else last_candle_ts
 
-        # Fetch execution snapshot data
-        _ticker = await exchange_client.fetch_ticker_full(symbol)
+        # Fetch execution snapshot data (reuse ticker from live price alignment if available)
+        _ticker = _live_ticker if '_live_ticker' in dir() else await exchange_client.fetch_ticker_full(symbol)
         _tick_size = exchange_client.get_tick_size(symbol)
         _atr = ind.atr
         _last_candle = df.iloc[-1] if df is not None and len(df) > 0 else None
@@ -990,7 +954,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             confidence_v2_factors=[],
             entry_candle_open=_entry_candle_open,
             # Execution snapshot
-            entry_price_source="CLOSE",
+            entry_price_source="LIVE_TICKER",
             entry_open=float(_last_candle["open"]) if _last_candle is not None else None,
             entry_mid=float((_last_candle["high"] + _last_candle["low"]) / 2) if _last_candle is not None else None,
             entry_bid=_ticker.get("bid") if _ticker else None,
@@ -1025,7 +989,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             tick_size=_tick_size,
             buffer_total=abs(result.sl - result.close) if result.sl and result.close else None,
             execution_latency_ms=_latency_ms,
-            entry_source="CLOSE",
+            entry_source="LIVE_TICKER",
             entry_price=result.close,
             bid=_ticker.get("bid") if _ticker else None,
             ask=_ticker.get("ask") if _ticker else None,

@@ -37,6 +37,14 @@ MARKET_TYPE=swap
 | `REVERSAL_REQUIRE_DISPLACEMENT` | `false` | требовать displacement на reversal |
 | `REQUIRE_ENTRY_ZONE` | `false` | сигнал только при входе в OB/FVG-зону |
 | `MIN_P_TP` | `0.45` | Probability-селектор (P(TP) флор; 0.0 = off) |
+| `EXECUTION_MODEL` | `median_immediate` | цена входа в бэктесте: `median_immediate` (фантомная медиана FVG) / `close` (close бара, зеркалит live-P&L) / `limit_pending` (лимитка на медиане, филл при касании) |
+| `EXECUTION_PENDING_MAX_BARS` | `50` | макс. свечей жизни pending-ордера для `EXECUTION_MODEL=limit_pending` |
+
+> **Важно (2026-08-18, см. `docs/decisions/execution_model.md`):** `median_immediate`
+> даёт фантомные филлы и завышенные метрики (risk-гейт считает RR от нереалистичной
+> цены). Любая публикуемая метрика бэктеста обязана сопровождаться пометкой, какой
+> `EXECUTION_MODEL` использован. Продуктовое решение (исполнять ли ордера) ещё не
+> принято.
 
 ## Фильтры направления/символа (Rec 3 — config/direction_filter)
 

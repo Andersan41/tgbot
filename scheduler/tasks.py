@@ -53,9 +53,19 @@ class TaskScheduler:
             coalesce=True,
         )
 
+        # Full offline-cache sync for backtests (every 6 hours, idempotent)
+        self._scheduler.add_job(
+            self._update_ohlcv_cache_job,
+            CronTrigger(hour="*/6"),
+            id="update_ohlcv_cache",
+            name="Sync offline 15m OHLCV cache",
+            max_instances=1,
+            coalesce=True,
+        )
+
         logger.info(
             "Scheduler configured: scanning every 15 min, daily report at 00:05 UTC, "
-            "history cache update every 15 min"
+            "history cache update every 15 min, offline cache sync every 6h"
         )
 
     async def _scan_job(self, timeframes: list[str] | None = None):
@@ -127,6 +137,31 @@ class TaskScheduler:
                     except Exception:
                         logger.exception("Failed to send history-update error alert")
                     self._history_failures = 0
+
+    async def _update_ohlcv_cache_job(self):
+        """Sync the offline 15m OHLCV cache for all symbols (every 6 hours).
+
+        Идемпотентно (update_history сам определяет недостающие свечи),
+        поэтому не дублирует запросы к бирже с outcome tracker. try/except —
+        не роняет scheduler.
+        """
+        from backtest.cache_ohlcv import BASE_TIMEFRAME, update_history
+        from config.settings import get_active_symbols
+
+        symbols = get_active_symbols()
+        if not symbols:
+            return
+        logger.info(f"Scheduler: syncing offline 15m OHLCV cache for {len(symbols)} symbols")
+        for symbol in symbols:
+            try:
+                added = await update_history(
+                    symbol,
+                    timeframe=BASE_TIMEFRAME,
+                    market_type=config.exchange.market_type,
+                )
+                logger.info(f"Offline cache sync {symbol}: +{added} candles")
+            except Exception as e:
+                logger.error(f"Offline cache sync failed for {symbol}: {e}", exc_info=True)
 
     def start(self):
         self._scheduler.start()

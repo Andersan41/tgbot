@@ -12,6 +12,7 @@
     <div class="header">
       <span class="logo">Trading <span class="accent">Signal</span> Bot</span>
       <span class="tagline">AI-АНАЛИЗ РЫНКА • MULTI-FACTOR • LIVE</span>
+      <a class="btn-backtest" href="/backtest" target="_blank" rel="noopener">Offline Backtest</a>
     </div>
     <div class="status-bar">
       <span class="dot-live"></span>
@@ -34,8 +35,19 @@
     <!-- Signal card -->
     <div class="signal-card no" id="signalCard">
       <div class="signal-header">
-        <span class="signal-type no" id="signalType">ОЖИДАНИЕ...</span>
-        <span id="signalScore" style="font-size:12px;color:#555;">Score: —</span>
+        <div class="signal-header-left">
+          <span class="signal-type no" id="signalType">ОЖИДАНИЕ...</span>
+          <span class="signal-verdict" id="signalVerdict"></span>
+        </div>
+        <div class="signal-header-right">
+          <span class="signal-timestamp" id="signalTimestamp"></span>
+        </div>
+      </div>
+      <div class="signal-confidence">
+        <div class="signal-conf-bar">
+          <div class="signal-conf-fill" id="signalConfFill"></div>
+        </div>
+        <span class="signal-conf-label" id="signalConfLabel">0%</span>
       </div>
       <div class="signal-details">
         <div class="signal-detail">
@@ -50,8 +62,41 @@
           <div class="signal-detail-label">Take Profit</div>
           <div class="signal-detail-value" id="signalTP">—</div>
         </div>
+        <div class="signal-detail signal-pl-box" id="signalPlBox">
+          <div class="signal-detail-label">P/L от входа</div>
+          <div class="signal-detail-value" id="signalPL">—</div>
+        </div>
       </div>
       <div class="signal-reasons" id="signalReasons"></div>
+    </div>
+
+    <!-- Whale Activity -->
+    <div class="whale-bar" id="whaleBar">
+      <div class="whale-bar-left">
+        <span class="whale-icon">🐋</span>
+        <span class="whale-title">Киты</span>
+        <span class="whale-zscore-badge" id="whaleZscoreBadge">Z: —</span>
+        <div class="whale-tf-toggle" id="whaleTfToggle">
+          <button class="whale-tf-btn active" data-tf="1h">1h</button>
+          <button class="whale-tf-btn" data-tf="4h">4h</button>
+        </div>
+        <button class="whale-sound-toggle" id="whaleSoundBtn" title="Звуковые уведомления T3">🔔</button>
+      </div>
+      <div class="whale-bar-metrics">
+        <div class="whale-metric">
+          <span class="whale-metric-label">VWAP</span>
+          <span class="whale-metric-value" id="whaleVwap">—</span>
+        </div>
+        <div class="whale-metric">
+          <span class="whale-metric-label">Объём/Средн</span>
+          <span class="whale-metric-value" id="whaleVolRatio">—</span>
+        </div>
+        <div class="whale-metric">
+          <span class="whale-metric-label">Крупные</span>
+          <span class="whale-metric-value" id="whaleT3Count">0</span>
+        </div>
+      </div>
+      <div class="whale-bar-signals" id="whaleSignalsList"></div>
     </div>
 
     <!-- Indicators: 6 cards -->
@@ -87,7 +132,7 @@
         <div class="bar-track"><div class="bar-fill" id="bar-st" style="width:0%"></div></div>
       </div>
       <div class="card" id="card-vol">
-        <div class="card-label">Volume <span class="badge" id="badge-vol">—</span></div>
+        <div class="card-label">Объём <span class="badge" id="badge-vol">—</span></div>
         <div class="card-value" id="val-vol">—</div>
         <div class="card-sub" id="sub-vol">Загрузка...</div>
         <div class="bar-track"><div class="bar-fill" id="bar-vol" style="width:0%"></div></div>
@@ -148,12 +193,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Filter toggles -->
-    <div class="filter-bar" id="filterBar">
-      <div class="filter-bar-label">Фильтры</div>
-      <div class="filter-bar-list" id="filterList"></div>
     </div>
 
     <!-- Open Trades -->

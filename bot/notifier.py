@@ -48,9 +48,10 @@ def format_context_block(verdict: ContextVerdict) -> str:
         if snap.long_short_ratio is not None:
             ls_emoji = "✅" if snap.long_short_ratio < nc.long_short_ratio_threshold else "⚠️"
             lines.append(f"├ Long/Short: {snap.long_short_ratio:.2f} {ls_emoji}")
-        if snap.open_interest_delta is not None:
+        if snap.open_interest_delta is not None and not snap.oi_is_warmup:
             oi_emoji = "✅" if snap.open_interest_delta > 0 else "⚠️"
-            lines.append(f"├ OI: +{snap.open_interest_delta:.1f}% {oi_emoji}")
+            oi_sign = "+" if snap.open_interest_delta > 0 else ""
+            lines.append(f"├ OI: {oi_sign}{snap.open_interest_delta:.1f}% {oi_emoji}")
         if snap.news_sentiment_score is not None:
             if snap.news_sentiment_score > nc.sentiment_positive_threshold:
                 news_emoji = "😊"

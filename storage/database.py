@@ -1103,6 +1103,16 @@ class Database:
             )
             return len(list(result.scalars().all()))
 
+    async def get_active_signals_count_by_symbol(self, symbol: str) -> int:
+        """Количество активных сигналов по конкретному символу."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(SignalOutcome)
+                .join(Signal, SignalOutcome.signal_id == Signal.id)
+                .where(SignalOutcome.status == "OPEN", Signal.symbol == symbol)
+            )
+            return len(list(result.scalars().all()))
+
     async def get_portfolio_risk_sum(self) -> float:
         """Суммарный risk_pct всех активных позиций."""
         async with self._session_factory() as session:

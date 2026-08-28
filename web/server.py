@@ -26,7 +26,7 @@ DASHBOARD_PASS = os.getenv("DASHBOARD_PASS", "")
 
 # Глобальное состояние
 _clients: Set[web.WebSocketResponse] = set()
-_client_symbols: Dict[web.WebSocketResponse, str] = {}
+_client_state: Dict[web.WebSocketResponse, Dict[str, str]] = {}  # ws → {symbol, timeframe}
 _broadcast_task: Optional[asyncio.Task] = None
 
 
@@ -147,26 +147,28 @@ def _compute_whale(df) -> Dict[str, Any]:
     return state.to_dict()
 
 
-async def _build_payload(symbol: str) -> Dict[str, Any]:
+async def _build_payload(symbol: str, timeframe: str = None) -> Dict[str, Any]:
     """Собрать полный payload для отправки клиенту."""
     try:
         from config.settings import config as cfg
-        tf = cfg.trading.primary_timeframes[0] if cfg.trading.primary_timeframes else "1h"
+        if not timeframe:
+            timeframe = cfg.trading.primary_timeframes[0] if cfg.trading.primary_timeframes else "1h"
 
-        df = await _fetch_candles(symbol, tf, limit=200)
+        df = await _fetch_candles(symbol, timeframe, limit=200)
         if df is None or df.empty:
             return {
                 "type": "update",
                 "symbol": symbol,
+                "timeframe": timeframe,
                 "timestamp": int(time.time() * 1000),
                 "error": "No data",
             }
 
-        indicators = _compute_indicators(df, symbol, tf) or {}
-        structure = _compute_structure(df, symbol, tf)
-        liquidity = _compute_liquidity(df, symbol, tf)
-        sr_levels = _compute_sr_levels(df, symbol, tf)
-        signal_info = _compute_signal_light(df, symbol, tf)
+        indicators = _compute_indicators(df, symbol, timeframe) or {}
+        structure = _compute_structure(df, symbol, timeframe)
+        liquidity = _compute_liquidity(df, symbol, timeframe)
+        sr_levels = _compute_sr_levels(df, symbol, timeframe)
+        signal_info = _compute_signal_light(df, symbol, timeframe)
         whale_info = _compute_whale(df)
 
         # Price history for chart (последние 20 свечей)
@@ -213,30 +215,36 @@ def _compute_signal_light(df, symbol: str, timeframe: str) -> Dict[str, Any]:
     reasons = []
     score = 0
 
-    if iv.ema_fast > iv.ema_slow:
+    # Each reason: {text, passed, value}
+    ema_pass = iv.ema_fast > iv.ema_slow
+    if ema_pass:
         score += 1
-        reasons.append("EMA fast > slow")
     elif iv.ema_fast < iv.ema_slow:
         score -= 1
+    reasons.append({"text": "EMA fast > slow", "passed": ema_pass, "value": f"{iv.ema_fast:.2f} / {iv.ema_slow:.2f}"})
 
-    if iv.rsi > 55:
+    rsi_pass = iv.rsi > 55
+    if rsi_pass:
         score += 1
-        reasons.append(f"RSI {iv.rsi:.0f} > 55")
     elif iv.rsi < 45:
         score -= 1
+    reasons.append({"text": f"RSI {iv.rsi:.0f} > 55", "passed": rsi_pass, "value": f"{iv.rsi:.1f}"})
 
-    if iv.macd_hist > 0:
+    macd_pass = iv.macd_hist > 0
+    if macd_pass:
         score += 1
-        reasons.append("MACD hist > 0")
     elif iv.macd_hist < 0:
         score -= 1
+    reasons.append({"text": "MACD hist > 0", "passed": macd_pass, "value": f"{iv.macd_hist:.4f}"})
 
+    adx_pass = False
     if iv.adx > 20:
-        if iv.dmi_plus > iv.dmi_minus:
+        adx_pass = iv.dmi_plus > iv.dmi_minus
+        if adx_pass:
             score += 1
-            reasons.append("ADX+ > ADX-")
         else:
             score -= 1
+    reasons.append({"text": "ADX+ > ADX-", "passed": adx_pass, "value": f"{iv.dmi_plus:.1f} / {iv.dmi_minus:.1f}"})
 
     if score >= 2:
         signal = "BUY"
@@ -255,6 +263,14 @@ def _compute_signal_light(df, symbol: str, timeframe: str) -> Dict[str, Any]:
         "sl": None,
         "tp": None,
         "regime": None,
+        "timestamp": int(time.time() * 1000),
+        "indicators": {
+            "rsi": round(iv.rsi, 1),
+            "adx": round(iv.adx, 1),
+            "macd_hist": round(iv.macd_hist, 4),
+            "ema_fast": round(iv.ema_fast, 2),
+            "ema_slow": round(iv.ema_slow, 2),
+        },
     }
 
 
@@ -278,19 +294,23 @@ async def _broadcast_loop():
     while True:
         try:
             if _clients:
-                # Собрать уникальные символы
-                symbols = set(_client_symbols.values())
-                if not symbols:
-                    symbols = {config.trading.symbols[0]} if config.trading.symbols else {"BTC/USDT"}
+                # Собрать уникальные (symbol, timeframe) пары
+                pairs = set()
+                for st in _client_state.values():
+                    pairs.add((st["symbol"], st["timeframe"]))
+                if not pairs:
+                    s = config.trading.symbols[0] if config.trading.symbols else "BTC/USDT"
+                    tf = config.trading.primary_timeframes[0] if config.trading.primary_timeframes else "1h"
+                    pairs = {(s, tf)}
 
-                for symbol in symbols:
-                    payload = await _build_payload(symbol)
+                for symbol, tf in pairs:
+                    payload = await _build_payload(symbol, tf)
                     message = json.dumps(payload, default=str)
 
-                    # Отправить только клиентам, подписанным на этот символ
                     stale = set()
                     for ws in _clients:
-                        if _client_symbols.get(ws) == symbol:
+                        st = _client_state.get(ws)
+                        if st and st["symbol"] == symbol and st["timeframe"] == tf:
                             try:
                                 await ws.send_str(message)
                             except Exception:
@@ -383,14 +403,15 @@ async def ws_handler(request):
 
     # Подписываем на символ по умолчанию
     default_symbol = config.trading.symbols[0] if config.trading.symbols else "BTC/USDT"
+    default_tf = config.trading.primary_timeframes[0] if config.trading.primary_timeframes else "1h"
     _clients.add(ws)
-    _client_symbols[ws] = default_symbol
+    _client_state[ws] = {"symbol": default_symbol, "timeframe": default_tf}
 
-    logger.info(f"WS client connected ({len(_clients)} total), default: {default_symbol}")
+    logger.info(f"WS client connected ({len(_clients)} total), default: {default_symbol} {default_tf}")
 
     try:
         # Отправить текущее состояние сразу
-        payload = await _build_payload(default_symbol)
+        payload = await _build_payload(default_symbol, default_tf)
         await ws.send_json(payload)
 
         async for msg in ws:
@@ -399,13 +420,12 @@ async def ws_handler(request):
                     data = json.loads(msg.data)
                     if data.get("type") == "subscribe" and data.get("symbol"):
                         new_symbol = data["symbol"].upper()
-                        # Конвертируем BTC → BTC/USDT
                         if "/" not in new_symbol:
                             new_symbol = new_symbol + "/USDT"
-                        _client_symbols[ws] = new_symbol
-                        logger.info(f"WS client subscribed to {new_symbol}")
-                        # Отправить данные нового символа
-                        payload = await _build_payload(new_symbol)
+                        new_tf = data.get("timeframe") or _client_state.get(ws, {}).get("timeframe", default_tf)
+                        _client_state[ws] = {"symbol": new_symbol, "timeframe": new_tf}
+                        logger.info(f"WS client subscribed to {new_symbol} {new_tf}")
+                        payload = await _build_payload(new_symbol, new_tf)
                         await ws.send_json(payload)
                 except json.JSONDecodeError:
                     pass
@@ -413,7 +433,7 @@ async def ws_handler(request):
                 logger.warning(f"WS error: {ws.exception()}")
     finally:
         _clients.discard(ws)
-        _client_symbols.pop(ws, None)
+        _client_state.pop(ws, None)
         logger.info(f"WS client disconnected ({len(_clients)} remaining)")
 
     return ws

@@ -66,11 +66,48 @@ Pattern Engine → Feature Builder → Probability Engine → Risk Engine → Te
 | direction/symbol | scanner.py ~373 | `config.direction_filter` (Rec 3) |
 | news | scanner.py ~399 | `config.risk.news_filter_enabled` (Rec 4a, opt-in) |
 | confluence-mode | scanner.py ~409 | `STRATEGY_MODE == "confluence"` |
-| symbol overrides | scanner.py ~487 | `config.trading.symbol_overrides` (adx/sl/atr/quality/blocked types) |
+| symbol overrides | `strategy/signal_evaluator.py` → `apply_symbol_overrides()` | `config.trading.symbol_overrides` (adx/sl/atr/quality/blocked types); real fields (`trade_plan.sl_distance_pct`, `setup.overall_quality`) |
 | entry zone | scanner.py ~554 | `config.require_entry_zone` (opt-in) |
-| HTF Bias V2 | scanner.py ~598 | `htf_bias_v2=True`; continuation против bias → block/penalty |
-| Premium/Discount | scanner.py ~744 | `premium_discount=False` default |
+| HTF Bias V2 | scanner.py ~598 + `strategy/signal_evaluator.py` → `htf_opposition()` | `htf_bias_v2=True`; continuation против bias → block/penalty; penalty применяется к P(TP) |
+| Premium/Discount | scanner.py ~744 | `premium_discount=False` default (A/B: PF 1.28→0.91) |
 | min P(TP) | scanner.py ~1257 | `min_p_tp=0.45` default (Probability selector) |
+
+> **Shared evaluation (live ⇄ backtest parity):** `strategy/signal_evaluator.py` — единый
+> источник для `estimate_p_tp()` (Phase 3), `apply_symbol_overrides()` (Phase 1.46),
+> `htf_opposition()` (Phase 1.45), `get_cooldown_minutes()` и `dedup_block_window()`
+> (Phase 6 dedup). Используется и live-сканером, и `backtest/engine.py`
+> (включая penalty P(TP), HTF-выравнивание +0.05 и per-symbol overrides).
+> Бэктест не хранит копий — это исключает расхождение типа BUG-19.
+> `trades_log` в API сортируется по `entry_index` (движок отдаёт в порядке выхода).
+>
+> **HTF Hard Gate:** `config.htf_hard_gate` по умолчанию **True** (env `HTF_HARD_GATE=true`)
+> — блокирует buy-continuation против bearish HTF bias (W1→D1→H4→H1 EMA), A/B PF 1.10→1.28.
+
+---
+
+## 5. БЭКТЕСТ-ПАРИТЕТ (обновления 2026-08-17)
+
+- **Мульти-позиционность:** `backtest/engine.py` держит `open_trades: list[BacktestTrade]` —
+  до `config.max_active_signals` одновременных позиций; входной гейт
+  `sum(risk_pct) < config.max_portfolio_risk_pct`. SL/TP проверяются по каждой открытой
+  позиции (порядок входа), в конце данных все закрываются по close с `exit_reason="eob"`.
+  `PortfolioState` заполняется реальными `active_count`/`total_risk_pct`.
+- **Funding (swap):** модель списания за каждый 8h-интервал удержания —
+  `derivatives.funding_rate_pct_8h` (env `FUNDING_RATE_PCT_8H`, default 0.01%), консервативно
+  всегда платим. Складывается в `trade.funding_pct` и входит в `net_pnl_pct`.
+- **Честные метрики:** `max_drawdown` считается по NET PnL; `max_drawdown_sized` — по
+  sizing-aware equity (риск `risk_pct`% от эквити на сделку); `sharpe_annualized` — per-trade
+  net Sharpe × √(trades_per_year); `avg_mfe_pct`/`avg_mae_pct` — средняя лучшая/худшая
+  экскурсия по открытым позициям.
+- **Окно анализа = `candles_limit` (паритет + скорость):** на каждой свече бэктест анализирует
+  `df.iloc[max(0, i - candle_limit + 1): i + 1]` — ровно как live-сканер (`fetch_ohlcv`
+  `limit=candles_limit`). Раньше окно росло до всей истории: бэктест «видел» больше, чем live
+  (расхождение паритета), и это давало O(n²). Теперь O(n × candles_limit).
+- **Скорость (numpy в детекторах):** `detect_order_blocks`/`detect_sweeps`/`detect_fvg`
+  (liquidity/*) и `_find_swing_points` (market_structure/structure.py) переписаны на numpy-массивы
+  вместо per-row pandas-доступа (`data.iloc[i]`, `iterrows`, `fast_xs`) — поведение идентично
+  (обёртки `_check_bos_*`/`_calc_*`/`_is_fvg_filled` сохранены для тестов). Прогон SOL/USDT 1h
+  2026-01→08 (5472 свечи): >240с → **33.5с**, результаты бит-в-бит те же (trades идентичны).
 
 ---
 

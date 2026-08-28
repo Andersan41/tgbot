@@ -55,6 +55,7 @@ from backtest.run_funnel import _build_ind_values, _row_has_valid_indicators
 from indicators.engine import IndicatorEngine
 from strategy.pattern_engine import pattern_engine
 from strategy.trade_engine import trade_engine
+from strategy.signal_evaluator import entry_zone_touched
 from risk.engine import risk_engine, PortfolioState
 from scheduler.scanner import _detect_regime
 from liquidity.sweep import detect_sweeps
@@ -240,10 +241,13 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
                 elif setup.setup_type == "reversal":
                     _htf_bias_penalty = config.htf_bias_continuation_penalty
 
-        # ── Entry zone (opt-in hard gate) ──
-        if not setup.entry_armed and config.require_entry_zone:
-            counts["entry_zone"] += 1
-            continue
+        # ── Entry zone (opt-in hard gate, shared with live) ──
+        if config.require_entry_zone:
+            _bar_high = float(ind.high) if ind.high else float(ind.close)
+            _bar_low = float(ind.low) if ind.low else float(ind.close)
+            if not entry_zone_touched(setup.direction, fvgs, _bar_high, _bar_low):
+                counts["entry_zone"] += 1
+                continue
 
         # ── Phase 1.5: trade plan (SL/TP) ──
         try:

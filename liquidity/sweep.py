@@ -93,32 +93,36 @@ def detect_sweeps(
     # Compute offset so candle_index is absolute in the original df
     offset = len(df) - len(data)
 
+    _open = data["open"].to_numpy(dtype=float)
+    _high = data["high"].to_numpy(dtype=float)
+    _low = data["low"].to_numpy(dtype=float)
+    _close = data["close"].to_numpy(dtype=float)
+    _vol = data["volume"].to_numpy(dtype=float)
+    _idx = data.index
+
     sweeps: list[SweepEvent] = []
 
-    swing_highs = _find_swing_highs(data, swing_window)
-    swing_lows = _find_swing_lows(data, swing_window)
+    swing_highs = _find_swing_highs_np(_high, swing_window)
+    swing_lows = _find_swing_lows_np(_low, swing_window)
 
     for i in range(len(data) - 1):
-        current = data.iloc[i]
-        next_candle = data.iloc[i + 1]
-
-        ts = _to_datetime(data.index[i])
+        ts = _to_datetime(_idx[i])
 
         for swing_high in swing_highs:
             if swing_high["index"] >= i:
                 continue
-            if current["high"] > swing_high["price"] and next_candle["close"] < swing_high["price"]:
-                volume_ratio = _calc_volume_ratio(data, i)
-                reclaim = _count_candles_to_reclaim_bearish(data, i, swing_high["price"])
-                wick_body = _calc_wick_body_ratio(data, i)
-                displacement = _calc_displacement_after_sweep(data, i, "bearish")
-                delta_aligned = _check_delta_aligned(data, i, "bearish")
+            if _high[i] > swing_high["price"] and _close[i + 1] < swing_high["price"]:
+                volume_ratio = _calc_volume_ratio_np(_vol, i)
+                reclaim = _count_candles_to_reclaim_bearish_np(_close, i, swing_high["price"])
+                wick_body = _calc_wick_body_ratio_np(_open, _high, _low, _close, i)
+                displacement = _calc_displacement_after_sweep_np(_close, i, "bearish")
+                delta_aligned = _check_delta_aligned_np(_open, _high, _low, _close, i, "bearish")
 
                 sweeps.append(SweepEvent(
                     type="bearish",
                     swept_level=swing_high["price"],
-                    sweep_low=float(current["low"]),
-                    sweep_high=float(current["high"]),
+                    sweep_low=float(_low[i]),
+                    sweep_high=float(_high[i]),
                     reclaim_candles=reclaim,
                     volume_ratio=volume_ratio,
                     timestamp=ts,
@@ -131,18 +135,18 @@ def detect_sweeps(
         for swing_low in swing_lows:
             if swing_low["index"] >= i:
                 continue
-            if current["low"] < swing_low["price"] and next_candle["close"] > swing_low["price"]:
-                volume_ratio = _calc_volume_ratio(data, i)
-                reclaim = _count_candles_to_reclaim_bullish(data, i, swing_low["price"])
-                wick_body = _calc_wick_body_ratio(data, i)
-                displacement = _calc_displacement_after_sweep(data, i, "bullish")
-                delta_aligned = _check_delta_aligned(data, i, "bullish")
+            if _low[i] < swing_low["price"] and _close[i + 1] > swing_low["price"]:
+                volume_ratio = _calc_volume_ratio_np(_vol, i)
+                reclaim = _count_candles_to_reclaim_bullish_np(_close, i, swing_low["price"])
+                wick_body = _calc_wick_body_ratio_np(_open, _high, _low, _close, i)
+                displacement = _calc_displacement_after_sweep_np(_close, i, "bullish")
+                delta_aligned = _check_delta_aligned_np(_open, _high, _low, _close, i, "bullish")
 
                 sweeps.append(SweepEvent(
                     type="bullish",
                     swept_level=swing_low["price"],
-                    sweep_low=float(current["low"]),
-                    sweep_high=float(current["high"]),
+                    sweep_low=float(_low[i]),
+                    sweep_high=float(_high[i]),
                     reclaim_candles=reclaim,
                     volume_ratio=volume_ratio,
                     timestamp=ts,
@@ -235,6 +239,91 @@ def _check_delta_aligned(df: pd.DataFrame, sweep_index: int, sweep_type: str) ->
     next_candle = df.iloc[sweep_index + 1]
     body = float(next_candle["close"]) - float(next_candle["open"])
     range_val = float(next_candle["high"]) - float(next_candle["low"])
+    if range_val == 0:
+        return False
+    close_position = body / range_val
+    if sweep_type == "bullish":
+        return close_position > 0.5
+    else:
+        return close_position < -0.5
+
+
+def _find_swing_highs_np(arr, window: int) -> list[dict]:
+    """Numpy-backed swing highs — same logic as _find_swing_highs."""
+    highs = []
+    for i in range(window, len(arr) - window):
+        if arr[i] == arr[i - window: i + window + 1].max():
+            highs.append({"index": i, "price": float(arr[i])})
+    return highs
+
+
+def _find_swing_lows_np(arr, window: int) -> list[dict]:
+    """Numpy-backed swing lows — same logic as _find_swing_lows."""
+    lows = []
+    for i in range(window, len(arr) - window):
+        if arr[i] == arr[i - window: i + window + 1].min():
+            lows.append({"index": i, "price": float(arr[i])})
+    return lows
+
+
+def _calc_volume_ratio_np(vol, index: int) -> float:
+    """Numpy-backed volume ratio — same logic as _calc_volume_ratio."""
+    vol_window = config.trading.volume_sma_period
+    start = max(0, index - vol_window + 1)
+    recent_vol = vol[start:index + 1]
+    avg_vol = recent_vol.mean()
+    if avg_vol == 0:
+        return 1.0
+    return float(vol[index] / avg_vol)
+
+
+def _count_candles_to_reclaim_bullish_np(close, sweep_index: int, level: float, max_check: int = 10) -> int:
+    """Numpy-backed reclaim count — same logic as _count_candles_to_reclaim_bullish."""
+    for j in range(sweep_index + 1, min(sweep_index + max_check + 1, len(close))):
+        if close[j] > level:
+            return j - sweep_index
+    return max_check
+
+
+def _count_candles_to_reclaim_bearish_np(close, sweep_index: int, level: float, max_check: int = 10) -> int:
+    """Numpy-backed reclaim count — same logic as _count_candles_to_reclaim_bearish."""
+    for j in range(sweep_index + 1, min(sweep_index + max_check + 1, len(close))):
+        if close[j] < level:
+            return j - sweep_index
+    return max_check
+
+
+def _calc_wick_body_ratio_np(open_, high, low, close, index: int) -> float:
+    """Numpy-backed wick-to-body ratio — same logic as _calc_wick_body_ratio."""
+    body = abs(float(close[index]) - float(open_[index]))
+    range_val = float(high[index]) - float(low[index])
+    if body == 0:
+        return float("inf") if range_val > 0 else 0.0
+    wick = range_val - body
+    return wick / body
+
+
+def _calc_displacement_after_sweep_np(close, sweep_index: int, sweep_type: str, max_check: int = 5) -> float:
+    """Numpy-backed displacement % — same logic as _calc_displacement_after_sweep."""
+    start_close = float(close[sweep_index])
+    max_move = 0.0
+    for j in range(sweep_index + 1, min(sweep_index + max_check + 1, len(close))):
+        c = float(close[j])
+        if sweep_type == "bullish":
+            move = (c - start_close) / start_close * 100
+        else:
+            move = (start_close - c) / start_close * 100
+        if move > max_move:
+            max_move = move
+    return round(max_move, 3)
+
+
+def _check_delta_aligned_np(open_, high, low, close, sweep_index: int, sweep_type: str) -> bool:
+    """Numpy-backed delta check — same logic as _check_delta_aligned."""
+    if sweep_index + 1 >= len(close):
+        return False
+    body = float(close[sweep_index + 1]) - float(open_[sweep_index + 1])
+    range_val = float(high[sweep_index + 1]) - float(low[sweep_index + 1])
     if range_val == 0:
         return False
     close_position = body / range_val

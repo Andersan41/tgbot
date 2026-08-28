@@ -306,11 +306,11 @@ class TestBacktestConfig:
     """Test BacktestConfig feature flags and presets."""
 
     def test_default_config(self):
-        """Default BacktestConfig has pipeline gates enabled."""
+        """Default BacktestConfig has pipeline gates enabled (live parity)."""
         cfg = BacktestConfig()
         assert cfg.enable_pattern_engine_gates is True
         assert cfg.enable_probability_gate is False
-        assert cfg.enable_htf_bias_gate is False
+        assert cfg.enable_htf_bias_gate is True
 
     def test_baseline_preset(self):
         """Baseline preset disables all gates."""
@@ -320,11 +320,11 @@ class TestBacktestConfig:
         assert cfg.enable_htf_bias_gate is False
 
     def test_full_preset(self):
-        """Full preset enables pattern engine gates."""
+        """Full preset enables pattern engine and HTF gates (live parity)."""
         cfg = get_preset_config("full")
         assert cfg.enable_pattern_engine_gates is True
         assert cfg.enable_probability_gate is False
-        assert cfg.enable_htf_bias_gate is False
+        assert cfg.enable_htf_bias_gate is True
 
     def test_optimized_preset(self):
         """Optimized preset enables all gates."""

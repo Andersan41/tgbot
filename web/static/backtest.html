@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offline Backtest</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --card: #1a1a1a;
+    --card-2: #111;
+    --border: #222;
+    --text: #e0e0e0;
+    --muted: #666;
+    --dim: #888;
+    --accent: #a3e635;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #facc15;
+    --chart-1: #a3e635;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  h1 .accent { color: var(--accent); }
+  .sub { font-size: 11px; color: var(--dim); margin-bottom: 16px; }
+  a.back { color: var(--accent); font-size: 12px; text-decoration: none; }
+
+  .form-card {
+    background: var(--card);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .field label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field select, .field input {
+    width: 100%;
+    background: var(--card-2);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+  }
+  .field select:focus, .field input:focus { border-color: var(--accent); }
+
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .run-select {
+    background: var(--card-2);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    min-width: 260px;
+    max-width: 100%;
+  }
+  .run-select:focus { border-color: var(--accent); }
+  #runBtn {
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: var(--bg);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px;
+    cursor: pointer;
+  }
+  #runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status-line { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--accent); }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .banner {
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .banner.error { background: #2e1010; color: var(--red); border: 0.5px solid #4a1515; }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .m-card {
+    background: var(--card);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .m-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .m-value { font-size: 24px; font-weight: 600; line-height: 1.1; }
+  .m-value.pos { color: var(--green); }
+  .m-value.neg { color: var(--red); }
+  .m-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+  .section {
+    background: var(--card);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+  .section h2 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+
+  .chart-wrap { width: 100%; height: 200px; }
+  svg { width: 100%; height: 100%; display: block; }
+  .chart-grid { stroke: #2a2a2a; stroke-dasharray: 3 3; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    text-align: left; font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 6px 10px; border-bottom: 0.5px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 6px 10px; border-bottom: 0.5px solid #1a1a1a; color: #ccc; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--card-2); }
+  .empty { text-align: center; color: var(--muted); padding: 16px 10px !important; }
+  .h-toggle-cell { width: 28px; text-align: center; }
+  .h-toggle {
+    background: var(--card-2);
+    border: 0.5px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent);
+    font-size: 11px;
+    width: 22px; height: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .h-toggle:hover { border-color: var(--accent); }
+  .h-row:hover { cursor: pointer; }
+  .h-details td { padding: 0; }
+  .h-detail-body {
+    background: var(--card-2);
+    padding: 10px;
+    border-top: 0.5px solid var(--border);
+  }
+  .h-detail-body table { font-size: 11px; }
+  .h-detail-body thead th { color: var(--muted); font-size: 9px; }
+  .badge-buy { color: var(--accent); font-weight: 700; }
+  .badge-sell { color: var(--red); font-weight: 700; }
+  .pnl-pos { color: var(--green); font-weight: 600; }
+  .pnl-neg { color: var(--red); font-weight: 600; }
+  .st-completed { color: var(--green); }
+  .st-failed { color: var(--red); }
+  .st-queued, .st-running { color: var(--yellow); }
+  .table-wrap { overflow-x: auto; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Offline <span class="accent">Backtest</span></h1>
+  <div class="sub">Прогон из локального 15m кэша (ohlcv_cache/), без обращений к бирже. <a class="back" href="/">← Dashboard</a></div>
+
+  <div class="form-card">
+    <div class="form-grid">
+      <div class="field">
+        <label>Token</label>
+        <select id="symbol">
+          <option>BTC/USDT</option>
+          <option>ETH/USDT</option>
+          <option>SOL/USDT</option>
+          <option>LINK/USDT</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Timeframe</label>
+        <select id="timeframe">
+          <option>15m</option>
+          <option selected>1h</option>
+          <option>2h</option>
+          <option>4h</option>
+          <option>1d</option>
+          <option>1w</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Start date</label>
+        <input type="date" id="startDate" value="2026-01-01">
+      </div>
+      <div class="field">
+        <label>End date</label>
+        <input type="date" id="endDate" value="2026-08-16">
+      </div>
+      <div class="field">
+        <label>Market type</label>
+        <select id="marketType">
+          <option selected>swap</option>
+          <option>spot</option>
+          <option>future</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="runBtn">Run backtest</button>
+      <select id="runSelect" class="run-select">
+        <option value="">Saved runs…</option>
+      </select>
+      <div class="status-line hidden" id="statusLine">
+        <div class="spinner"></div>
+        <span id="statusText">Running backtest...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="banner error hidden" id="errorBanner"></div>
+
+  <div id="resultSection" class="hidden">
+    <div class="metrics" id="metricsGrid"></div>
+    <div class="section">
+      <h2>Equity Curve</h2>
+      <div class="chart-wrap" id="chartWrap"></div>
+    </div>
+    <div class="section">
+      <h2>Trade Log</h2>
+      <div class="table-wrap" id="tradesWrap"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Run History</h2>
+    <div class="table-wrap" id="historyWrap"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var POLL_INTERVAL = 1500;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    opts.headers['Content-Type'] = 'application/json';
+    return fetch(path, opts).then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok) {
+          var err = new Error((data && data.error) || ('HTTP ' + r.status));
+          err.status = r.status;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function showError(msg) {
+    var b = $('errorBanner');
+    b.textContent = msg;
+    b.classList.remove('hidden');
+  }
+
+  function clearError() {
+    $('errorBanner').classList.add('hidden');
+  }
+
+  function setLoading(on, text) {
+    $('runBtn').disabled = on;
+    $('statusLine').classList.toggle('hidden', !on);
+    if (text) $('statusText').textContent = text;
+  }
+
+  function fmt(v, digits) {
+    if (v === null || v === undefined) return '—';
+    return Number(v).toFixed(digits === undefined ? 2 : digits);
+  }
+
+  function metricClass(v) {
+    if (v === null || v === undefined || v === 0) return '';
+    return v > 0 ? 'pos' : 'neg';
+  }
+
+  function renderMetrics(r) {
+    var grid = $('metricsGrid');
+    var items = [
+      { label: 'Win Rate', value: fmt(r.winrate, 1) + '%' },
+      { label: 'Profit Factor', value: fmt(r.profit_factor) },
+      { label: 'Expectancy', value: fmt(r.expectancy, 3) + '%', color: r.expectancy },
+      { label: 'Max Drawdown', value: '-' + fmt(r.max_drawdown, 2) + '%', color: r.max_drawdown },
+      { label: 'Total Trades', value: r.total_trades || 0 },
+      { label: 'Sharpe Ratio', value: fmt(r.sharpe_ratio), color: r.sharpe_ratio },
+    ];
+    grid.innerHTML = items.map(function (it) {
+      var cls = (it.color !== undefined && it.color !== null && it.color !== 0)
+        ? (it.color > 0 ? 'pos' : 'neg') : '';
+      return '<div class="m-card"><div class="m-label">' + it.label + '</div>' +
+             '<div class="m-value ' + cls + '">' + it.value + '</div></div>';
+    }).join('');
+  }
+
+  function renderEquity(curve) {
+    var wrap = $('chartWrap');
+    if (!curve || curve.length === 0) {
+      wrap.innerHTML = '<div style="color:#666;text-align:center;padding-top:80px">No data</div>';
+      return;
+    }
+    var W = 1000, H = 200, PAD = 8;
+    var min = Math.min.apply(null, curve);
+    var max = Math.max.apply(null, curve);
+    var span = (max - min) || 1;
+    function X(i) { return PAD + (i / (curve.length - 1)) * (W - 2 * PAD); }
+    function Y(v) { return H - PAD - ((v - min) / span) * (H - 2 * PAD); }
+
+    var grid = '';
+    for (var g = 0; g <= 4; g++) {
+      var gy = PAD + (g / 4) * (H - 2 * PAD);
+      grid += '<line class="chart-grid" x1="' + PAD + '" y1="' + gy + '" x2="' + (W - PAD) + '" y2="' + gy + '"/>';
+    }
+
+    var pts = curve.map(function (v, i) { return X(i) + ',' + Y(v); }).join(' ');
+    var poly = pts.split(' ').map(function (p) {
+      var xy = p.split(',');
+      return xy[0] + ',' + xy[1];
+    }).join(' ');
+
+    var svg =
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      grid +
+      '<polyline fill="none" stroke="var(--chart-1)" stroke-width="1.5" points="' + pts + '"/>' +
+      '<polygon fill="var(--chart-1)" fill-opacity="0.08" points="' + poly + ' ' + PAD + ',' + (H - PAD) + ' ' + (W - PAD) + ',' + (H - PAD) + '"/>' +
+      '</svg>';
+    wrap.innerHTML = svg;
+  }
+
+  function tradesTableHtml(trades) {
+    if (!trades || trades.length === 0) {
+      return '<table><tbody><tr><td class="empty">No trades</td></tr></tbody></table>';
+    }
+    var rows = trades.map(function (t) {
+      var dirCls = t.direction === 'BUY' ? 'badge-buy' : 'badge-sell';
+      var pnlCls = t.pnl_pct > 0 ? 'pnl-pos' : 'pnl-neg';
+      var outcome = (t.exit_reason || '').toUpperCase();
+      var time = (t.entry_timestamp || '').replace('T', ' ').substring(0, 16);
+      return '<tr>' +
+        '<td>' + time + '</td>' +
+        '<td class="' + dirCls + '">' + t.direction + '</td>' +
+        '<td>' + fmt(t.entry_price, 4) + '</td>' +
+        '<td>' + fmt(t.sl, 4) + '</td>' +
+        '<td>' + fmt(t.tp, 4) + '</td>' +
+        '<td>' + fmt(t.rr, 2) + '</td>' +
+        '<td>' + outcome + '</td>' +
+        '<td class="' + pnlCls + '">' + fmt(t.pnl_pct, 3) + '%</td>' +
+        '</tr>';
+    }).join('');
+    return '<table><thead><tr><th>Time</th><th>Direction</th><th>Entry</th><th>SL</th>' +
+      '<th>TP</th><th>RR</th><th>Outcome</th><th>PnL %</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderTrades(trades) {
+    $('tradesWrap').innerHTML = tradesTableHtml(trades);
+  }
+
+  function renderResult(r) {
+    $('resultSection').classList.remove('hidden');
+    renderMetrics(r);
+    renderEquity(r.equity_curve);
+    renderTrades(r.trades_log);
+  }
+
+  function statusBadge(status) {
+    return '<span class="st-' + status + '">' + status + '</span>';
+  }
+
+  function renderHistory(jobs) {
+    var wrap = $('historyWrap');
+    if (!jobs || jobs.length === 0) {
+      wrap.innerHTML = '<table><tbody><tr><td class="empty">No runs yet</td></tr></tbody></table>';
+      return;
+    }
+    var rows = jobs.map(function (j) {
+      var r = j.result || {};
+      return '<tr class="h-row" data-job="' + j.id + '">' +
+        '<td class="h-toggle-cell"><button class="h-toggle" data-job="' + j.id + '" title="Show trades">▸</button></td>' +
+        '<td><code style="font-family:var(--font-mono)">' + j.id + '</code></td>' +
+        '<td>' + j.symbol + '</td>' +
+        '<td>' + j.timeframe + '</td>' +
+        '<td>' + statusBadge(j.status) + '</td>' +
+        '<td>' + (r.winrate !== undefined ? fmt(r.winrate, 1) + '%' : '—') + '</td>' +
+        '<td>' + (r.profit_factor !== undefined ? fmt(r.profit_factor) : '—') + '</td>' +
+        '<td>' + (j.created_at || '').substring(0, 19).replace('T', ' ') + '</td>' +
+        '</tr>' +
+        '<tr class="h-details" data-job="' + j.id + '" style="display:none">' +
+        '<td colspan="8"><div class="h-detail-body"></div></td>' +
+        '</tr>';
+    }).join('');
+    wrap.innerHTML =
+      '<table><thead><tr><th></th><th>Job ID</th><th>Symbol</th><th>TF</th><th>Status</th>' +
+      '<th>WR</th><th>PF</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function loadHistory() {
+    return api('/api/backtest/list').then(function (data) {
+      var jobs = data.jobs || [];
+      renderHistory(jobs);
+      renderRunSelect(jobs);
+      return jobs;
+    }).catch(function (e) {
+      renderHistory([]);
+      renderRunSelect([]);
+      return [];
+    });
+  }
+
+  function runLabel(j) {
+    var r = j.result || {};
+    var wr = (r.winrate !== undefined && r.winrate !== null) ? fmt(r.winrate, 1) + '%' : '—';
+    var trades = (r.total_trades !== undefined && r.total_trades !== null) ? r.total_trades : '—';
+    var when = (j.created_at || '').substring(0, 16).replace('T', ' ');
+    return j.symbol + ' · ' + j.timeframe + ' · ' + when + ' · WR ' + wr + ' · ' + trades + ' trades';
+  }
+
+  function renderRunSelect(jobs, selectedId) {
+    var sel = $('runSelect');
+    var completed = (jobs || []).filter(function (j) {
+      return j.status === 'completed' && j.result && j.result.total_trades !== undefined;
+    });
+    sel.innerHTML = '<option value="">Saved runs…</option>' + completed.map(function (j) {
+      return '<option value="' + j.id + '"' + (j.id === selectedId ? ' selected' : '') + '>' +
+        runLabel(j).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    }).join('');
+    sel.disabled = completed.length === 0;
+  }
+
+  function selectRun(jobId) {
+    if (!jobId) return;
+    api('/api/backtest/result/' + jobId).then(function (data) {
+      var res = (data.job && data.job.result) || {};
+      renderResult(res);
+    }).catch(function (e) {
+      showError('Failed to load run: ' + e.message);
+    });
+  }
+
+  $('runSelect').addEventListener('change', function () {
+    clearError();
+    selectRun(this.value);
+  });
+
+  // After a page refresh the stats must not disappear: auto-render the most
+  // recent completed run from the server-side history.
+  function restoreLastRun(jobs) {
+    var completed = (jobs || []).filter(function (j) {
+      return j.status === 'completed' && j.result;
+    });
+    if (completed.length === 0) return;
+    var last = completed[0];
+    $('runSelect').value = last.id;
+    renderRunSelect(jobs, last.id);
+    selectRun(last.id);
+  }
+
+  function toggleJob(jobId, btn) {
+    var detailsRow = document.querySelector('.h-details[data-job="' + jobId + '"]');
+    if (!detailsRow) return;
+    var body = detailsRow.querySelector('.h-detail-body');
+    var isOpen = detailsRow.style.display !== 'none';
+    if (isOpen) {
+      detailsRow.style.display = 'none';
+      btn.textContent = '▸';
+      return;
+    }
+    detailsRow.style.display = '';
+    btn.textContent = '▾';
+    body.innerHTML = '<div style="color:#888;text-align:center;padding:8px">Loading trades...</div>';
+    api('/api/backtest/result/' + jobId).then(function (data) {
+      var res = (data.job && data.job.result) || {};
+      body.innerHTML = tradesTableHtml(res.trades_log || []);
+    }).catch(function (e) {
+      body.innerHTML = '<div style="color:var(--red);text-align:center;padding:8px">Failed to load: ' + e.message + '</div>';
+    });
+  }
+
+  $('historyWrap').addEventListener('click', function (e) {
+    var btn = e.target.closest('.h-toggle');
+    if (!btn) return;
+    toggleJob(btn.getAttribute('data-job'), btn);
+  });
+
+  function poll(jobId) {
+    setLoading(true, 'Running backtest...');
+    var timer = setInterval(function () {
+      api('/api/backtest/status/' + jobId).then(function (job) {
+        if (job.status === 'completed') {
+          clearInterval(timer);
+          setLoading(false);
+          return api('/api/backtest/result/' + jobId).then(function (data) {
+            renderResult(data.job.result || {});
+            loadHistory().then(function () {
+              var option = $('runSelect').querySelector('option[value="' + jobId + '"]');
+              if (option) $('runSelect').value = jobId;
+            });
+          });
+        }
+        if (job.status === 'failed') {
+          clearInterval(timer);
+          setLoading(false);
+          showError('Backtest failed: ' + (job.error || 'unknown error'));
+          loadHistory();
+        }
+      }).catch(function (e) {
+        clearInterval(timer);
+        setLoading(false);
+        showError('Polling error: ' + e.message);
+      });
+    }, POLL_INTERVAL);
+  }
+
+  function run() {
+    clearError();
+    $('resultSection').classList.add('hidden');
+    var payload = {
+      symbol: $('symbol').value,
+      timeframe: $('timeframe').value,
+      start_date: $('startDate').value,
+      end_date: $('endDate').value,
+      market_type: $('marketType').value,
+    };
+    setLoading(true, 'Starting...');
+    api('/api/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
+      .then(function (data) {
+        poll(data.job_id);
+      })
+      .catch(function (e) {
+        setLoading(false);
+        showError('Failed to start backtest: ' + e.message);
+      });
+  }
+
+  $('runBtn').addEventListener('click', run);
+
+  loadHistory().then(restoreLastRun);
+})();
+</script>
+</body>
+</html>

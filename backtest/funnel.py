@@ -238,7 +238,7 @@ async def run_funnel_one(symbol: str, candles: int) -> SymbolFunnel:
     if enriched_df is None:
         return funnel
 
-    warmup = 80
+    warmup = max(80, config.trading.candles_limit // 2)
     df = enriched_df.iloc[-(candles + 60):] if len(enriched_df) > candles + 60 else enriched_df
     confirm_df = cached_15m
 

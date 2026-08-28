@@ -69,6 +69,7 @@ from strategy.pattern_engine import pattern_engine
 from strategy.feature_builder import feature_builder, _SESSION_MAP
 from strategy.probability_engine import probability_engine
 from strategy.trade_engine import trade_engine
+from strategy.signal_evaluator import entry_zone_touched
 from risk.engine import risk_engine, PortfolioState
 from risk.volatility_regime import classify_volatility
 from scheduler.scanner import _detect_regime
@@ -322,8 +323,11 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
                     _htf_bias_penalty = config.htf_bias_continuation_penalty
 
         # ── Entry zone (opt-in hard gate, same as live) ──
-        if not setup.entry_armed and config.require_entry_zone:
-            continue
+        if config.require_entry_zone:
+            _bar_high = float(ind.high) if ind.high else float(ind.close)
+            _bar_low = float(ind.low) if ind.low else float(ind.close)
+            if not entry_zone_touched(setup.direction, fvgs, _bar_high, _bar_low):
+                continue
 
         # ── Phase 1.5: trade plan (SL/TP) ──
         try:

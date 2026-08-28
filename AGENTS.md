@@ -57,6 +57,15 @@ is `plan/14-env-config.md`. Update those files when behavior changes, not this o
   Blocks buy continuations against bearish HTF bias (W1→D1→H4→H1 EMA).
 - **Premium/Discount zones** are OFF (`config.premium_discount = False`). A/B showed
   they hurt performance (PF 1.28→0.91). Revisit after 500+ live trades with v2.
+- **Per-FVG dedup** prevents re-entry on the same FVG (type+top+bottom). Once an FVG
+  has produced a trade, it is blocked for the rest of the backtest. This eliminates
+  duplicate entries at the same phantom price.
+- **Max-duration exit** (`MAX_TRADE_DURATION_BARS`, default 72): trades that neither
+  hit SL nor TP within this many bars are closed at the current close price. Prevents
+  stale trades from dragging down win rate. Set to 0 to disable.
+- **TP scoring** uses power-scaled RR factor: `min(1.0, (rr/3.0)^0.6)` instead of
+  linear cap. This rewards higher-RR targets (RR=3→0.72, RR=5→0.86, RR=10→1.0)
+  instead of the old behavior where RR>=3 all scored equally.
 
 ## Scheduler
 

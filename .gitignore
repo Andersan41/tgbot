@@ -42,3 +42,6 @@ ohlcv_cache/
 reports/feasibility/dataset_summary.json
 reports/feasibility/train_metrics.json
 reports/funnel/funnel_full_new1.json
+
+# Runtime backtest history (web dashboard dropdown)
+web/backtest_history.json

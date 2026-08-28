@@ -58,22 +58,22 @@ def detect_fvg(
     if len(data) < 3:
         return []
 
+    highs = data["high"].to_numpy(dtype=float)
+    lows = data["low"].to_numpy(dtype=float)
+    index = data.index
+
     fvgs: list[FairValueGap] = []
 
     for i in range(1, len(data) - 1):
-        candle1 = data.iloc[i - 1]
-        candle2 = data.iloc[i]
-        candle3 = data.iloc[i + 1]
-
-        high1 = float(candle1["high"])
-        low1 = float(candle1["low"])
-        high3 = float(candle3["high"])
-        low3 = float(candle3["low"])
+        high1 = highs[i - 1]
+        low1 = lows[i - 1]
+        high3 = highs[i + 1]
+        low3 = lows[i + 1]
 
         if low3 > high1:
             gap_size_pct = (low3 - high1) / high1 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(data.index[i])
+                ts = _to_datetime(index[i])
                 fvgs.append(FairValueGap(
                     type="bullish",
                     top=low3,
@@ -85,7 +85,7 @@ def detect_fvg(
         if high3 < low1:
             gap_size_pct = (low1 - high3) / high3 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(data.index[i])
+                ts = _to_datetime(index[i])
                 fvgs.append(FairValueGap(
                     type="bearish",
                     top=low1,
@@ -96,10 +96,18 @@ def detect_fvg(
 
     # Проверка: какие FVG уже закрыты ценой
     for fvg in fvgs:
-        candles_after = data.iloc[fvg.index + 1:]  # свечи ПОСЛЕ формирования
-        fvg.filled = _is_fvg_filled(fvg, candles_after)
+        fvg.filled = _is_fvg_filled_np(fvg, highs[fvg.index + 1:], lows[fvg.index + 1:])
 
     return fvgs
+
+
+def _is_fvg_filled_np(fvg: FairValueGap, after_highs, after_lows) -> bool:
+    """Numpy-backed fill check — same logic as _is_fvg_filled."""
+    if fvg.type == "bullish":
+        return bool((after_lows <= fvg.top).any())
+    elif fvg.type == "bearish":
+        return bool((after_highs >= fvg.bottom).any())
+    return False
 
 
 def _is_fvg_filled(fvg: FairValueGap, candles_after: pd.DataFrame) -> bool:

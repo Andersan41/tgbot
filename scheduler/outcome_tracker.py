@@ -207,11 +207,13 @@ async def check_open_outcomes() -> None:
         _symbol_fail_count.pop(signal.symbol, None)
 
         # Also check recent candle high/low to catch TP/SL spikes
-        # that happened between tracker intervals
+        # that happened between tracker intervals.
+        # drop_last=False: включаем текущую незавершённую свечу, чтобы
+        # не пропустить SL/TP на актуальном баре.
         candle_high = current_price
         candle_low = current_price
         try:
-            candle_df = await exchange_client.fetch_ohlcv(signal.symbol, signal.timeframe, limit=2)
+            candle_df = await exchange_client.fetch_ohlcv(signal.symbol, signal.timeframe, limit=2, drop_last=False)
             if candle_df is not None and len(candle_df) >= 1:
                 last_candle = candle_df.iloc[-1]
                 candle_high = float(last_candle["high"])

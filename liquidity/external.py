@@ -65,33 +65,37 @@ def detect_external_liquidity(
     if len(data) < swing_window * 3:
         return []
 
+    highs = data["high"].to_numpy(dtype=float)
+    lows = data["low"].to_numpy(dtype=float)
+    vols = data["volume"].to_numpy(dtype=float)
+    index = data.index
+
     # Find all swing points
     swing_highs = []
     swing_lows = []
 
     for i in range(swing_window, len(data) - swing_window):
-        window = data.iloc[i - swing_window: i + swing_window + 1]
-        high = data.iloc[i]["high"]
-        low = data.iloc[i]["low"]
+        high = highs[i]
+        low = lows[i]
 
         # Swing high: highest high in window
-        if high == window["high"].max():
-            ts = data.index[i] if hasattr(data.index[i], 'hour') else datetime.now()
+        if high == highs[i - swing_window: i + swing_window + 1].max():
+            ts = index[i] if hasattr(index[i], 'hour') else datetime.now()
             swing_highs.append({
                 "price": high,
                 "index": i,
                 "timestamp": ts,
-                "volume": float(data.iloc[i]["volume"]),
+                "volume": float(vols[i]),
             })
 
         # Swing low: lowest low in window
-        if low == window["low"].min():
-            ts = data.index[i] if hasattr(data.index[i], 'hour') else datetime.now()
+        if low == lows[i - swing_window: i + swing_window + 1].min():
+            ts = index[i] if hasattr(index[i], 'hour') else datetime.now()
             swing_lows.append({
                 "price": low,
                 "index": i,
                 "timestamp": ts,
-                "volume": float(data.iloc[i]["volume"]),
+                "volume": float(vols[i]),
             })
 
     # Current range (last N candles)

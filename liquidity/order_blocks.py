@@ -97,43 +97,47 @@ def detect_order_blocks(
     if len(data) < 5:
         return []
 
+    _open = data["open"].to_numpy(dtype=float)
+    _high = data["high"].to_numpy(dtype=float)
+    _low = data["low"].to_numpy(dtype=float)
+    _close = data["close"].to_numpy(dtype=float)
+    _vol = data["volume"].to_numpy(dtype=float)
+    n = len(data)
+
     atr = _calc_atr(data)
-    avg_vol = data["volume"].mean()
-    swing_highs = _find_swing_highs(data)
-    swing_lows = _find_swing_lows(data)
+    avg_vol = float(_vol.mean())
+    swing_highs = _find_swing_highs_np(_high)
+    swing_lows = _find_swing_lows_np(_low)
 
     blocks: list[OrderBlock] = []
 
-    for i in range(1, len(data) - 2):
-        candle = data.iloc[i]
-        next_candle = data.iloc[i + 1]
-
-        body = abs(float(candle["close"]) - float(candle["open"]))
-        range_val = float(candle["high"]) - float(candle["low"])
+    for i in range(1, n - 2):
+        body = abs(_close[i] - _open[i])
+        range_val = _high[i] - _low[i]
         if range_val == 0:
             continue
 
-        is_bearish_candle = float(candle["close"]) < float(candle["open"])
-        is_bullish_candle = float(candle["close"]) > float(candle["open"])
+        is_bearish_candle = _close[i] < _open[i]
+        is_bullish_candle = _close[i] > _open[i]
 
         if is_bearish_candle:
-            next_move_pct = (float(next_candle["close"]) - float(candle["low"])) / float(candle["low"]) * 100
+            next_move_pct = (_close[i + 1] - _low[i]) / _low[i] * 100
             if next_move_pct >= displacement_pct:
-                move_size = float(next_candle["close"]) - float(candle["low"])
+                move_size = _close[i + 1] - _low[i]
                 disp_atr = move_size / atr if atr > 0 else 0.0
-                vol_ratio = float(data["volume"].iloc[i + 1]) / avg_vol if avg_vol > 0 else 1.0
-                has_bos = _check_bos_bullish(data, i + 1, swing_highs)
+                vol_ratio = _vol[i + 1] / avg_vol if avg_vol > 0 else 1.0
+                has_bos = _check_bos_bullish_np(_high, i + 1, swing_highs)
 
                 if require_bos and not has_bos:
                     continue
 
                 ts = _to_datetime(data.index[i])
-                retested, reaction = _check_retest_bullish(data, i, float(candle["high"]), float(candle["low"]))
+                retested, reaction = _check_retest_bullish_np(_low, _close, i, _high[i], _low[i])
 
                 blocks.append(OrderBlock(
                     type="bullish",
-                    high=float(candle["high"]),
-                    low=float(candle["low"]),
+                    high=_high[i],
+                    low=_low[i],
                     timestamp=ts,
                     candle_index=i,
                     displacement_atr=round(disp_atr, 3),
@@ -144,23 +148,23 @@ def detect_order_blocks(
                 ))
 
         if is_bullish_candle:
-            next_move_pct = (float(candle["high"]) - float(next_candle["close"])) / float(candle["high"]) * 100
+            next_move_pct = (_high[i] - _close[i + 1]) / _high[i] * 100
             if next_move_pct >= displacement_pct:
-                move_size = float(candle["high"]) - float(next_candle["close"])
+                move_size = _high[i] - _close[i + 1]
                 disp_atr = move_size / atr if atr > 0 else 0.0
-                vol_ratio = float(data["volume"].iloc[i + 1]) / avg_vol if avg_vol > 0 else 1.0
-                has_bos = _check_bos_bearish(data, i + 1, swing_lows)
+                vol_ratio = _vol[i + 1] / avg_vol if avg_vol > 0 else 1.0
+                has_bos = _check_bos_bearish_np(_low, i + 1, swing_lows)
 
                 if require_bos and not has_bos:
                     continue
 
                 ts = _to_datetime(data.index[i])
-                retested, reaction = _check_retest_bearish(data, i, float(candle["high"]), float(candle["low"]))
+                retested, reaction = _check_retest_bearish_np(_high, _close, i, _high[i], _low[i])
 
                 blocks.append(OrderBlock(
                     type="bearish",
-                    high=float(candle["high"]),
-                    low=float(candle["low"]),
+                    high=_high[i],
+                    low=_low[i],
                     timestamp=ts,
                     candle_index=i,
                     displacement_atr=round(disp_atr, 3),
@@ -170,7 +174,7 @@ def detect_order_blocks(
                     retest_reaction=reaction,
                 ))
 
-    blocks = _filter_by_age(blocks, len(data), max_age_candles)
+    blocks = _filter_by_age(blocks, n, max_age_candles)
     return blocks
 
 
@@ -255,6 +259,72 @@ def _check_retest_bearish(df: pd.DataFrame, ob_idx: int, ob_high: float, ob_low:
         if high >= ob_low and high <= ob_high:
             reaction = high - close
             return True, reaction
+    return False, None
+
+
+def _find_swing_highs_np(arr, window: int = 5) -> list[dict]:
+    """Numpy-backed swing highs (local maxima) — same logic as _find_swing_highs."""
+    highs = []
+    for i in range(window, len(arr) - window):
+        if arr[i] == arr[i - window: i + window + 1].max():
+            highs.append({"index": i, "price": float(arr[i])})
+    return highs
+
+
+def _find_swing_lows_np(arr, window: int = 5) -> list[dict]:
+    """Numpy-backed swing lows (local minima) — same logic as _find_swing_lows."""
+    lows = []
+    for i in range(window, len(arr) - window):
+        if arr[i] == arr[i - window: i + window + 1].min():
+            lows.append({"index": i, "price": float(arr[i])})
+    return lows
+
+
+def _check_bos_bullish_np(high, start_idx: int, swing_highs: list[dict], look_ahead: int = 20) -> bool:
+    """Numpy-backed BOS check — same logic as _check_bos_bullish."""
+    relevant_highs = [s for s in swing_highs if s["index"] < start_idx]
+    if not relevant_highs:
+        return False
+    prev_swing_high = max(relevant_highs, key=lambda s: s["index"])["price"]
+    end = min(start_idx + look_ahead, len(high))
+    for j in range(start_idx, end):
+        if float(high[j]) > prev_swing_high:
+            return True
+    return False
+
+
+def _check_bos_bearish_np(low, start_idx: int, swing_lows: list[dict], look_ahead: int = 20) -> bool:
+    """Numpy-backed BOS check — same logic as _check_bos_bearish."""
+    relevant_lows = [s for s in swing_lows if s["index"] < start_idx]
+    if not relevant_lows:
+        return False
+    prev_swing_low = min(relevant_lows, key=lambda s: s["index"])["price"]
+    end = min(start_idx + look_ahead, len(low))
+    for j in range(start_idx, end):
+        if float(low[j]) < prev_swing_low:
+            return True
+    return False
+
+
+def _check_retest_bullish_np(low, close, ob_idx: int, ob_high: float, ob_low: float, max_lookahead: int = 30) -> tuple[bool, Optional[float]]:
+    """Numpy-backed bullish retest check — same logic as _check_retest_bullish."""
+    end = min(ob_idx + max_lookahead, len(low))
+    for j in range(ob_idx + 1, end):
+        l = float(low[j])
+        c = float(close[j])
+        if l <= ob_high and l >= ob_low:
+            return True, c - l
+    return False, None
+
+
+def _check_retest_bearish_np(high, close, ob_idx: int, ob_high: float, ob_low: float, max_lookahead: int = 30) -> tuple[bool, Optional[float]]:
+    """Numpy-backed bearish retest check — same logic as _check_retest_bearish."""
+    end = min(ob_idx + max_lookahead, len(high))
+    for j in range(ob_idx + 1, end):
+        h = float(high[j])
+        c = float(close[j])
+        if h >= ob_low and h <= ob_high:
+            return True, h - c
     return False, None
 
 

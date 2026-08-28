@@ -55,14 +55,24 @@ class TradeEngine:
 
         # ═══ FVG ENTRY: use median (50%) of active FVG as entry price ═══
         if fvgs:
+            fvg_proximity_pct = config.pattern_engine.fvg_proximity_pct
             for f in fvgs:
                 f_dir = "buy" if f.type == "bullish" else "sell" if f.type == "bearish" else f.type
                 if f.is_active and f_dir == direction:
                     fvg_median = (f.top + f.bottom) / 2.0
+                    dist_pct = abs(fvg_median - entry) / entry * 100
+                    if dist_pct > fvg_proximity_pct:
+                        logger.debug(
+                            f"FVG entry skipped: median {fvg_median:.4f} is "
+                            f"{dist_pct:.1f}% from price {entry:.4f} "
+                            f"(max {fvg_proximity_pct}%)"
+                        )
+                        continue
                     entry = round(fvg_median, 8)
                     logger.debug(
                         f"FVG entry: using median {entry:.4f} "
-                        f"(top={f.top:.4f}, bottom={f.bottom:.4f}, type={f.type})"
+                        f"(top={f.top:.4f}, bottom={f.bottom:.4f}, type={f.type}, "
+                        f"dist={dist_pct:.1f}%)"
                     )
                     break
 
@@ -188,12 +198,6 @@ class TradeEngine:
                     f"SL adjusted above candle high: {sl:.4f} "
                     f"(candle_high={candle_high:.4f}, spread={spread_buffer:.6f}, "
                     f"tick={tick_buffer:.6f}, atr_buf={atr_buffer:.6f})"
-                )
-            elif signal == SignalType.SELL and sl <= candle_high:
-                sl = round(candle_high + atr * 0.10, 8)
-                logger.debug(
-                    f"SL adjusted above candle high: {sl:.4f} "
-                    f"(candle_high={candle_high:.4f}, atr={atr:.4f})"
                 )
 
         # ═══ Step 3: Find Targets (TP) ═══
