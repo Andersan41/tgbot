@@ -34,6 +34,10 @@ full_test_output.txt
 err.txt
 out.txt
 stdout.txt
+pytest_err.txt
+pytest_output.txt
+pytest_result.txt
+pytest_final.txt
 /tests/tmp*/
 _reports_out/
 ohlcv_cache/
