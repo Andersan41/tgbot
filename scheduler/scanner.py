@@ -833,9 +833,27 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         # ═══ Phase 4: Risk Engine ═══
 
+        # Re-check portfolio state (may have changed during pipeline)
+        _recheck_active = await db.get_active_signals_count()
+        _recheck_risk = await db.get_portfolio_risk_sum()
+        if _recheck_active >= config.max_active_signals:
+            reason = f"max active signals ({_recheck_active}/{config.max_active_signals}) [re-check]"
+            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk_recheck", "BLOCKED", reason)
+            trace.blocked("portfolio_risk_recheck", reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            return None
+        if _recheck_risk >= config.max_portfolio_risk_pct:
+            reason = f"portfolio risk {_recheck_risk:.1f}% >= {config.max_portfolio_risk_pct}% [re-check]"
+            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk_recheck", "BLOCKED", reason)
+            trace.blocked("portfolio_risk_recheck", reason)
+            trace.set_version(VERSION, build_config_snapshot())
+            await trace.save(db)
+            return None
+
         portfolio_state = PortfolioState(
-            active_count=active_count,
-            total_risk_pct=portfolio_risk,
+            active_count=_recheck_active,
+            total_risk_pct=_recheck_risk,
             max_active_signals=config.max_active_signals,
             max_portfolio_risk_pct=config.max_portfolio_risk_pct,
         )

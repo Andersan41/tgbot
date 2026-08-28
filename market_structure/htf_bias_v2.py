@@ -53,9 +53,10 @@ def get_tf_bias(df: pd.DataFrame, use_structure: bool = True) -> tuple[str, floa
     """
     Определяет bias для одного таймфрейма.
     Returns: (direction, confidence)
+    direction: 'bullish', 'bearish', 'neutral', 'unknown' (insufficient data)
     """
     if df is None or len(df) < 55:
-        return 'neutral', 0.0
+        return 'unknown', 0.0
 
     ema21 = df['close'].ewm(span=21).mean().iloc[-1]
     ema55 = df['close'].ewm(span=55).mean().iloc[-1]
@@ -102,12 +103,18 @@ def get_htf_bias_v2(
     h4_bias, h4_conf = get_tf_bias(df_4h, use_structure=True)
     h1_bias, h1_conf = get_tf_bias(df_1h, use_structure=False) if df_1h is not None else ('neutral', 0)
 
-    # Majority voting on W1, D1, H4
+    # Majority voting on W1, D1, H4 (exclude 'unknown' from voting)
     biases = [w1_bias, d1_bias, h4_bias]
-    bullish_count = biases.count('bullish')
-    bearish_count = biases.count('bearish')
+    known_biases = [b for b in biases if b != 'unknown']
+    unknown_count = biases.count('unknown')
+    bullish_count = known_biases.count('bullish')
+    bearish_count = known_biases.count('bearish')
 
-    if bullish_count >= 3:
+    if not known_biases:
+        # All unknown — insufficient data on all TFs
+        direction = 'neutral'
+        strength = BiasStrength.NEUTRAL
+    elif bullish_count >= 3:
         direction = 'bullish'
         strength = BiasStrength.STRONG
     elif bearish_count >= 3:
@@ -120,14 +127,14 @@ def get_htf_bias_v2(
         direction = 'bearish'
         strength = BiasStrength.MODERATE
     else:
-        # Check for weak majority
-        if w1_bias != 'neutral' and d1_bias == w1_bias:
+        # Check for weak majority (exclude 'unknown')
+        if w1_bias not in ('neutral', 'unknown') and d1_bias == w1_bias:
             direction = w1_bias
             strength = BiasStrength.WEAK
-        elif w1_bias != 'neutral' and h4_bias == w1_bias:
+        elif w1_bias not in ('neutral', 'unknown') and h4_bias == w1_bias:
             direction = w1_bias
             strength = BiasStrength.WEAK
-        elif d1_bias != 'neutral' and h4_bias == d1_bias:
+        elif d1_bias not in ('neutral', 'unknown') and h4_bias == d1_bias:
             direction = d1_bias
             strength = BiasStrength.WEAK
         else:

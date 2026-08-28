@@ -43,6 +43,7 @@ class ContextFetcher:
         # Последнее наблюдённое значение OI per-symbol — для расчёта дельты.
         # In-memory: после рестарта первый расчёт даст delta=0.0.
         self._last_oi: Dict[str, float] = {}
+        self._MAX_OI_CACHE = 200  # cap memory usage
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -229,6 +230,12 @@ class ContextFetcher:
             else:
                 delta_pct = 0.0
             self._last_oi[symbol] = current
+            # Cap memory: keep only most recent symbols
+            if len(self._last_oi) > self._MAX_OI_CACHE:
+                # Remove oldest half
+                keys = list(self._last_oi.keys())
+                for k in keys[:len(keys) // 2]:
+                    del self._last_oi[k]
             result = {
                 "open_interest": current,
                 "open_interest_delta": delta_pct,

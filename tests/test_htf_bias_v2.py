@@ -68,7 +68,7 @@ class TestGetTfBias:
     def test_neutral_short_dataframe(self):
         df = _make_neutral_df(n=10)
         direction, conf = get_tf_bias(df, use_structure=False)
-        assert direction == 'neutral'
+        assert direction == 'unknown'
         assert conf == 0.0
 
     def test_neutral_flat(self):
