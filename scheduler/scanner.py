@@ -521,6 +521,23 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         except Exception as e:
             logger.warning(f"Failed to fetch live ticker for {symbol}: {e}, using candle close as entry")
 
+        # ── Direction sanity: BUY entry must be ≤ live price, SELL entry ≥ live price ──
+        if _live_price and _live_price > 0:
+            if setup.direction == "buy" and entry_price > _live_price * 1.001:
+                reason = f"BUY entry {entry_price:.6f} > live price {_live_price:.6f}"
+                _current_funnel.log_gate(symbol, timeframe, "direction_check", "BLOCKED", reason)
+                trace.blocked("direction_check", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+            if setup.direction == "sell" and entry_price < _live_price * 0.999:
+                reason = f"SELL entry {entry_price:.6f} < live price {_live_price:.6f}"
+                _current_funnel.log_gate(symbol, timeframe, "direction_check", "BLOCKED", reason)
+                trace.blocked("direction_check", reason)
+                trace.set_version(VERSION, build_config_snapshot())
+                await trace.save(db)
+                return None
+
         # ── Phase 1.46: Per-Symbol Overrides (shared with backtest) ──
         _sym_blocked, _sym_reason = apply_symbol_overrides(
             symbol=symbol,

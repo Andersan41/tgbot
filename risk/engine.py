@@ -130,7 +130,11 @@ class RiskEngine:
 
         # === SOFT GATES (log violations, don't block — Kelly sizing handles them) ===
 
-        _structural_sources = {"sweep_extreme", "ob_boundary", "swing_point", "bos_level", "structural"}
+        _structural_sources = {
+            "sweep_extreme", "ob_boundary", "swing_point",
+            "structure_break", "structural",  # invalidation.py produces both
+            "bos_level", "ob", "fractal", "bos",  # signal_engine.py / trade_engine.py
+        }
         _is_structural = sl_source and sl_source in _structural_sources
 
         if rr_ratio < self.min_rr_ratio:

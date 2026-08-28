@@ -375,7 +375,7 @@ class ExchangeClient:
         remaining = total_limit
 
         while remaining > 0:
-            batch_limit = min(remaining + 1, page_size)  # +1 for dropped last candle
+            batch_limit = min(remaining, page_size)
             params = {}
             if end_time_ms is not None:
                 params["endTime"] = end_time_ms
@@ -410,8 +410,8 @@ class ExchangeClient:
                 f"oldest={df.index[0]}, remaining={remaining}"
             )
 
-            # Safety: stop if we got a full batch (no more历史 data available)
-            if len(raw) < batch_limit - 5:
+            # Safety: stop if we got significantly less than requested
+            if len(raw) < batch_limit - 3:
                 break
 
             # Small delay between pages

@@ -54,13 +54,13 @@ def detect_fvg(
     if min_size_pct is None:
         min_size_pct = getattr(config, "liquidity_fvg_min_size_pct", 0.3)
 
-    data = df.tail(lookback).reset_index(drop=True)
+    data = df.tail(lookback).reset_index(drop=False)
     if len(data) < 3:
         return []
 
     highs = data["high"].to_numpy(dtype=float)
     lows = data["low"].to_numpy(dtype=float)
-    index = data.index
+    _orig_index = data.index.tolist()  # preserve original datetime index
 
     fvgs: list[FairValueGap] = []
 
@@ -73,7 +73,7 @@ def detect_fvg(
         if low3 > high1:
             gap_size_pct = (low3 - high1) / high1 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(index[i])
+                ts = _to_datetime(_orig_index[i])
                 fvgs.append(FairValueGap(
                     type="bullish",
                     top=low3,
@@ -85,7 +85,7 @@ def detect_fvg(
         if high3 < low1:
             gap_size_pct = (low1 - high3) / high3 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(index[i])
+                ts = _to_datetime(_orig_index[i])
                 fvgs.append(FairValueGap(
                     type="bearish",
                     top=low1,

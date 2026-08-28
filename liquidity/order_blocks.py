@@ -93,10 +93,11 @@ def detect_order_blocks(
     if retest_required is None:
         retest_required = getattr(config, "liquidity_ob_retest_required", False)
 
-    data = df.tail(lookback).reset_index(drop=True)
+    data = df.tail(lookback).reset_index(drop=False)
     if len(data) < 5:
         return []
 
+    _orig_index = data.index.tolist()  # preserve original datetime index
     _open = data["open"].to_numpy(dtype=float)
     _high = data["high"].to_numpy(dtype=float)
     _low = data["low"].to_numpy(dtype=float)
@@ -131,7 +132,7 @@ def detect_order_blocks(
                 if require_bos and not has_bos:
                     continue
 
-                ts = _to_datetime(data.index[i])
+                ts = _to_datetime(_orig_index[i])
                 retested, reaction = _check_retest_bullish_np(_low, _close, i, _high[i], _low[i])
 
                 blocks.append(OrderBlock(
@@ -158,7 +159,7 @@ def detect_order_blocks(
                 if require_bos and not has_bos:
                     continue
 
-                ts = _to_datetime(data.index[i])
+                ts = _to_datetime(_orig_index[i])
                 retested, reaction = _check_retest_bearish_np(_high, _close, i, _high[i], _low[i])
 
                 blocks.append(OrderBlock(

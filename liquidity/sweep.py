@@ -86,7 +86,7 @@ def detect_sweeps(
     Returns:
         List of SweepEvent objects.
     """
-    data = df.tail(lookback).reset_index(drop=True)
+    data = df.tail(lookback).reset_index(drop=False)
     if len(data) < swing_window * 2 + 2:
         return []
 
@@ -98,7 +98,7 @@ def detect_sweeps(
     _low = data["low"].to_numpy(dtype=float)
     _close = data["close"].to_numpy(dtype=float)
     _vol = data["volume"].to_numpy(dtype=float)
-    _idx = data.index
+    _orig_index = data.index.tolist()  # preserve original datetime index
 
     sweeps: list[SweepEvent] = []
 
@@ -106,7 +106,7 @@ def detect_sweeps(
     swing_lows = _find_swing_lows_np(_low, swing_window)
 
     for i in range(len(data) - 1):
-        ts = _to_datetime(_idx[i])
+        ts = _to_datetime(_orig_index[i])
 
         for swing_high in swing_highs:
             if swing_high["index"] >= i:

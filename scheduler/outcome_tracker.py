@@ -16,6 +16,7 @@ from data.exchange_client import exchange_client
 from storage.database import db
 from config.settings import config
 # from strategy.scenario_memory import scenario_memory, ScenarioOutcomeRecord  # DELETED module
+_SCENARIO_MEMORY_AVAILABLE = False
 
 
 OUTCOME_CHECK_INTERVAL_SECONDS = int(
@@ -354,6 +355,8 @@ def _record_hypothesis_outcome(
     Extracts hypothesis data from DecisionTrace.hypothesis_snapshot JSON
     and creates a ScenarioOutcomeRecord.
     """
+    if not _SCENARIO_MEMORY_AVAILABLE:
+        return
     try:
         if not trace_row.hypothesis_snapshot:
             return

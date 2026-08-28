@@ -339,9 +339,17 @@ class PatternEngine:
                 direction = "buy"
             elif mss.type == "bearish":
                 direction = "sell"
-            # Bars between sweep and MSS
+            # Bars between sweep and MSS — MSS MUST come after sweep
             if sweep_candle_index >= 0 and mss.candle_index >= 0:
-                sweep_to_mss = max(0, mss.candle_index - sweep_candle_index)
+                if mss.candle_index <= sweep_candle_index:
+                    # MSS happened before or at same time as sweep — causality violated
+                    return ICTSetup(
+                        detected=False,
+                        has_sweep=has_sweep, sweep_type=sweep_type,
+                        has_displacement=has_displacement,
+                        rejection_reason="reversal: MSS before sweep (causality violated)",
+                    )
+                sweep_to_mss = mss.candle_index - sweep_candle_index
 
         if not has_mss:
             return ICTSetup(
@@ -358,6 +366,26 @@ class PatternEngine:
                 has_displacement=has_displacement,
                 has_mss=has_mss,
                 rejection_reason="reversal: MSS direction unclear",
+            )
+
+        # Direction consistency: sweep and MSS must agree
+        # Bullish reversal: sweep=bullish (swept lows) + MSS=bullish (CHoCH up)
+        # Bearish reversal: sweep=bearish (swept highs) + MSS=bearish (CHoCH down)
+        if direction == "buy" and sweep_type != "bullish":
+            return ICTSetup(
+                detected=False,
+                has_sweep=has_sweep, sweep_type=sweep_type,
+                has_displacement=has_displacement,
+                has_mss=has_mss,
+                rejection_reason=f"reversal: sweep type '{sweep_type}' != 'bullish' for buy",
+            )
+        if direction == "sell" and sweep_type != "bearish":
+            return ICTSetup(
+                detected=False,
+                has_sweep=has_sweep, sweep_type=sweep_type,
+                has_displacement=has_displacement,
+                has_mss=has_mss,
+                rejection_reason=f"reversal: sweep type '{sweep_type}' != 'bearish' for sell",
             )
 
         return ICTSetup(
