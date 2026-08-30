@@ -325,7 +325,7 @@ class ExchangeClient:
         async with self._semaphore:
             raw = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: self._fetch_ohlcv_raw(
-                    symbol, timeframe, limit, since=since, drop_last=False,
+                    symbol, timeframe, limit, since=since, drop_last=drop_last,
                     end_time=end_time,
                 )
             )
@@ -345,8 +345,7 @@ class ExchangeClient:
             if taker_buy_volumes and len(taker_buy_volumes) == len(raw):
                 df["taker_buy_volume"] = taker_buy_volumes[:len(raw)]
 
-            if drop_last and len(df) > 1:
-                df = df.iloc[:-1]
+            # drop_last is already handled by _fetch_ohlcv_raw — no second drop needed.
 
         logger.debug(f"Fetched {len(df)} candles: {symbol} {timeframe}")
         return df

@@ -111,6 +111,9 @@ def detect_sweeps(
         for swing_high in swing_highs:
             if swing_high["index"] >= i:
                 continue
+            # Guard: confirm candle (i+1) must exist
+            if i + 1 >= len(_close):
+                continue
             if _high[i] > swing_high["price"] and _close[i + 1] < swing_high["price"]:
                 volume_ratio = _calc_volume_ratio_np(_vol, i)
                 reclaim = _count_candles_to_reclaim_bearish_np(_close, i, swing_high["price"])
@@ -134,6 +137,9 @@ def detect_sweeps(
 
         for swing_low in swing_lows:
             if swing_low["index"] >= i:
+                continue
+            # Guard: confirm candle (i+1) must exist
+            if i + 1 >= len(_close):
                 continue
             if _low[i] < swing_low["price"] and _close[i + 1] > swing_low["price"]:
                 volume_ratio = _calc_volume_ratio_np(_vol, i)

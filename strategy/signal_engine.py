@@ -53,7 +53,7 @@ class SignalResult:
     _has_leading_trigger: bool = False
     _regime: Optional[str] = None
     _regime_blocked: bool = False
-    _sl_source: Optional[Literal["bos", "atr"]] = None
+    _sl_source: Optional[str] = None  # ob, fractal, bos, atr, sweep_extreme, ob_boundary, structure_break, swing_point
     tp_source: str = ""  # external_liquidity | opposing_ob | active_fvg | swing | atr
     _swing_highs_1h: List[float] = field(default_factory=list)
     _swing_lows_1h: List[float] = field(default_factory=list)
@@ -188,7 +188,7 @@ def _calculate_sl_tp(
     sweeps: Optional[list] = None,
     fvgs: Optional[list] = None,
     df: Any = None,
-) -> tuple[float, float, Literal["ob", "fractal", "bos", "atr"]]:
+) -> tuple[float, float, str]:
     """Calculate SL/TP using ICT priority chain: OB > Fractal > BOS > ATR.
 
     SL Priority:

@@ -231,6 +231,10 @@ class BacktestConfig:
     enable_htf_bias_gate: bool = True
     min_p_tp: float = 0.0
     min_score_for_signal: Optional[int] = None
+    # Intrabar SL/TP resolution model:
+    #   "conservative" — SL checked first on same bar (default, matches live)
+    #   "optimistic"   — TP checked first on same bar
+    intrabar_model: Literal["conservative", "optimistic"] = "conservative"
 
 
 # Preset definitions: name → dict of BacktestConfig field overrides
@@ -557,6 +561,11 @@ class BacktestEngine:
                 pending_orders = _alive
 
             # --- Exit check (all open positions) ---
+            # Intrabar model: when SL and TP are both hit on the same bar,
+            # the order of checking determines the outcome.
+            #   "conservative" (default): SL first → pessimistic, matches live exchange fills
+            #   "optimistic": TP first → best-case fill order
+            _intrabar = getattr(self.bt_config, "intrabar_model", "conservative")
             if open_trades:
                 high, low = float(ind.high), float(ind.low)
                 _close_price = float(ind.close)
@@ -566,12 +575,23 @@ class BacktestEngine:
                     if t.direction == "BUY":
                         t.mfe_pct = max(t.mfe_pct, (high - entry) / entry * 100)
                         t.mae_pct = min(t.mae_pct, (low - entry) / entry * 100)
-                        if low <= t.sl:
+                        _sl_hit = low <= t.sl
+                        _tp_hit = high >= t.tp
+                        if _sl_hit and _tp_hit:
+                            # Both on same bar — resolve by intrabar model
+                            if _intrabar == "optimistic":
+                                t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
+                            else:
+                                t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                        if _sl_hit:
                             t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
                             t.exit_timestamp = str(df.index[i])
                             trades.append(t)
                             continue
-                        if high >= t.tp:
+                        if _tp_hit:
                             t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
                             t.exit_timestamp = str(df.index[i])
                             trades.append(t)
@@ -579,12 +599,22 @@ class BacktestEngine:
                     else:
                         t.mfe_pct = max(t.mfe_pct, (entry - low) / entry * 100)
                         t.mae_pct = min(t.mae_pct, (entry - high) / entry * 100)
-                        if high >= t.sl:
+                        _sl_hit = high >= t.sl
+                        _tp_hit = low <= t.tp
+                        if _sl_hit and _tp_hit:
+                            if _intrabar == "optimistic":
+                                t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
+                            else:
+                                t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
+                            t.exit_timestamp = str(df.index[i])
+                            trades.append(t)
+                            continue
+                        if _sl_hit:
                             t.exit_price, t.exit_index, t.exit_reason = t.sl, i, "sl"
                             t.exit_timestamp = str(df.index[i])
                             trades.append(t)
                             continue
-                        if low <= t.tp:
+                        if _tp_hit:
                             t.exit_price, t.exit_index, t.exit_reason = t.tp, i, "tp"
                             t.exit_timestamp = str(df.index[i])
                             trades.append(t)
@@ -677,6 +707,7 @@ class BacktestEngine:
                     candle_quality=candle_quality,
                     current_price=ind.close,
                     atr=ind.atr if ind.atr else 0.0,
+                    df=_df_clean,
                 )
 
                 if not setup.detected:
@@ -685,6 +716,38 @@ class BacktestEngine:
                     if self.instrument:
                         _funnel_counts["NO_PATTERN"] += 1
                     continue
+
+                # === Phase 1.35: Direction / Symbol filter (live order) ===
+                if config.direction_filter.block_all_sell and setup.direction == "sell":
+                    reject_stats.other_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                _blocked_dir = config.direction_filter.blocked_symbol_directions.get(self.symbol)
+                if _blocked_dir is not None and setup.direction == _blocked_dir.lower():
+                    reject_stats.other_rejected += 1
+                    reject_stats.total_rejected += 1
+                    if self.instrument:
+                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                    continue
+
+                # === Phase 1.35: Confluence Mode (v3.0) ===
+                from config.settings import STRATEGY_MODE, StrategyMode
+                if STRATEGY_MODE == StrategyMode.CONFLUENCE:
+                    if setup.setup_type == "reversal":
+                        reject_stats.other_rejected += 1
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                        continue
+                    if setup.setup_type == "continuation" and not setup.has_ob:
+                        reject_stats.other_rejected += 1
+                        reject_stats.total_rejected += 1
+                        if self.instrument:
+                            _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
+                        continue
 
                 # === Phase 1.4: Setup-Type-Specific Gates ===
                 if self.bt_config.enable_pattern_engine_gates:
@@ -795,14 +858,6 @@ class BacktestEngine:
 
                 # === Phase 2: Analytics (inline) ===
                 atr_pct = (float(ind.atr) / float(ind.close) * 100) if ind.atr and ind.close > 0 else 0.0
-
-                # === Direction filter (live Phase 1.35) ===
-                if config.direction_filter.block_all_sell and setup.direction == "sell":
-                    reject_stats.other_rejected += 1
-                    reject_stats.total_rejected += 1
-                    if self.instrument:
-                        _funnel_counts["RISK_ENGINE_BLOCKED"] += 1
-                    continue
 
                 # === Per-symbol overrides (live Phase 1.46) ===
                 _ov_blocked, _ov_reason = apply_symbol_overrides(

@@ -33,6 +33,10 @@ SYMBOL_FETCH_FAIL_THRESHOLD = 3
 SYMBOL_FETCH_COOLDOWN_SECONDS = 600  # 10 min cooldown
 _symbol_fail_count: dict[str, int] = {}
 _symbol_cooldown_until: dict[str, datetime] = {}
+# Lock to protect _symbol_fail_count and _symbol_cooldown_until from
+# concurrent async access (race condition between check_open_outcomes
+# and parallel scanner tasks).
+_symbol_tracker_lock = asyncio.Lock()
 
 
 async def _send_close_notification(
@@ -190,22 +194,25 @@ async def check_open_outcomes() -> None:
             continue
 
         # Skip symbols on cooldown after repeated fetch failures
-        cooldown_until = _symbol_cooldown_until.get(signal.symbol)
+        async with _symbol_tracker_lock:
+            cooldown_until = _symbol_cooldown_until.get(signal.symbol)
         if cooldown_until and now < cooldown_until:
             continue
         # Текущая цена через ticker (real-time, не свеча)
         current_price = await exchange_client.fetch_ticker_price(signal.symbol)
         if current_price is None:
-            _symbol_fail_count[signal.symbol] = _symbol_fail_count.get(signal.symbol, 0) + 1
-            if _symbol_fail_count[signal.symbol] >= SYMBOL_FETCH_FAIL_THRESHOLD:
-                _symbol_cooldown_until[signal.symbol] = now + timedelta(seconds=SYMBOL_FETCH_COOLDOWN_SECONDS)
-                logger.warning(
-                    f"Symbol {signal.symbol} hit {SYMBOL_FETCH_FAIL_THRESHOLD} consecutive "
-                    f"fetch failures — skipping for {SYMBOL_FETCH_COOLDOWN_SECONDS}s"
-                )
+            async with _symbol_tracker_lock:
+                _symbol_fail_count[signal.symbol] = _symbol_fail_count.get(signal.symbol, 0) + 1
+                if _symbol_fail_count[signal.symbol] >= SYMBOL_FETCH_FAIL_THRESHOLD:
+                    _symbol_cooldown_until[signal.symbol] = now + timedelta(seconds=SYMBOL_FETCH_COOLDOWN_SECONDS)
+                    logger.warning(
+                        f"Symbol {signal.symbol} hit {SYMBOL_FETCH_FAIL_THRESHOLD} consecutive "
+                        f"fetch failures — skipping for {SYMBOL_FETCH_COOLDOWN_SECONDS}s"
+                    )
             continue
         # Success — reset failure tracking
-        _symbol_fail_count.pop(signal.symbol, None)
+        async with _symbol_tracker_lock:
+            _symbol_fail_count.pop(signal.symbol, None)
 
         # Also check recent candle high/low to catch TP/SL spikes
         # that happened between tracker intervals.

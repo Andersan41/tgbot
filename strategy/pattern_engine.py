@@ -294,13 +294,15 @@ class PatternEngine:
         sweep_candle_index = -1
 
         valid_sweeps = [s for s in sweeps if s.is_valid]
-        for s in valid_sweeps:
+        if valid_sweeps:
+            # Use the NEWEST valid sweep (last in chronological order),
+            # not the oldest. Earlier sweeps may be stale/irrelevant.
+            s = valid_sweeps[-1]
             has_sweep = True
             sweep_type = s.type
             sweep_strength = s.strength
             sweep_reclaim = s.reclaim_candles
             sweep_candle_index = s.candle_index
-            break  # use first valid sweep
 
         if not has_sweep:
             return ICTSetup(

@@ -36,6 +36,12 @@ from storage.trace import DecisionTraceBuilder, ExecutionSnapshot
 # Used by _detect_regime() to compute ema_spread_trend (rising/falling/stable).
 _ema_spread_history: dict[str, list[float]] = {}
 
+# ── Portfolio Lock ─────────────────────────────────────────────────────
+# Atomic check-and-reserve for portfolio limits: prevents race conditions
+# when multiple scan_symbol_v2 tasks run concurrently and all see the same
+# active_count before any of them writes a new signal.
+_portfolio_lock = asyncio.Lock()
+
 
 # ── Signal Funnel Logging ──────────────────────────────────────────────
 _FUNNEL_GATES = [
@@ -204,33 +210,35 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         trace.passed("cooldown")
         _current_funnel.log_gate(symbol, timeframe, "cooldown", "PASS")
 
-        # 0.2 Portfolio risk
-        # Per-symbol limit: block if this symbol already has enough open positions
-        max_per_sym = config.max_active_signals_per_symbol
-        sym_active = await db.get_active_signals_count_by_symbol(symbol)
-        if sym_active >= max_per_sym:
-            reason = f"max active signals for {symbol} ({sym_active}/{max_per_sym})"
-            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
-            trace.blocked("portfolio_risk", reason)
-            await trace.save(db)
-            return None
+        # 0.2 Portfolio risk — atomic check-and-reserve
+        # The lock ensures no two concurrent scan tasks see the same active_count
+        # and both pass the limit check.
+        async with _portfolio_lock:
+            max_per_sym = config.max_active_signals_per_symbol
+            sym_active = await db.get_active_signals_count_by_symbol(symbol)
+            if sym_active >= max_per_sym:
+                reason = f"max active signals for {symbol} ({sym_active}/{max_per_sym})"
+                _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
+                trace.blocked("portfolio_risk", reason)
+                await trace.save(db)
+                return None
 
-        max_sigs = config.max_active_signals
-        max_risk = config.max_portfolio_risk_pct
-        active_count = await db.get_active_signals_count()
-        if active_count >= max_sigs:
-            reason = f"max active signals ({active_count}/{max_sigs})"
-            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
-            trace.blocked("portfolio_risk", reason)
-            await trace.save(db)
-            return None
-        portfolio_risk = await db.get_portfolio_risk_sum()
-        if portfolio_risk >= max_risk:
-            reason = f"portfolio risk {portfolio_risk:.1f}% >= {max_risk}%"
-            _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
-            trace.blocked("portfolio_risk", reason)
-            await trace.save(db)
-            return None
+            max_sigs = config.max_active_signals
+            max_risk = config.max_portfolio_risk_pct
+            active_count = await db.get_active_signals_count()
+            if active_count >= max_sigs:
+                reason = f"max active signals ({active_count}/{max_sigs})"
+                _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
+                trace.blocked("portfolio_risk", reason)
+                await trace.save(db)
+                return None
+            portfolio_risk = await db.get_portfolio_risk_sum()
+            if portfolio_risk >= max_risk:
+                reason = f"portfolio risk {portfolio_risk:.1f}% >= {max_risk}%"
+                _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
+                trace.blocked("portfolio_risk", reason)
+                await trace.save(db)
+                return None
         trace.passed("portfolio_risk")
         _current_funnel.log_gate(symbol, timeframe, "portfolio_risk", "PASS")
 
@@ -495,8 +503,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         entry_price = float(trade_plan.entry_price)
 
         # ── Phase 1.51: Live Price Alignment ──
-        # Fetch live ticker and adjust entry/SL/TP to current market price.
-        # Original SL/TP distances are preserved (offset-based adjustment).
+        # Fetch live ticker and set entry to current market price.
+        # SL/TP remain structural (not shifted) — they reference real levels
+        # (swing, OB, BOS, ATR). R:R is re-validated after alignment.
         try:
             _live_ticker = await exchange_client.fetch_ticker_full(symbol)
             _live_price = None
@@ -504,18 +513,27 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 _live_price = _live_ticker.get("last") or _live_ticker.get("bid")
             if _live_price and _live_price > 0:
                 _candle_close = entry_price
-                _price_offset = _live_price - _candle_close
-                _offset_pct = abs(_price_offset) / _candle_close * 100 if _candle_close > 0 else 0
+                _offset_pct = abs(_live_price - _candle_close) / _candle_close * 100 if _candle_close > 0 else 0
 
                 if _offset_pct > 0.1:
                     logger.info(
                         f"Live price alignment: candle_close={_candle_close:.6f} "
-                        f"live={_live_price:.6f} offset={_price_offset:+.6f} ({_offset_pct:.2f}%)"
+                        f"live={_live_price:.6f} offset={_live_price - _candle_close:+.6f} ({_offset_pct:.2f}%)"
                     )
 
                 entry_price = round(_live_price, 8)
-                sl = round(sl + _price_offset, 8)
-                tp = round(tp + _price_offset, 8)
+                # SL/TP stay structural — do NOT shift by offset.
+                # Re-validate R:R with new entry.
+                _sl_dist = abs(entry_price - sl)
+                _tp_dist = abs(tp - entry_price)
+                _rr_after = _tp_dist / _sl_dist if _sl_dist > 0 else 0
+                if _rr_after < config.trading.min_rr_threshold:
+                    reason = f"RR {_rr_after:.2f} < {config.trading.min_rr_threshold} after live alignment"
+                    _current_funnel.log_gate(symbol, timeframe, "rr_recheck", "BLOCKED", reason)
+                    trace.blocked("rr_recheck", reason)
+                    trace.set_version(VERSION, build_config_snapshot())
+                    await trace.save(db)
+                    return None
             else:
                 logger.warning(f"Live ticker unavailable for {symbol}, using candle close as entry")
         except Exception as e:

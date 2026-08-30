@@ -277,8 +277,9 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             continue
 
         # ── Direction / Symbol filter (same as live) ──
-        if setup.direction == "sell":
-            continue
+        # NOTE: SELL setups are included for balanced ML training data.
+        # The live config.direction_filter.block_all_sell is a production
+        # safety gate, not a dataset filter. Excluding SELL biases the model.
         if symbol == "WIF/USDT" and setup.direction == "buy":
             continue
 
