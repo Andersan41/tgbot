@@ -304,13 +304,15 @@ class TestPatternEngine:
     # ── Continuation tests ──
 
     def test_continuation_full_setup(self):
-        """Trend + BOS aligned → continuation detected."""
+        """Trend + BOS aligned + sweep before BOS → continuation detected."""
         structure = MockStructure(
             trend="bullish",
-            last_bos=MockBOS(type="bullish", level=51000),
+            last_bos=MockBOS(type="bullish", level=51000, candle_index=10),
         )
+        # Bearish sweep (opposite direction) before BOS — causality satisfied
+        sweep = MockSweep(type="bearish", candle_index=5)
         setup = pattern_engine.detect(
-            sweeps=[], order_blocks=[], structure=structure,
+            sweeps=[sweep], order_blocks=[], structure=structure,
             fvgs=[], candle_quality=None, current_price=50000.0,
         )
         assert setup.detected is True

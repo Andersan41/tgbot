@@ -908,9 +908,10 @@ async def reload_config() -> None:
     Все модули, импортирующие `config.settings.config`, получат новые значения
     при следующем обращении (синглтон заменяется in-place).
     """
-    global config
+    global config, _runtime_symbols_cache
     load_dotenv()
     config = AppConfig()
+    _runtime_symbols_cache = None  # reset so new symbols are picked up
     from storage.database import db
     if hasattr(db, '_session_factory') and db._session_factory is not None:
         await reload_filter_toggles()

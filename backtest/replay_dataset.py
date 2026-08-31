@@ -80,6 +80,10 @@ from liquidity.candle_quality import analyze_last_candle
 from market_structure.structure import analyze_structure, calc_premium_discount_score
 from market_structure.htf_bias_v2 import get_htf_bias_v2, HTFBiasResult
 
+# Detector error tracking — silent failures are regressions, not normal state.
+_detector_errors: dict[str, int] = {}
+_DETECTOR_ERROR_LOG_EVERY = 50  # log summary every N errors
+
 TIMEFRAME = "1h"
 DEFAULT_CANDLES = 3900
 WARMUP = 260  # bars fed to the indicator engine + structure lookbacks
@@ -231,22 +235,34 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
         try:
             sweeps = detect_sweeps(_df_clean, lookback=50)
         except Exception:
-            logger.debug("replay: detect_sweeps failed", exc_info=True)
+            _detector_errors["sweeps"] = _detector_errors.get("sweeps", 0) + 1
+            if _detector_errors["sweeps"] % _DETECTOR_ERROR_LOG_EVERY == 1:
+                logger.warning(f"replay: detect_sweeps errors={_detector_errors['sweeps']}")
+            logger.exception(f"replay: detect_sweeps failed [{symbol} {timeframe}]")
             sweeps = []
         try:
             order_blocks = detect_order_blocks(_df_clean, lookback=100)
         except Exception:
-            logger.debug("replay: detect_order_blocks failed", exc_info=True)
+            _detector_errors["order_blocks"] = _detector_errors.get("order_blocks", 0) + 1
+            if _detector_errors["order_blocks"] % _DETECTOR_ERROR_LOG_EVERY == 1:
+                logger.warning(f"replay: detect_order_blocks errors={_detector_errors['order_blocks']}")
+            logger.exception(f"replay: detect_order_blocks failed [{symbol} {timeframe}]")
             order_blocks = []
         try:
             candle_quality = analyze_last_candle(_df_clean, atr_value=ind.atr)
         except Exception:
-            logger.debug("replay: analyze_last_candle failed", exc_info=True)
+            _detector_errors["candle_quality"] = _detector_errors.get("candle_quality", 0) + 1
+            if _detector_errors["candle_quality"] % _DETECTOR_ERROR_LOG_EVERY == 1:
+                logger.warning(f"replay: analyze_last_candle errors={_detector_errors['candle_quality']}")
+            logger.exception(f"replay: analyze_last_candle failed [{symbol} {timeframe}]")
             candle_quality = None
         try:
             fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
         except Exception:
-            logger.debug("replay: detect_fvg failed", exc_info=True)
+            _detector_errors["fvgs"] = _detector_errors.get("fvgs", 0) + 1
+            if _detector_errors["fvgs"] % _DETECTOR_ERROR_LOG_EVERY == 1:
+                logger.warning(f"replay: detect_fvg errors={_detector_errors['fvgs']}")
+            logger.exception(f"replay: detect_fvg failed [{symbol} {timeframe}]")
             fvgs = []
 
         _disp_atr = 0.0
@@ -264,7 +280,10 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
                 atr_value=ind.atr if ind.atr else 0.0,
             )
         except Exception:
-            logger.debug("replay: analyze_structure failed", exc_info=True)
+            _detector_errors["structure"] = _detector_errors.get("structure", 0) + 1
+            if _detector_errors["structure"] % _DETECTOR_ERROR_LOG_EVERY == 1:
+                logger.warning(f"replay: analyze_structure errors={_detector_errors['structure']}")
+            logger.exception(f"replay: analyze_structure failed [{symbol} {timeframe}]")
             structure = None
 
         # ── Phase 1: Pattern Engine ──

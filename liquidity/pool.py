@@ -135,16 +135,15 @@ def build_liquidity_map(
         ))
 
     # 2. External Liquidity (old highs/lows)
-    if df is not None:
-        ext_levels = detect_external_liquidity(df, lookback=lookback)
-        for ext in ext_levels:
-            levels.append(LiquidityLevel(
-                type=ext.type,
-                level=ext.level,
-                strength=ext.strength,
-                swept=ext.swept,
-                source=ext,
-            ))
+    ext_levels = detect_external_liquidity(df, lookback=lookback) if df is not None else []
+    for ext in ext_levels:
+        levels.append(LiquidityLevel(
+            type=ext.type,
+            level=ext.level,
+            strength=ext.strength,
+            swept=ext.swept,
+            source=ext,
+        ))
 
     # 3. Sweeps (already-swept levels — still relevant as references)
     for sweep in sweeps:
@@ -188,6 +187,6 @@ def build_liquidity_map(
         current_price=current_price,
         levels=levels,
         equal_levels=equal_levels,
-        external_levels=detect_external_liquidity(df, lookback=lookback) if df is not None else [],
+        external_levels=ext_levels,
         sweeps=sweeps,
     )

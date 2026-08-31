@@ -54,13 +54,19 @@ def detect_fvg(
     if min_size_pct is None:
         min_size_pct = getattr(config, "liquidity_fvg_min_size_pct", 0.3)
 
-    data = df.tail(lookback).reset_index(drop=False)
-    if len(data) < 3:
+    if len(df) < lookback:
+        lookback = len(df)
+    if lookback < 3:
         return []
 
+    # Preserve original datetime index before reset
+    data = df.tail(lookback).copy()
+    _orig_index = data.index.tolist()
+    data = data.reset_index(drop=True)
+
+    offset = len(df) - len(data)
     highs = data["high"].to_numpy(dtype=float)
     lows = data["low"].to_numpy(dtype=float)
-    _orig_index = data.index.tolist()  # preserve original datetime index
 
     fvgs: list[FairValueGap] = []
 
@@ -79,7 +85,7 @@ def detect_fvg(
                     top=low3,
                     bottom=high1,
                     timestamp=ts,
-                    index=i + 1,  # позиция свечи candle3
+                    index=offset + i + 1,  # absolute index of candle3
                 ))
 
         if high3 < low1:
@@ -91,12 +97,15 @@ def detect_fvg(
                     top=low1,
                     bottom=high3,
                     timestamp=ts,
-                    index=i + 1,  # позиция свечи candle3
+                    index=offset + i + 1,  # absolute index of candle3
                 ))
 
     # Проверка: какие FVG уже закрыты ценой
-    for fvg in fvgs:
-        fvg.filled = _is_fvg_filled_np(fvg, highs[fvg.index + 1:], lows[fvg.index + 1:])
+    # Use local index (i+2) — highs/lows are local to the sliced data.
+    for fvg, local_idx in zip(fvgs, range(1, len(data) - 1)):
+        _fill_start = local_idx + 2
+        if _fill_start < len(highs):
+            fvg.filled = _is_fvg_filled_np(fvg, highs[_fill_start:], lows[_fill_start:])
 
     return fvgs
 

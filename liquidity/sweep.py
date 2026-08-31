@@ -86,9 +86,15 @@ def detect_sweeps(
     Returns:
         List of SweepEvent objects.
     """
-    data = df.tail(lookback).reset_index(drop=False)
-    if len(data) < swing_window * 2 + 2:
+    if len(df) < lookback:
+        lookback = len(df)
+    if lookback < swing_window * 2 + 2:
         return []
+
+    # Preserve original datetime index before reset
+    data = df.tail(lookback).copy()
+    _orig_index = data.index.tolist()
+    data = data.reset_index(drop=True)
 
     # Compute offset so candle_index is absolute in the original df
     offset = len(df) - len(data)
@@ -98,7 +104,6 @@ def detect_sweeps(
     _low = data["low"].to_numpy(dtype=float)
     _close = data["close"].to_numpy(dtype=float)
     _vol = data["volume"].to_numpy(dtype=float)
-    _orig_index = data.index.tolist()  # preserve original datetime index
 
     sweeps: list[SweepEvent] = []
 

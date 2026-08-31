@@ -93,11 +93,17 @@ def detect_order_blocks(
     if retest_required is None:
         retest_required = getattr(config, "liquidity_ob_retest_required", False)
 
-    data = df.tail(lookback).reset_index(drop=False)
-    if len(data) < 5:
+    if len(df) < lookback:
+        lookback = len(df)
+    if lookback < 5:
         return []
 
-    _orig_index = data.index.tolist()  # preserve original datetime index
+    # Preserve original datetime index before reset
+    data = df.tail(lookback).copy()
+    _orig_index = data.index.tolist()
+    data = data.reset_index(drop=True)
+
+    offset = len(df) - len(data)
     _open = data["open"].to_numpy(dtype=float)
     _high = data["high"].to_numpy(dtype=float)
     _low = data["low"].to_numpy(dtype=float)
@@ -140,7 +146,7 @@ def detect_order_blocks(
                     high=_high[i],
                     low=_low[i],
                     timestamp=ts,
-                    candle_index=i,
+                    candle_index=offset + i,
                     displacement_atr=round(disp_atr, 3),
                     volume_ratio=round(vol_ratio, 3),
                     has_bos=has_bos,
@@ -167,7 +173,7 @@ def detect_order_blocks(
                     high=_high[i],
                     low=_low[i],
                     timestamp=ts,
-                    candle_index=i,
+                    candle_index=offset + i,
                     displacement_atr=round(disp_atr, 3),
                     volume_ratio=round(vol_ratio, 3),
                     has_bos=has_bos,

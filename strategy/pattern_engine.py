@@ -407,8 +407,12 @@ class PatternEngine:
             sweep_to_mss_bars=sweep_to_mss,
         )
 
-    def _try_continuation(self, structure, sweeps=None) -> ICTSetup:
-        """Try to detect a CONTINUATION setup: trend + BOS + sweep."""
+    def _try_continuation(self, structure, sweeps=None, max_sweep_age_bars: int = 20) -> ICTSetup:
+        """Try to detect a CONTINUATION setup: trend + BOS + sweep.
+
+        Causality: sweep must occur BEFORE BOS and within max_sweep_age_bars.
+        Uses newest valid sweep that satisfies causality.
+        """
         if structure is None:
             return ICTSetup(
                 detected=False,
@@ -469,19 +473,33 @@ class PatternEngine:
         has_sweep = False
         sweep_type = None
         sweep_strength = 0.0
+        sweep_candle_index = -1
 
         if sweeps:
             valid_sweeps = [s for s in sweeps if s.is_valid]
-            for s in valid_sweeps:
+            # Use REVERSED to get newest sweep first; enforce causality:
+            # sweep must happen BEFORE BOS, within max_sweep_age_bars.
+            bos_candle_index = structure.last_bos.candle_index if structure.last_bos else -1
+            for s in reversed(valid_sweeps):
                 if direction == "buy" and s.type == "bearish":
+                    if bos_candle_index >= 0 and s.candle_index >= 0:
+                        bars_between = bos_candle_index - s.candle_index
+                        if bars_between <= 0 or bars_between > max_sweep_age_bars:
+                            continue
                     has_sweep = True
                     sweep_type = s.type
                     sweep_strength = s.strength
+                    sweep_candle_index = s.candle_index
                     break
                 elif direction == "sell" and s.type == "bullish":
+                    if bos_candle_index >= 0 and s.candle_index >= 0:
+                        bars_between = bos_candle_index - s.candle_index
+                        if bars_between <= 0 or bars_between > max_sweep_age_bars:
+                            continue
                     has_sweep = True
                     sweep_type = s.type
                     sweep_strength = s.strength
+                    sweep_candle_index = s.candle_index
                     break
 
         if not has_sweep:

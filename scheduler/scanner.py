@@ -42,6 +42,11 @@ _ema_spread_history: dict[str, list[float]] = {}
 # active_count before any of them writes a new signal.
 _portfolio_lock = asyncio.Lock()
 
+# Limits concurrent scan_symbol_v2 tasks to avoid rate limiting / IP bans.
+# The exchange_client semaphore (1) serializes HTTP calls, but 100+ queued
+# tasks still consume memory and time. 10 parallel scans is a safe default.
+_scan_semaphore = asyncio.Semaphore(10)
+
 
 # ── Signal Funnel Logging ──────────────────────────────────────────────
 _FUNNEL_GATES = [
@@ -196,6 +201,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
     with scan_duration_seconds.labels(timeframe=timeframe).time():
         _current_funnel.log_gate(symbol, timeframe, "start", "ENTER")
         trace = DecisionTraceBuilder(symbol, timeframe)
+        _config_snapshot = build_config_snapshot()  # one serialization per scan
 
         # ═══ Phase 0: Hard Gates (capital protection) ═══
 
@@ -253,14 +259,16 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         trace.passed("indicators")
         _current_funnel.log_gate(symbol, timeframe, "indicators", "PASS")
 
+        # Detect regime once — reused for compression gate, setup gates, and analytics.
+        _regime = _detect_regime(ind, df, symbol, timeframe)
+
         # 0.4 Compression regime gate (block choppy markets)
         if config.trading.block_compression_regime:
-            _regime_check = _detect_regime(ind, df, symbol, timeframe)
-            if _regime_check and _regime_check.regime == "compression":
-                reason = f"compression regime (ATR percentile={_regime_check.atr_percentile:.0f})"
+            if _regime and _regime.regime == "compression":
+                reason = f"compression regime (ATR percentile={_regime.atr_percentile:.0f})"
                 _current_funnel.log_gate(symbol, timeframe, "compression_regime", "BLOCKED", reason)
                 trace.blocked("compression_regime", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             # Also block range + high ADX combo (failure cluster pattern)
@@ -277,7 +285,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                         reason = f"high ADX ({ind.adx:.0f}) in tight range ({_range_pct:.2f}%)"
                         _current_funnel.log_gate(symbol, timeframe, "compression_regime", "BLOCKED", reason)
                         trace.blocked("compression_regime", reason)
-                        trace.set_version(VERSION, build_config_snapshot())
+                        trace.set_version(VERSION, _config_snapshot)
                         await trace.save(db)
                         return None
         _current_funnel.log_gate(symbol, timeframe, "compression_regime", "PASS")
@@ -290,6 +298,24 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         structure = None
         fvgs = []
         candle_quality = None
+
+        # ── Early HTF fetch for MSS htf_aligned scoring ──
+        # Must happen before analyze_structure so we can pass htf_aligned.
+        # The same data is reused later for the full HTF bias gate.
+        _htf_aligned = False
+        _df_1d_early = None
+        _df_4h_early = None
+        try:
+            _df_1d_early = await exchange_client.fetch_ohlcv(symbol, "1d", limit=60)
+            _df_4h_early = await exchange_client.fetch_ohlcv(symbol, "4h", limit=60)
+            if _df_1d_early is not None and _df_4h_early is not None:
+                from market_structure.htf_bias_v2 import get_htf_bias_v2
+                _early_htf = get_htf_bias_v2(
+                    None, _df_1d_early, _df_4h_early, _df_clean.tail(60),
+                )
+                _htf_aligned = _early_htf.direction != "neutral"
+        except Exception:
+            pass
 
         try:
             if len(_df_clean) >= 10:
@@ -320,6 +346,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                     displacement_atr=_disp_atr,
                     reclaim_bars=_reclaim,
                     atr_value=ind.atr if ind.atr else 0.0,
+                    htf_aligned=_htf_aligned,
                 )
         except Exception as e:
             logger.warning(f"Pattern analysis failed for {symbol} {timeframe}: {e}")
@@ -340,7 +367,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                                      setup.rejection_reason or "no setup")
             trace.blocked("pattern_engine", setup.rejection_reason or "no ICT setup")
             trace.set_features({"components": setup.components_count})
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             logger.debug(f"No ICT setup: {symbol} {timeframe} — {setup.rejection_reason}")
             return None
@@ -362,7 +389,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             reason = config.direction_filter.block_all_sell_reason
             _current_funnel.log_gate(symbol, timeframe, "direction_filter", "BLOCKED", reason)
             trace.blocked("direction_filter", reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             logger.info(f"Direction BLOCKED: {symbol} {timeframe} — {reason}")
             return None
@@ -376,7 +403,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             )
             _current_funnel.log_gate(symbol, timeframe, "symbol_filter", "BLOCKED", reason)
             trace.blocked("symbol_filter", reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             logger.info(f"Symbol BLOCKED: {symbol} {timeframe} — {reason}")
             return None
@@ -398,7 +425,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "Confluence Mode: reversal blocked (WR 3.6% across 360d)"
                 _current_funnel.log_gate(symbol, timeframe, "confluence_mode", "BLOCKED", reason)
                 trace.blocked("confluence_mode", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 logger.info(f"Confluence BLOCKED: {symbol} {timeframe} — {reason}")
                 return None
@@ -408,7 +435,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "Confluence Mode: OB required for BOS (WR 93.7% with OB)"
                 _current_funnel.log_gate(symbol, timeframe, "confluence_mode", "BLOCKED", reason)
                 trace.blocked("confluence_mode", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 logger.info(f"Confluence BLOCKED: {symbol} {timeframe} — {reason}")
                 return None
@@ -418,8 +445,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         # Continuation: BOS + trend alignment (all hard gates)
         # Entry armed (OB/FVG proximity) — soft, log only
 
-        # Detect regime (used later for analytics)
-        _regime_for_gates = _detect_regime(ind, df, symbol, timeframe)
+        # Detect regime (used later for analytics) — reuse from Phase 0
 
         if setup.setup_type == "reversal":
             # ── Reversal Gates ──
@@ -427,7 +453,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "reversal: no sweep"
                 _current_funnel.log_gate(symbol, timeframe, "sweep_required", "BLOCKED", reason)
                 trace.blocked("sweep_required", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             trace.passed("sweep_required")
@@ -442,7 +468,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "reversal: no MSS (strong CHoCH)"
                 _current_funnel.log_gate(symbol, timeframe, "mss_gate", "BLOCKED", reason)
                 trace.blocked("mss_gate", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             trace.passed("mss_gate")
@@ -455,7 +481,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "continuation: no BOS"
                 _current_funnel.log_gate(symbol, timeframe, "bos_gate", "BLOCKED", reason)
                 trace.blocked("bos_gate", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             trace.passed("bos_gate")
@@ -467,7 +493,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "continuation: no sweep"
                 _current_funnel.log_gate(symbol, timeframe, "sweep_continuation", "BLOCKED", reason)
                 trace.blocked("sweep_continuation", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             trace.passed("sweep_continuation")
@@ -506,9 +532,10 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         # Fetch live ticker and set entry to current market price.
         # SL/TP remain structural (not shifted) — they reference real levels
         # (swing, OB, BOS, ATR). R:R is re-validated after alignment.
+        _live_ticker = None
+        _live_price = None
         try:
             _live_ticker = await exchange_client.fetch_ticker_full(symbol)
-            _live_price = None
             if _live_ticker:
                 _live_price = _live_ticker.get("last") or _live_ticker.get("bid")
             if _live_price and _live_price > 0:
@@ -531,7 +558,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                     reason = f"RR {_rr_after:.2f} < {config.trading.min_rr_threshold} after live alignment"
                     _current_funnel.log_gate(symbol, timeframe, "rr_recheck", "BLOCKED", reason)
                     trace.blocked("rr_recheck", reason)
-                    trace.set_version(VERSION, build_config_snapshot())
+                    trace.set_version(VERSION, _config_snapshot)
                     await trace.save(db)
                     return None
             else:
@@ -545,14 +572,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = f"BUY entry {entry_price:.6f} > live price {_live_price:.6f}"
                 _current_funnel.log_gate(symbol, timeframe, "direction_check", "BLOCKED", reason)
                 trace.blocked("direction_check", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
             if setup.direction == "sell" and entry_price < _live_price * 0.999:
                 reason = f"SELL entry {entry_price:.6f} < live price {_live_price:.6f}"
                 _current_funnel.log_gate(symbol, timeframe, "direction_check", "BLOCKED", reason)
                 trace.blocked("direction_check", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
 
@@ -567,7 +594,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         if _sym_blocked:
             _current_funnel.log_gate(symbol, timeframe, "symbol_overrides", "BLOCKED", _sym_reason)
             trace.blocked("symbol_overrides", _sym_reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             return None
         if _sym_overrides := config.trading.symbol_overrides.get(symbol, {}):
@@ -584,7 +611,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 reason = "price not in FVG entry zone"
                 _current_funnel.log_gate(symbol, timeframe, "entry_zone", "BLOCKED", reason)
                 trace.blocked("entry_zone", reason)
-                trace.set_version(VERSION, build_config_snapshot())
+                trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
         elif not setup.entry_armed:
@@ -608,13 +635,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         logger.debug(f"SMT {symbol}: {_smt_detail}")
 
         # ═══ Phase 1.45: HTF Bias + Premium/Discount Zones ═══
-
-        try:
-            df_1d = await exchange_client.fetch_ohlcv(symbol, "1d", limit=60)
-            df_4h = await exchange_client.fetch_ohlcv(symbol, "4h", limit=60)
-        except Exception:
-            df_1d = None
-            df_4h = None
+        # Reuse early-fetched HTF data; only fetch what's missing (1w, 1h).
+        df_1d = _df_1d_early
+        df_4h = _df_4h_early
 
         _htf_bias_penalty = 1.0
         _htf_result = None
@@ -656,7 +679,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                             reason = f"HTF bias gate: continuation {setup.direction} vs HTF {htf_bias_str}"
                             _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
                             trace.blocked("htf_bias", reason)
-                            trace.set_version(VERSION, build_config_snapshot())
+                            trace.set_version(VERSION, _config_snapshot)
                             await trace.save(db)
                             return None
                         _htf_bias_penalty = config.htf_bias_continuation_penalty
@@ -721,7 +744,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                             reason = f"HTF bias gate: continuation {setup.direction} vs HTF {_bias_enum.value}"
                             _current_funnel.log_gate(symbol, timeframe, "htf_bias", "BLOCKED", reason)
                             trace.blocked("htf_bias", reason)
-                            trace.set_version(VERSION, build_config_snapshot())
+                            trace.set_version(VERSION, _config_snapshot)
                             await trace.save(db)
                             return None
                         _htf_bias_penalty = config.htf_bias_continuation_penalty
@@ -790,7 +813,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         # ═══ Phase 2: Analytics (regime, context, MTF) ═══
 
-        regime = _detect_regime(ind, df, symbol, timeframe)
+        regime = _regime  # reuse from Phase 0
         atr_pct = (ind.atr / ind.close * 100) if ind.atr and ind.close > 0 else 0.0
 
         # MTF alignment (analytics — not a gate)
@@ -858,14 +881,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             reason = f"max active signals ({_recheck_active}/{config.max_active_signals}) [re-check]"
             _current_funnel.log_gate(symbol, timeframe, "portfolio_risk_recheck", "BLOCKED", reason)
             trace.blocked("portfolio_risk_recheck", reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             return None
         if _recheck_risk >= config.max_portfolio_risk_pct:
             reason = f"portfolio risk {_recheck_risk:.1f}% >= {config.max_portfolio_risk_pct}% [re-check]"
             _current_funnel.log_gate(symbol, timeframe, "portfolio_risk_recheck", "BLOCKED", reason)
             trace.blocked("portfolio_risk_recheck", reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             return None
 
@@ -893,7 +916,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             _current_funnel.log_gate(symbol, timeframe, "risk_engine", "BLOCKED",
                                      risk_decision.rejection_reason)
             trace.blocked("risk_engine", risk_decision.rejection_reason)
-            trace.set_version(VERSION, build_config_snapshot())
+            trace.set_version(VERSION, _config_snapshot)
             await trace.save(db)
             logger.info(f"Risk BLOCKED: {symbol} {timeframe} — {risk_decision.rejection_reason}")
             return None
@@ -977,17 +1000,23 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
 
         factor_fingerprint = f"components={setup.components_count}|regime={regime.regime if regime else 'none'}"
 
-        # Calculate entry candle open time from dataframe
+        # Calculate entry candle open time from dataframe index
         _entry_candle_open = None
         if df is not None and len(df) > 0:
-            last_candle_ts = df.iloc[-1].get("timestamp")
-            if last_candle_ts is not None:
+            last_candle_ts = df.index[-1]
+            if hasattr(last_candle_ts, 'timestamp'):
+                _entry_candle_open = datetime.fromtimestamp(
+                    last_candle_ts.timestamp(), tz=timezone.utc
+                )
+            elif isinstance(last_candle_ts, (int, float)):
                 _entry_candle_open = datetime.fromtimestamp(
                     last_candle_ts / 1000, tz=timezone.utc
-                ) if isinstance(last_candle_ts, (int, float)) else last_candle_ts
+                )
+            else:
+                _entry_candle_open = last_candle_ts
 
         # Fetch execution snapshot data (reuse ticker from live price alignment if available)
-        _ticker = _live_ticker if '_live_ticker' in dir() else await exchange_client.fetch_ticker_full(symbol)
+        _ticker = _live_ticker if _live_ticker else await exchange_client.fetch_ticker_full(symbol)
         _tick_size = exchange_client.get_tick_size(symbol)
         _atr = ind.atr
         _last_candle = df.iloc[-1] if df is not None and len(df) > 0 else None
@@ -1116,7 +1145,10 @@ async def run_scan_cycle(notify_callback, blocked_callback=None, timeframes: Opt
     tasks = []
     for symbol in symbols:
         for tf in tfs:
-            tasks.append(scan_symbol_v2(symbol, tf, notify_callback, blocked_callback))
+            async def _scan_one(s=symbol, t=tf):
+                async with _scan_semaphore:
+                    return await scan_symbol_v2(s, t, notify_callback, blocked_callback)
+            tasks.append(_scan_one())
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
