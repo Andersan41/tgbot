@@ -43,13 +43,17 @@ class TradeEngine:
         fvgs: Optional[list] = None,
         df: Optional[pd.DataFrame] = None,
         timeframe: str = "1h",
+        entry_override: Optional[float] = None,
     ) -> TradePlan:
         """Build a complete trade plan.
 
         This is the main entry point — replaces _calculate_sl_tp().
+
+        entry_override: when provided (e.g. live price), used instead of ind.close.
+        FVG proximity check and all structural references use this price.
         """
         cfg = config.trading
-        entry = float(ind.close)
+        entry = entry_override if entry_override and entry_override > 0 else float(ind.close)
         atr = ind.atr if ind.atr and ind.atr > 0 else entry * cfg.atr_fallback_pct / 100
         signal = SignalType.BUY if direction == "buy" else SignalType.SELL
 

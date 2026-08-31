@@ -82,6 +82,8 @@ class ICTSetup:
     has_fvg: bool = False
     fvg_type: Optional[str] = None
     fvg_size_pct: float = 0.0
+    fvg_top: float = 0.0
+    fvg_bottom: float = 0.0
 
     # ── Entry readiness (soft — log but don't block) ──
     entry_armed: bool = False
@@ -894,11 +896,13 @@ class PatternEngine:
         if not setup.detected:
             return
 
-        # Sweep quality
+        # Sweep quality — score the newest valid sweep of the matching direction
         if setup.has_sweep and sweeps:
             valid = [s for s in sweeps if s.is_valid]
             if valid:
-                setup.sweep_quality = self._score_sweep(valid[0], current_price, atr)
+                _dir_sweeps = [s for s in valid if s.type == setup.direction]
+                _score_sweep = _dir_sweeps[-1] if _dir_sweeps else valid[-1]
+                setup.sweep_quality = self._score_sweep(_score_sweep, current_price, atr)
                 setup.sweep_quality_score = setup.sweep_quality.score
 
         # MSS quality (reversal)
@@ -1050,6 +1054,8 @@ class PatternEngine:
                         continue  # stale FVG — skip
                 setup.has_fvg = True
                 setup.fvg_type = f.type
+                setup.fvg_top = f.top
+                setup.fvg_bottom = f.bottom
                 setup.fvg_size_pct = f.size_pct
                 break
 
@@ -1069,14 +1075,11 @@ class PatternEngine:
             if dist_pct <= self.ob_proximity_pct:
                 return True
 
-        # Check FVG containment
-        if setup.has_fvg:
-            # For bullish FVG: price should be within or below the gap
-            if setup.fvg_type == "bullish":
-                # FVG gap is between bottom and top
-                # Price entering from above retracing into the gap
-                return True  # FVG exists and is active → armed
-            elif setup.fvg_type == "bearish":
+        # Check FVG containment — price must be within or near the FVG zone
+        if setup.has_fvg and setup.fvg_top > 0 and setup.fvg_bottom > 0:
+            fvg_mid = (setup.fvg_top + setup.fvg_bottom) / 2.0
+            dist_pct = abs(current_price - fvg_mid) / current_price * 100
+            if dist_pct <= self.ob_proximity_pct:
                 return True
 
         return False
