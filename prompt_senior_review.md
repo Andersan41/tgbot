@@ -12,7 +12,7 @@ The bot scans symbols on 1h/4h timeframes every 15 minutes and sends signals to 
 
 The bot has been running live since July 2026. It produces signals but is deeply unprofitable:
 - **143 signals over 2 months, cumulative PnL: -126.12%**
-- Win rate 32.4%, Profit Factor 0.61 — system loses money on every timescale
+- Win rate 35.3%, Profit Factor 0.61 — system loses money on every timescale
 - The funnel is paradoxical: `portfolio_risk` blocks 96% of candidates, yet when signals DO get through, they're mostly losers
 - The bot needs structural fixes, not just threshold tuning
 
@@ -100,8 +100,8 @@ When a setup is detected, the bot outputs:
 | Total signals | 143 |
 | Closed trades | 139 |
 | Open trades | 4 |
-| **Win Rate** | **32.4%** (45 wins / 94 losses) |
-| **Cumulative PnL** | **-126.12%** |
+| **Win Rate** | **35.3%** (49 wins / 90 losses) |
+| **Cumulative PnL** | **-126.13%** |
 | Profit Factor | 0.61 |
 | Best trade | +24.17% |
 | Worst trade | -12.29% |
@@ -120,14 +120,14 @@ When a setup is detected, the bot outputs:
 
 | Direction | Signals | Avg PnL% |
 |-----------|---------|----------|
-| BUY | 78 | **+0.11%** |
-| SELL | 65 | **-2.14%** |
+| BUY | 76 | **+0.11%** |
+| SELL | 63 | **-2.14%** |
 
 ### By timeframe:
 
 | TF | Signals | Avg PnL% |
 |----|---------|----------|
-| 4h | 84 | -1.09% |
+| 4h | 80 | -1.09% |
 | 1h | 59 | -0.66% |
 
 ### Live Funnel (from `logs/bot.log` — 250 cycles, Sep 8-14):
@@ -450,7 +450,7 @@ confidence = min(0.85, p_tp)
 1. **`portfolio_risk` blocks ~96% of candidates** — the dominant bottleneck. Most candidates never reach pattern_engine. Config: `max_portfolio_risk_pct=3.0%` (code default), `max_active_signals=10` (.env override), `max_active_signals_per_symbol=1`.
 2. **BUY signals are slightly profitable (+0.11%), SELL signals are deeply negative (-2.14%).** The short side destroys performance.
 3. **SL hits (81) outnumber TP hits (37) by 2.2:1.** The win/loss ratio is inverted.
-4. **Average TP/SL ratio is 0.95** — TP is closer than SL on average, requiring >52% WR to break even.
+4. **Average TP is +3.21%, average SL is -3.19%** — R:R is approximately 1:1. The problem is the low win rate (35.3%), not the reward/risk ratio.
 5. **No `score_too_low` or `time_of_day_blocked` gates exist** in the current codebase.
 6. **`decision_traces` table is empty** — no per-candidate gate data was logged.
 7. **Config mismatch note:** `max_active_signals` is overridden to 10 in `.env` (code default is 3). `max_active_signals_per_symbol=1` and `max_portfolio_risk_pct=3.0%` are code defaults (not overridden in `.env`).
@@ -474,14 +474,15 @@ Questions:
 - Should we increase to 5-8% to allow more concurrent signals?
 - Is the risk sum calculation correct? Could stale trades inflate it?
 
-### 2. Why is the TP/SL ratio 0.95 (average)?
+### 2. Why is the win rate only 35.3%?
 
-This is the ROOT CAUSE of negative PnL. If TP is closer than SL, the bot needs >52% WR.
+The bot produces signals with roughly 1:1 R:R (avg TP +3.21% vs avg SL -3.19%), but only 35.3% hit TP. At 1:1 R:R, you need >50% WR to be profitable. Current WR is 35.3%.
 
 Look at:
 - `strategy/trade_engine.py` — `build_trade_plan()` method
-- Is SL based on structure (wider) while TP is based on next OB/FVG (tighter)?
-- Are there cases where TP < SL (reward < risk)?
+- Is SL placement too tight (getting stopped out before price reaches TP)?
+- Are entries at bad prices (entering too late in the move)?
+- Is the pattern engine letting through low-quality setups?
 
 ### 3. Why are SELL signals deeply negative (-2.14%) while BUY signals are positive (+0.11%)?
 
@@ -502,11 +503,11 @@ If we increase `max_portfolio_risk_pct` from 3% to 5%:
 
 ### 5. What should we prioritize?
 
-Given (32.4% WR, PF 0.61, -126% PnL, 96% blocked by portfolio_risk):
+Given (35.3% WR, PF 0.61, -126% PnL, 96% blocked by portfolio_risk):
 - A: Fix portfolio_risk gate
-- B: Fix TP/SL ratio (enforce min RR 2.0+)
-- C: Fix SELL signal quality
-- D: Fix SL placement
+- B: Improve win rate (entries too late, SL too tight, or setup quality too low)
+- C: Fix SELL signal quality (-2.14% avg vs BUY +0.11%)
+- D: Increase signal throughput (currently 8/week)
 - E: Something else
 
 ---
@@ -528,8 +529,8 @@ Given (32.4% WR, PF 0.61, -126% PnL, 96% blocked by portfolio_risk):
 - Bot trades multiple symbols on 1h/4h timeframes
 - Exchange: Binance Futures (via ccxt)
 - Must NOT send false signals (risk management is priority)
-- Currently losing money — PF 0.61, WR 32.4%, cumulative PnL -126%
-- Need PF > 1.2 and WR > 40% for system to be viable
+- Currently losing money — PF 0.61, WR 35.3%, cumulative PnL -126%
+- Need PF > 1.2 and WR > 50% for system to be viable (at 1:1 R:R)
 - 8 signals per week is too few — need 2-5 quality signals per week
 
 ---
