@@ -29,6 +29,12 @@ venv/
 *.csv
 *.log
 *.zip
+
+# Открытые данные для аудита
+!data/signals.db
+!logs/bot.log
+!logs/logs.txt
+!logs/logs.*.txt
 .pytest_cache/
 full_test_output.txt
 err.txt
