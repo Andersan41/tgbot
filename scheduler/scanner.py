@@ -273,7 +273,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 await trace.save(db)
                 return None
             # Also block range + high ADX combo (failure cluster pattern)
-            if (_regime_check and _regime_check.regime == "range"
+            if (_regime and _regime.regime == "range"
                     and float(ind.adx or 0) >= 26):
                 # Price in middle of tight range = no edge
                 if len(df) >= 20:
@@ -326,10 +326,10 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 from liquidity.fvg import detect_fvg
                 from liquidity.candle_quality import analyze_last_candle
 
-                sweeps = detect_sweeps(_df_clean, lookback=50)
-                order_blocks = detect_order_blocks(_df_clean, lookback=100)
+                sweeps = detect_sweeps(_df_clean, lookback=100)
+                order_blocks = detect_order_blocks(_df_clean, lookback=150)
                 candle_quality = analyze_last_candle(_df_clean, atr_value=ind.atr)
-                fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
+                fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 150))
 
                 # Compute displacement_atr and reclaim for MSS classification
                 _disp_atr = 0.0
@@ -342,7 +342,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                         _reclaim = _valid_sw[0].reclaim_candles
 
                 structure = analyze_structure(
-                    _df_clean, lookback=50,
+                    _df_clean, lookback=100,
                     sweeps=sweeps,
                     displacement_atr=_disp_atr,
                     reclaim_bars=_reclaim,
@@ -489,17 +489,30 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             _funnel.log_gate(symbol, timeframe, "bos_gate", "PASS",
                                      f"bos_type={setup.bos_type}")
 
-            # Sweep required for continuation (100% of winners had sweep)
-            if not setup.has_sweep:
-                reason = "continuation: no sweep"
-                _funnel.log_gate(symbol, timeframe, "sweep_continuation", "BLOCKED", reason)
-                trace.blocked("sweep_continuation", reason)
+            # Sweep is optional for continuation (soft quality signal).
+            if setup.has_sweep:
+                trace.passed("sweep_continuation")
+                _funnel.log_gate(symbol, timeframe, "sweep_continuation", "PASS",
+                                         f"sweep_type={setup.sweep_type}")
+            else:
+                trace.passed("sweep_continuation")
+                _funnel.log_gate(symbol, timeframe, "sweep_continuation", "PASS",
+                                         "no sweep (optional for continuation)")
+
+        elif setup.setup_type == "poi_entry":
+            # ── POI Entry Gates ──
+            # Price in OB/FVG zone aligned with trend. No BOS/sweep required.
+            # Just verify the POI components are present.
+            if not setup.has_ob and not setup.has_fvg:
+                reason = "poi_entry: no OB or FVG"
+                _funnel.log_gate(symbol, timeframe, "poi_gate", "BLOCKED", reason)
+                trace.blocked("poi_gate", reason)
                 trace.set_version(VERSION, _config_snapshot)
                 await trace.save(db)
                 return None
-            trace.passed("sweep_continuation")
-            _funnel.log_gate(symbol, timeframe, "sweep_continuation", "PASS",
-                                     f"sweep_type={setup.sweep_type}")
+            trace.passed("poi_gate")
+            _funnel.log_gate(symbol, timeframe, "poi_gate", "PASS",
+                                     f"ob={setup.has_ob} fvg={setup.has_fvg}")
 
         # ── Phase 1.5 (moved before overrides): Build Trade Plan (ICT-based) ──
         # Built here so per-symbol override gates (max_sl_pct) can use real SL

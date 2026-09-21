@@ -134,6 +134,7 @@ class TradeEngine:
                 swing_lows=recent_lows,
                 bos_level=bos_level,
                 atr=atr,
+                max_sl_atr=cfg.max_sl_atr,
             )
         else:
             invalidation = find_invalidation_sell(
@@ -143,6 +144,7 @@ class TradeEngine:
                 swing_highs=recent_highs,
                 bos_level=bos_level,
                 atr=atr,
+                max_sl_atr=cfg.max_sl_atr,
             )
 
         if invalidation is None:

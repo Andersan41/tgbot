@@ -160,6 +160,8 @@ class TradingConfig:
     min_sl_distance_pct: float = float(os.getenv("MIN_SL_DISTANCE_PCT", "1.0"))
     # Максимальное расстояние SL от entry (%)
     max_sl_distance_pct: float = float(os.getenv("MAX_SL_DISTANCE_PCT", "10.0"))
+    # Максимальное расстояние SL в ATR (если structural SL шире — используется ATR-based SL)
+    max_sl_atr: float = float(os.getenv("MAX_SL_ATR", "3.0"))
     # Минимальный R:R для финализации сигнала
     min_rr_threshold: float = float(os.getenv("MIN_RR_THRESHOLD", "1.5"))
     # Буфер stop hunt для structural SL (%) — стоп ставится за уровень, а не на него
@@ -620,6 +622,14 @@ class PatternEngineConfig:
     # Maximum FVG age in candles. If FVG formed more than N candles ago and price
     # returns to it, the setup is rejected. 0 = disabled.
     max_fvg_age_candles: int = int(os.getenv("PATTERN_MAX_FVG_AGE_CANDLES", "4"))
+    # Maximum sweep age in bars for continuation setups. Sweep must occur before BOS
+    # and within this window. Higher values catch older sweeps.
+    max_sweep_age_bars: int = int(os.getenv("PATTERN_MAX_SWEEP_AGE_BARS", "40"))
+    # Enable POI-based entry: if price is in OB/FVG zone aligned with trend,
+    # enter without requiring BOS+sweep (like other ICT bots).
+    poi_entry_enabled: bool = os.getenv("PATTERN_POI_ENTRY_ENABLED", "true").lower() == "true"
+    # Minimum OB/FVG quality score for POI entry (0-100). 0 = any valid OB/FVG.
+    poi_min_quality: float = float(os.getenv("PATTERN_POI_MIN_QUALITY", "30"))
 
 
 @dataclass

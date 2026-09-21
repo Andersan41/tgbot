@@ -152,12 +152,18 @@ class PatternEngine:
         min_setup_confidence: float = 0.0,
         min_components_required: int = 2,
         max_fvg_age_candles: int = 4,
+        max_sweep_age_bars: int = 40,
+        poi_entry_enabled: bool = True,
+        poi_min_quality: float = 30.0,
     ):
         self.ob_proximity_pct = ob_proximity_pct
         self.min_overall_quality = min_overall_quality
         self.min_setup_confidence = min_setup_confidence
         self.min_components_required = min_components_required
         self.max_fvg_age_candles = max_fvg_age_candles
+        self.max_sweep_age_bars = max_sweep_age_bars
+        self.poi_entry_enabled = poi_entry_enabled
+        self.poi_min_quality = poi_min_quality
 
     def detect(
         self,
@@ -214,6 +220,18 @@ class PatternEngine:
             else:
                 continuation_rejection = continuation.rejection_reason
 
+        # ═══ POI ENTRY PATH ═══
+        # Price in OB/FVG zone aligned with trend (only if reversal + continuation failed)
+        poi_rejection = None
+        if not reversal.detected and self.poi_entry_enabled:
+            poi = self._try_poi_entry(structure, order_blocks, fvgs, current_price, df)
+            if poi.detected:
+                direction = poi.direction
+                setup_type = "poi_entry"
+                reversal = poi
+            else:
+                poi_rejection = poi.rejection_reason
+
         if direction is None:
             trend = structure.trend if structure else "ranging"
             # Prefer continuation-specific reason if continuation was tried
@@ -224,8 +242,11 @@ class PatternEngine:
                     reason = continuation_rejection
                 else:
                     reason = reversal_rejection
+            elif poi_rejection and (reversal_rejection or continuation_rejection):
+                # POI entry also failed — show most relevant reason
+                reason = continuation_rejection or reversal_rejection
             else:
-                reason = continuation_rejection or reversal_rejection or "no valid setup"
+                reason = continuation_rejection or poi_rejection or reversal_rejection or "no valid setup"
             return ICTSetup(
                 detected=False,
                 structure_trend=trend,
@@ -409,12 +430,15 @@ class PatternEngine:
             sweep_to_mss_bars=sweep_to_mss,
         )
 
-    def _try_continuation(self, structure, sweeps=None, max_sweep_age_bars: int = 20) -> ICTSetup:
+    def _try_continuation(self, structure, sweeps=None, max_sweep_age_bars: Optional[int] = None) -> ICTSetup:
         """Try to detect a CONTINUATION setup: trend + BOS + sweep.
 
         Causality: sweep must occur BEFORE BOS and within max_sweep_age_bars.
         Uses newest valid sweep that satisfies causality.
         """
+        if max_sweep_age_bars is None:
+            max_sweep_age_bars = self.max_sweep_age_bars
+
         if structure is None:
             return ICTSetup(
                 detected=False,
@@ -504,13 +528,10 @@ class PatternEngine:
                     sweep_candle_index = s.candle_index
                     break
 
-        if not has_sweep:
-            return ICTSetup(
-                detected=False,
-                has_bos=has_bos, bos_type=bos_type,
-                structure_trend=trend,
-                rejection_reason=f"continuation: no sweep in {direction} direction",
-            )
+        # Sweep is OPTIONAL for continuation (soft quality signal, not a gate).
+        # Many valid continuations lack a counter-trend sweep.
+        if has_sweep:
+            logger.debug(f"Continuation sweep found: {direction} sweep_type={sweep_type}")
 
         return ICTSetup(
             detected=True,
@@ -523,6 +544,87 @@ class PatternEngine:
             sweep_type=sweep_type,
             sweep_strength=sweep_strength,
         )
+
+    def _try_poi_entry(
+        self,
+        structure,
+        order_blocks: list,
+        fvgs: list,
+        current_price: float,
+        df: Optional[pd.DataFrame] = None,
+    ) -> ICTSetup:
+        """Try POI-based entry: price in OB/FVG zone aligned with structure trend.
+
+        This is an alternative entry model (like other ICT bots):
+        if the current price is inside or very near a valid OB/FVG that aligns
+        with the market structure trend, it's a valid entry without BOS+sweep.
+        """
+        if not self.poi_entry_enabled:
+            return ICTSetup(detected=False, rejection_reason="poi_entry: disabled")
+
+        if structure is None or structure.trend == "ranging":
+            return ICTSetup(detected=False, rejection_reason="poi_entry: no trend")
+
+        trend = structure.trend
+        direction = "buy" if trend == "bullish" else "sell"
+
+        # Check OB alignment with trend
+        for ob in order_blocks:
+            ob_dir = "buy" if ob.type == "bullish" else "sell" if ob.type == "bearish" else ob.type
+            if not ob.is_valid or ob_dir != direction:
+                continue
+            # Price must be within the OB zone or very near it
+            dist_pct = abs(current_price - ob.midpoint) / current_price * 100
+            if dist_pct > self.ob_proximity_pct:
+                continue
+            # For BUY: price should be near/below OB midpoint (discount zone)
+            # For SELL: price should be near/above OB midpoint (premium zone)
+            if direction == "buy" and current_price > ob.midpoint * 1.01:
+                continue
+            if direction == "sell" and current_price < ob.midpoint * 0.99:
+                continue
+            return ICTSetup(
+                detected=True,
+                direction=direction,
+                setup_type="poi_entry",
+                has_ob=True,
+                ob_type=ob.type,
+                ob_midpoint=ob.midpoint,
+                has_bos=structure.last_bos is not None,
+                bos_type=structure.last_bos.type if structure.last_bos else None,
+                bos_level=structure.last_bos.level if structure.last_bos else 0.0,
+            )
+
+        # Check FVG alignment with trend
+        for f in fvgs:
+            f_dir = "buy" if f.type == "bullish" else "sell" if f.type == "bearish" else f.type
+            if not f.is_active or f_dir != direction:
+                continue
+            # Time-based filter
+            if df is not None and len(df) > 0 and self.max_fvg_age_candles > 0:
+                age_candles = len(df) - 1 - f.index if hasattr(f, 'index') else 0
+                if age_candles > self.max_fvg_age_candles:
+                    continue
+            # Price must be inside or near the FVG
+            fvg_mid = (f.top + f.bottom) / 2.0
+            dist_pct = abs(current_price - fvg_mid) / current_price * 100
+            if dist_pct > self.ob_proximity_pct:
+                continue
+            return ICTSetup(
+                detected=True,
+                direction=direction,
+                setup_type="poi_entry",
+                has_fvg=True,
+                fvg_type=f.type,
+                fvg_top=f.top,
+                fvg_bottom=f.bottom,
+                fvg_size_pct=f.size_pct,
+                has_bos=structure.last_bos is not None,
+                bos_type=structure.last_bos.type if structure.last_bos else None,
+                bos_level=structure.last_bos.level if structure.last_bos else 0.0,
+            )
+
+        return ICTSetup(detected=False, rejection_reason="poi_entry: no aligned OB/FVG")
 
     def _score_sweep(self, sweep, current_price: float, atr: float) -> ComponentQuality:
         """Score sweep quality 0-100.
@@ -1008,9 +1110,20 @@ class PatternEngine:
                 core_components += 1
             if setup.has_bos:
                 core_components += 1
+            # POI entry counts OB/FVG as core components
+            if setup.setup_type == "poi_entry":
+                if setup.has_ob:
+                    core_components += 1
+                if setup.has_fvg:
+                    core_components += 1
 
-            if core_components < self.min_components_required:
-                return f"quality: only {core_components} core components (need {self.min_components_required})"
+            # Continuation with BOS alone is valid (sweep is optional)
+            effective_min = self.min_components_required
+            if setup.setup_type == "continuation" and setup.has_bos and not setup.has_sweep:
+                effective_min = 1
+
+            if core_components < effective_min:
+                return f"quality: only {core_components} core components (need {effective_min})"
 
         # Check overall quality threshold
         if self.min_overall_quality > 0 and setup.overall_quality < self.min_overall_quality:
@@ -1097,6 +1210,8 @@ class PatternEngine:
         elif setup.setup_type == "continuation":
             if setup.has_bos:
                 components.append("BOS")
+        elif setup.setup_type == "poi_entry":
+            components.append("POI")
         if setup.has_ob:
             components.append("OB")
         if setup.has_fvg:
@@ -1116,6 +1231,9 @@ def _create_pattern_engine():
             min_overall_quality=config.pattern_engine.min_overall_quality,
             min_setup_confidence=config.pattern_engine.min_setup_confidence,
             min_components_required=config.pattern_engine.min_components_required,
+            max_sweep_age_bars=config.pattern_engine.max_sweep_age_bars,
+            poi_entry_enabled=config.pattern_engine.poi_entry_enabled,
+            poi_min_quality=config.pattern_engine.poi_min_quality,
         )
     except Exception:
         return PatternEngine()

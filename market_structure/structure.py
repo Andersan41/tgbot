@@ -471,8 +471,8 @@ def analyze_structure(
         last_mss=last_mss,
         swing_points=swings,
         structure_breaks=breaks,
-        recent_highs=highs[-5:] if len(highs) >= 5 else highs,
-        recent_lows=lows[-5:] if len(lows) >= 5 else lows,
+        recent_highs=highs[-15:] if len(highs) >= 15 else highs,
+        recent_lows=lows[-15:] if len(lows) >= 15 else lows,
     )
 
 
