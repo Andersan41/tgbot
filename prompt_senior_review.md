@@ -165,9 +165,9 @@ For each symbol × timeframe:
 ├─ GATE 2: Portfolio Risk ★ #1 KILLER ────────────────────────────
 │  Input: symbol (atomic lock)
 │  Logic: 3 sequential checks:
-│    (a) active_signals_for_this_symbol >= max_active_per_symbol (2)
+│    (a) active_signals_for_this_symbol >= max_active_per_symbol (1)
 │    (b) total_active_signals >= max_active_signals (10)
-│    (c) sum_of_active_risk% >= max_portfolio_risk_pct (5.0%)
+│    (c) sum_of_active_risk% >= max_portfolio_risk_pct (3.0%)
 │  Pass: ALL 3 checks pass
 │  Block: any check fails → "max active (X/Y)" or "portfolio risk X% >= 5%"
 │  ★ This blocks ~96% of candidates in live operation
@@ -423,8 +423,8 @@ confidence = min(0.85, p_tp)
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | max_active_signals | 10 | Max global concurrent signals |
-| max_active_signals_per_symbol | 2 | Max concurrent per symbol |
-| **max_portfolio_risk_pct** | **5.0%** | **Max sum of risk across all active trades** |
+| max_active_signals_per_symbol | 1 | Max concurrent per symbol |
+| **max_portfolio_risk_pct** | **3.0%** | **Max sum of risk across all active trades** |
 | signal_cooldown_minutes | 45 | Base cooldown between signals |
 | SIGNAL_COOLDOWN_TF_MULTIPLIER | 2.0 | Cooldown = max(base, TF × multiplier) |
 | min_rr_ratio | 1.5 | Minimum risk:reward ratio |
@@ -447,12 +447,14 @@ confidence = min(0.85, p_tp)
 
 ## VI. Key Observations for Auditor
 
-1. **`portfolio_risk` blocks ~96% of candidates** — the dominant bottleneck. Most candidates never reach pattern_engine.
+1. **`portfolio_risk` blocks ~96% of candidates** — the dominant bottleneck. Most candidates never reach pattern_engine. Config: `max_portfolio_risk_pct=3.0%` (code default), `max_active_signals=10` (.env override), `max_active_signals_per_symbol=1`.
 2. **BUY signals are slightly profitable (+0.11%), SELL signals are deeply negative (-2.14%).** The short side destroys performance.
 3. **SL hits (81) outnumber TP hits (37) by 2.2:1.** The win/loss ratio is inverted.
 4. **Average TP/SL ratio is 0.95** — TP is closer than SL on average, requiring >52% WR to break even.
 5. **No `score_too_low` or `time_of_day_blocked` gates exist** in the current codebase.
 6. **`decision_traces` table is empty** — no per-candidate gate data was logged.
+7. **Config mismatch note:** `max_active_signals` is overridden to 10 in `.env` (code default is 3). `max_active_signals_per_symbol=1` and `max_portfolio_risk_pct=3.0%` are code defaults (not overridden in `.env`).
+8. **Data sources not in git:** `data/signals.db` (22.8 MB, 143 signals) and `logs/bot.log` (3.7 MB) are in `.gitignore`. Local paths: `E:\Projects\tgbot-claude\data\signals.db`, `E:\Projects\tgbot-claude\logs\bot.log`.
 
 ---
 
@@ -464,12 +466,12 @@ This is the REAL #1 bottleneck. The gate fires at Phase 0, before any setup anal
 
 Look at:
 - `scheduler/scanner.py:223-250` — portfolio_risk gate logic
-- `config.settings`: `max_portfolio_risk_pct=5.0`, `max_active_signals=10`
-- When active risk is 3-4%, only 1-2% budget remains → first candidate gets blocked
+- `config.settings`: `max_portfolio_risk_pct=3.0`, `max_active_signals=10`, `max_active_signals_per_symbol=1`
+- With active risk typically 2-3%, only 0-1% budget remains → almost everything blocked
 
 Questions:
-- Is 5% max portfolio risk too conservative?
-- Should we increase to 8-10% to allow more concurrent signals?
+- Is 3% max portfolio risk too conservative?
+- Should we increase to 5-8% to allow more concurrent signals?
 - Is the risk sum calculation correct? Could stale trades inflate it?
 
 ### 2. Why is the TP/SL ratio 0.95 (average)?
@@ -494,7 +496,7 @@ Look at:
 
 Current: 35 entries/cycle → 0 signals (98% blocked by portfolio_risk)
 
-If we increase `max_portfolio_risk_pct` from 5% to 8%:
+If we increase `max_portfolio_risk_pct` from 3% to 5%:
 - How many more candidates reach pattern_engine?
 - Expected signals per week?
 
