@@ -175,12 +175,12 @@ async def _load_closed_trades(
 async def _load_all_outcomes(
     period: Optional[timedelta] = None,
 ) -> list[tuple[SignalOutcome, Signal]]:
-    """Load ALL outcomes (HIT_TP + HIT_SL + EXPIRED) optionally filtered."""
+    """Load ALL closed outcomes (HIT_TP + HIT_SL + EXPIRED + MANUAL_CLOSE) optionally filtered."""
     async with db._session_factory() as session:
         query = (
             select(SignalOutcome, Signal)
             .join(Signal, SignalOutcome.signal_id == Signal.id)
-            .where(SignalOutcome.status.in_(["HIT_TP", "HIT_SL", "EXPIRED"]))
+            .where(SignalOutcome.status.in_(["HIT_TP", "HIT_SL", "EXPIRED", "MANUAL_CLOSE"]))
         )
         if period is not None:
             cutoff = datetime.now(timezone.utc) - period
@@ -270,7 +270,7 @@ async def overall_stats(period: str | None = None) -> WinrateStats:
 
     # Load outcomes
     all_outcomes = await _load_all_outcomes(td)
-    closed = [(o, s) for o, s in all_outcomes if o.status in ("HIT_TP", "HIT_SL")]
+    closed = [(o, s) for o, s in all_outcomes if o.status in ("HIT_TP", "HIT_SL", "EXPIRED", "MANUAL_CLOSE")]
     expired = sum(1 for o, s in all_outcomes if o.status == "EXPIRED")
 
     pnls = [o.pnl_pct for o, s in closed if o.pnl_pct is not None]
@@ -590,7 +590,7 @@ def format_overall_stats(s: WinrateStats, period_label: str = "all time") -> str
         return f"📊 Нет закрытых сделок ({period_label})"
     return (
         f"📊 <b>Статистика ({period_label})</b>\n\n"
-        f"Всего: <b>{s.total}</b> (TP: {s.wins} | SL: {s.losses} | EX: {s.expired})\n"
+        f"Всего: <b>{s.total}</b> (PnL+: {s.wins} | PnL−: {s.losses} | EX: {s.expired})\n"
         f"Winrate: <b>{s.winrate:.1f}%</b>\n"
         f"Profit Factor: <b>{s.profit_factor:.2f}</b>\n"
         f"Expectancy: <b>{s.expectancy_r:+.3f}R</b>\n"

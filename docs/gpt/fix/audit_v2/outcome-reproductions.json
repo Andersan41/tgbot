@@ -1,0 +1,43 @@
+[
+  {
+    "case": "both_barriers_hit_tp_wins",
+    "resolution": [
+      1,
+      "HIT_TP",
+      110.0,
+      9.797500000000001
+    ],
+    "resolution_kwargs": {}
+  },
+  {
+    "case": "ticker_sl_erased_by_candle",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "previous_bar_sl_ignored",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "pre_entry_wick_false_tp",
+    "resolution": [
+      1,
+      "HIT_TP",
+      110.0,
+      9.799987499528125
+    ],
+    "resolution_kwargs": {}
+  },
+  {
+    "case": "expiry_discards_loss",
+    "resolution": [
+      1,
+      "EXPIRED"
+    ],
+    "resolution_kwargs": {
+      "close_price": 100.0,
+      "pnl_pct": 0.0
+    }
+  }
+]

@@ -1,0 +1,260 @@
+....................FF.....................FFFFFF.FFFF.FFFFFFF.FFFFFFFFF [  6%]
+F.FFFF..FF.......................................F....F................. [ 13%]
+...............................................s....FF..FF.....FF..FFFF. [ 20%]
+FFFFF.F.F...............F............................................... [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 40%]
+.......F.FF....FF.....................F.F............................... [ 47%]
+........................................................................ [ 54%]
+........................................FF.............................. [ 61%]
+..........FF.....................................FFFFFFFFFFFFFFFFFFFFFFF [ 68%]
+.FFFFFFFFFF...FF.F......................F....F.......................... [ 75%]
+...............................F..........F.....................F....... [ 81%]
+.............F.......................................................... [ 88%]
+.......FF.................................................FFFFFF........ [ 95%]
+................................................                         [100%]
+================================== FAILURES ===================================
+tests\test_admin_commands.py:361: AssertionError: BTC/USDT should be scanned
+tests\test_admin_commands.py:386: AssertionError: assert 'BTC/USDT' in set()
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:30: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'verdict'
+tests\test_analytics.py:366: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_analytics.py:402: TypeError: BacktestTrade.__init__() got an unexpected keyword argument 'factor_strengths'
+tests\test_architecture.py:338: AssertionError: assert False is True
+tests\test_architecture.py:406: AssertionError: assert 'R/R' in '🟢 BUY — ПОКУПКА — BTC/USDT\nТаймфрейм: 1H\nEntry: <code>50000</code>\nSL: <code>49000</code> (-2.00%)\nTP: <code>53000</code> (+6.00%)\nRR: 1:3.0\nConfidence: 71/100'
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+<workspace>\.audit-venv\Lib\site-packages\pandas\io\parquet.py:68: ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+tests\test_config.py:28: AssertionError: assert 0 > 0
+tests\test_config.py:42: AssertionError: assert 0 > 0
+tests\test_config.py:59: AssertionError: assert 'XRP/USDT' in ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+C:\Users\AV\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\pathlib.py:1013: FileNotFoundError: [Errno 2] No such file or directory: '.env'
+C:\Users\AV\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\mock.py:928: AssertionError: Expected 'binance' to have been called once. Called 0 times.
+tests\test_exchange_client.py:79: assert                               open     high      low    close     volume\ntimestamp                                    ....1  84850.8   618.5145\n2026-09-21 12:00:00+00:00  84850.8  85387.7  84778.9  85287.6  1017.3372\n\n[199 rows x 5 columns] is None
+tests\test_exchange_client.py:87: assert                               open     high      low    close     volume\ntimestamp                                    ....1  84850.8   618.5145\n2026-09-21 12:00:00+00:00  84850.8  85387.7  84778.9  85287.6  1017.3372\n\n[199 rows x 5 columns] is None
+tests\test_exchange_client.py:121: TypeError: 'NoneType' object is not subscriptable
+tests\test_exchange_client.py:130: TypeError: 'NoneType' object is not subscriptable
+tests\test_ict_menu.py:25: AssertionError: Main menu should have ICT button
+tests\test_ict_menu.py:40: AssertionError: ICT token list should have custom token button
+C:\Users\AV\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\mock.py:928: AssertionError: Expected 'error' to have been called once. Called 0 times.
+main.py:24: SystemExit: 1
+scheduler\scanner.py:225: TypeError: object MagicMock can't be used in 'await' expression
+scheduler\scanner.py:225: TypeError: object MagicMock can't be used in 'await' expression
+tests\test_new_pipeline.py:477: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:489: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:503: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:520: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:526: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:532: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:535: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:549: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:558: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:564: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:577: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:596: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:613: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:632: NameError: name 'probability_engine' is not defined
+tests\test_new_pipeline.py:636: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:649: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:657: NameError: name 'TradeProbability' is not defined
+tests\test_new_pipeline.py:663: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:678: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:693: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:708: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:723: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:736: NameError: name 'probability_engine' is not defined
+tests\test_new_pipeline.py:750: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:763: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:777: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:790: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:803: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:815: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:826: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:838: NameError: name 'TradeProbability' is not defined
+tests\test_new_pipeline.py:856: NameError: name 'TradeProbability' is not defined
+tests\test_new_pipeline.py:873: NameError: name 'SetupFeatures' is not defined
+tests\test_new_pipeline.py:950: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:991: NameError: name 'feature_builder' is not defined
+tests\test_new_pipeline.py:1024: NameError: name 'SetupFeatures' is not defined
+<workspace>\.audit-venv\Lib\site-packages\loguru\_logger.py:844: ValueError: An event loop is required to add a coroutine sink with `enqueue=True`, but none has been passed as argument and none is currently running.
+tests\test_ops.py:106: assert not True
+tests\test_risk.py:128: AssertionError: assert 0.25 == 0.0
+tests\test_risk.py:171: AssertionError: assert 0.25 == 0.0
+tests\test_risk.py:336: assert 0.8 == 1.0
+tests\test_risk.py:511: assert 20.0 == 18.0
+liquidity\pool.py:76: TypeError: '>' not supported between instances of 'MagicMock' and 'float'
+liquidity\pool.py:76: TypeError: '>' not supported between instances of 'MagicMock' and 'float'
+tests\test_scoring.py:316: AssertionError: assert 'СИЛЬНЫЙ' == 'STRONG'
+tests\test_scoring.py:331: AssertionError: assert 'УМЕРЕННЫЙ' == 'MODERATE'
+tests\test_scoring.py:346: AssertionError: assert 'СЛАБЫЙ' == 'WEAK'
+tests\test_scoring.py:361: AssertionError: assert 'СИЛЬНЫЙ' == 'STRONG'
+tests\test_scoring.py:369: AssertionError: assert 'УМЕРЕННЫЙ' == 'MODERATE'
+tests\test_scoring.py:386: AssertionError: assert 'Quality: strong' in '🟢 BUY — ПОКУПКА — BTC/USDT\nТаймфрейм: 1H\nEntry: <code>50000.0</code>\nConfidence: 72/100'
+============================== warnings summary ===============================
+..\.audit-venv\Lib\site-packages\pytz\tzinfo.py:27
+  <workspace>\.audit-venv\Lib\site-packages\pytz\tzinfo.py:27: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    _epoch = datetime.utcfromtimestamp(0)
+
+..\.audit-venv\Lib\site-packages\pandas_ta\__init__.py:37
+  <workspace>\.audit-venv\Lib\site-packages\pandas_ta\__init__.py:37: Pandas4Warning: The 'mode.copy_on_write' option is deprecated. Copy-on-Write can no longer be disabled (it is always enabled with pandas >= 3.0), and setting the option has no impact. This option will be removed in pandas 4.0.
+    from pandas_ta.core import AnalysisIndicators
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_admin_commands.py::TestScannerDisabledFilter::test_scan_skips_disabled
+FAILED tests/test_admin_commands.py::TestScannerDisabledFilter::test_scan_all_when_no_disabled
+FAILED tests/test_analytics.py::TestFactorContribution::test_single_factor_winrate
+FAILED tests/test_analytics.py::TestFactorContribution::test_profit_factor_calculation
+FAILED tests/test_analytics.py::TestFactorContribution::test_expectancy_calculation
+FAILED tests/test_analytics.py::TestFactorContribution::test_factor_not_present_excluded
+FAILED tests/test_analytics.py::TestFactorContribution::test_false_positive_count
+FAILED tests/test_analytics.py::TestFactorContribution::test_avg_strength - T...
+FAILED tests/test_analytics.py::TestFactorContribution::test_multiple_factors
+FAILED tests/test_analytics.py::TestCombinationStats::test_basic_combination
+FAILED tests/test_analytics.py::TestCombinationStats::test_min_occurrences_filter
+FAILED tests/test_analytics.py::TestCombinationStats::test_sorted_by_expectancy
+FAILED tests/test_analytics.py::TestCombinationStats::test_different_combinations
+FAILED tests/test_analytics.py::TestFalsePositives::test_strong_fp_rate - Typ...
+FAILED tests/test_analytics.py::TestFalsePositives::test_moderate_fp_rate - T...
+FAILED tests/test_analytics.py::TestFalsePositives::test_worst_factors - Type...
+FAILED tests/test_analytics.py::TestFalsePositives::test_best_worst_combinations
+FAILED tests/test_analytics.py::TestFalsePositives::test_fp_by_regime - TypeE...
+FAILED tests/test_analytics.py::TestFalsePositives::test_fp_by_verdict - Type...
+FAILED tests/test_analytics.py::TestFalsePositives::test_no_strong_signals - ...
+FAILED tests/test_analytics.py::TestIntegration::test_full_pipeline - TypeErr...
+FAILED tests/test_analytics.py::TestIntegration::test_backtest_trade_has_factor_data
+FAILED tests/test_analytics.py::TestEntryTiming::test_buy_signal_at_30pct_of_move
+FAILED tests/test_analytics.py::TestEntryTiming::test_buy_signal_at_70pct_of_move
+FAILED tests/test_analytics.py::TestEntryTiming::test_sell_signal_efficiency
+FAILED tests/test_analytics.py::TestEntryTiming::test_late_entry_low_efficiency
+FAILED tests/test_analytics.py::TestEntryTiming::test_entry_efficiency_capped_at_100
+FAILED tests/test_analytics.py::TestEntryTiming::test_atr_normalized_metrics
+FAILED tests/test_analytics.py::TestEntryTiming::test_approximate_atr_from_sl
+FAILED tests/test_analytics.py::TestEntryTiming::test_summary_avg_efficiency
+FAILED tests/test_analytics.py::TestEntryTiming::test_summary_median_efficiency
+FAILED tests/test_analytics.py::TestEntryTiming::test_summary_pct_above_threshold
+FAILED tests/test_analytics.py::TestEntryTiming::test_summary_by_direction - ...
+FAILED tests/test_analytics.py::TestEntryTiming::test_mixed_buy_sell_efficiency
+FAILED tests/test_analytics.py::TestEntryTiming::test_zero_atr_fallback - Typ...
+FAILED tests/test_architecture.py::TestIndicatorValuesProperties::test_trend_is_strong
+FAILED tests/test_architecture.py::TestSignalResultFormatting::test_risk_reward_display
+FAILED tests/test_backtest_source_switch.py::TestSourceSwitch::test_local_reads_parquet
+FAILED tests/test_backtest_source_switch.py::TestSourceSwitch::test_local_resamples_non_base_tf
+FAILED tests/test_cache_ohlcv.py::TestSaveLoadRoundTrip::test_preserves_datetime_index
+FAILED tests/test_cache_ohlcv.py::TestSaveLoadRoundTrip::test_load_rejects_non_datetime_index
+FAILED tests/test_cache_ohlcv.py::TestTimeAlignment::test_15m_first_last_within_1h_range
+FAILED tests/test_cache_ohlcv.py::TestUnifiedRoundTrip::test_save_load_columns_and_format
+FAILED tests/test_cache_ohlcv.py::TestFetchFullHistory::test_returns_none_and_saves_parquet
+FAILED tests/test_cache_ohlcv.py::TestFetchFullHistory::test_backward_pagination_end_time_per_batch
+FAILED tests/test_cache_ohlcv.py::TestFetchFullHistory::test_stops_at_start_ms_cutoff
+FAILED tests/test_cache_ohlcv.py::TestFetchBatchRetry::test_retry_exponential_backoff
+FAILED tests/test_cache_ohlcv.py::TestUpdateHistory::test_incremental_add_one_candle
+FAILED tests/test_cache_ohlcv.py::TestUpdateHistory::test_incremental_no_new_data
+FAILED tests/test_cache_ohlcv.py::TestUpdateHistory::test_dedup_on_partial_overlap
+FAILED tests/test_cache_ohlcv.py::TestUpdateHistory::test_update_history_fetches_full_when_missing
+FAILED tests/test_config.py::TestTelegramConfig::test_reads_from_env - Assert...
+FAILED tests/test_config.py::TestExchangeConfig::test_reads_from_env - Assert...
+FAILED tests/test_config.py::TestTradingConfig::test_symbols_from_env - Asser...
+FAILED tests/test_config.py::TestEnvFile::test_env_matches_example_structure
+FAILED tests/test_exchange_client.py::TestExchangeClient::test_connect_creates_exchange
+FAILED tests/test_exchange_client.py::TestExchangeClient::test_fetch_ohlcv_empty_response
+FAILED tests/test_exchange_client.py::TestExchangeClient::test_fetch_ohlcv_network_error
+FAILED tests/test_exchange_client.py::TestExchangeClient::test_connect_passes_defaultType_from_config
+FAILED tests/test_exchange_client.py::TestExchangeClient::test_connect_defaultType_future
+FAILED tests/test_ict_menu.py::TestKeyboardStructure::test_main_menu_has_ict_button
+FAILED tests/test_ict_menu.py::TestKeyboardStructure::test_ict_token_list_has_custom_button
+FAILED tests/test_main.py::TestMainStartup::test_empty_token_logs_error - Ass...
+FAILED tests/test_main.py::TestMainStartup::test_successful_startup_sequence
+FAILED tests/test_metrics.py::TestScanSymbolMetrics::test_signals_total_increased_on_signal
+FAILED tests/test_metrics.py::TestScanSymbolMetrics::test_scan_duration_histogram_wraps
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_singleton_exists
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_build_returns_setup_features
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_vector_returns_dict
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_vector_numeric_only
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_vector_structure_encoding
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_vector_session_encoding
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_reasoning_reversal
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_reasoning_continuation
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_to_reasoning_empty
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_build_calculates_rr_ratio
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_build_calculates_volume_ratio
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_build_mss_fields_populated
+FAILED tests/test_new_pipeline.py::TestFeatureBuilder::test_build_with_none_ind
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_singleton_exists
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_rules_based_fallback
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_p_tp_in_range
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_quality_labels
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_reversal_mss_highest_edge
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_continuation_bos_edge
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_volume_boosts_p_tp
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_higher_rr_higher_p_tp
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_mtf_aligned_boosts
+FAILED tests/test_new_pipeline.py::TestProbabilityEngine::test_get_top_features_empty
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_valid_trade_passes - ...
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_rr_too_low_rejects - ...
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_sl_too_tight_rejects
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_sl_too_wide_rejects
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_portfolio_risk_full_passes_in_risk_engine
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_max_active_signals_passes_in_risk_engine
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_invalid_price_rejects
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_high_volatility_reduces_risk
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_mss_quality_soft_adjustment
+FAILED tests/test_new_pipeline.py::TestRiskEngine::test_kelly_fraction_used
+FAILED tests/test_new_pipeline.py::TestPipelineIntegration::test_full_reversal_pipeline
+FAILED tests/test_new_pipeline.py::TestPipelineIntegration::test_full_continuation_pipeline
+FAILED tests/test_new_pipeline.py::TestPipelineIntegration::test_risk_blocks_bad_rr
+FAILED tests/test_ops.py::TestSetupErrorSink::test_adds_sink_when_error_channel_set
+FAILED tests/test_ops.py::TestRateLimiter::test_rate_limit_blocks_after_5 - a...
+FAILED tests/test_risk.py::TestDynamicRisk::test_weak_setup_base_risk - Asser...
+FAILED tests/test_risk.py::TestDynamicRisk::test_calculate_risk_weak_no_trade
+FAILED tests/test_risk.py::TestRiskConfig::test_default_values - assert 0.8 =...
+FAILED tests/test_risk.py::TestMarketRegime::test_regime_config_defaults - as...
+FAILED tests/test_scanner.py::TestScanSymbolV2::test_full_successful_scan - T...
+FAILED tests/test_scanner.py::TestScanSymbolV2::test_sets_cooldown_after_signal
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_verdict_from_v2_strong
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_verdict_from_v2_moderate
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_verdict_from_v2_weak
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_verdict_from_v2_sell_negative_score
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_fallback_to_legacy_when_no_v2
+FAILED tests/test_scoring.py::TestSignalResultV2Confidence::test_format_message_shows_quality_when_v2
+116 failed, 939 passed, 1 skipped, 2 warnings in 44.26s

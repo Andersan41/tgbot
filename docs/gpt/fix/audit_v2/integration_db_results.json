@@ -1,0 +1,13 @@
+{
+  "legacy_migration": "passed; sentinel preserved; idempotent",
+  "feature_snapshot": "components/quality/P(TP)/risk persisted across updates",
+  "signed_metric_wrong_label_single_loss_wr": 0.0,
+  "signed_metric_combined": {
+    "gate": "portfolio_admission",
+    "entered": 3,
+    "passed": 3,
+    "dropped": 0,
+    "wr_downstream": 66.7,
+    "pf_downstream": 2.0
+  }
+}

@@ -55,6 +55,9 @@ FEATURE_KEYS = {
     "atr_pct", "ema_slope_3", "ema_slope_5",
     "nearest_support_pct", "nearest_resistance_pct",
     "regime_confidence",
+    # B-011: V2 pipeline features
+    "components", "overall_quality", "setup_confidence", "mtf_aligned",
+    "p_tp", "risk_pct", "expected_rr", "setup_type", "git_sha",
 }
 
 
@@ -161,8 +164,8 @@ class DecisionTraceBuilder:
         self._candidate_id = candidate_id
 
     def set_features(self, features: dict) -> None:
-        """Set feature snapshot — only known keys are kept."""
-        self._features = {k: v for k, v in features.items() if k in FEATURE_KEYS}
+        """Keep earlier snapshots and all explicitly registered feature names."""
+        self._features.update({key: value for key, value in features.items() if key in FEATURE_KEYS})
 
     def set_version(self, version: str, config_snapshot: Optional[str] = None) -> None:
         """Set strategy version and optional config snapshot JSON."""
@@ -213,25 +216,15 @@ class DecisionTraceBuilder:
         return self._final_stage
 
     def build_gate_path(self) -> str:
-        """Serialize gate outcomes as ordered JSON array.
-
-        Example: ["cooldown:PASS", "signal_engine:BLOCK:not_actionable:ENGINE_ADX_FLAT"]
-        Enables transition matrix analysis.
-        """
+        """Preserve actual execution order, including gates absent from old schemas."""
         path = []
-        for gate in GATE_ORDER:
-            result = self._gates.get(gate)
-            if result is None:
+        for gate, passed in self._gates.items():
+            if passed is None:
                 continue
-            status = "PASS" if result else "BLOCK"
-            entry = f"{gate}:{status}"
-            if not result and self._final_stage == gate and self._blocked_reason:
-                entry += f":{self._blocked_reason[:80]}"
-            path.append(entry)
-        # Also add compression_block if recorded (not in canonical GATE_ORDER)
-        if "compression_block" in self._gates:
-            status = "PASS" if self._gates["compression_block"] else "BLOCK"
-            path.append(f"compression_block:{status}")
+            value = f"{gate}:{'PASS' if passed else 'BLOCK'}"
+            if not passed and gate == self._final_stage and self._blocked_reason:
+                value += f":{self._blocked_reason[:80]}"
+            path.append(value)
         return json.dumps(path)
 
     async def save(
@@ -269,5 +262,5 @@ class DecisionTraceBuilder:
             )
             return trace.id
         except Exception as e:
-            logger.debug(f"Decision trace save failed for {self.symbol} {self.timeframe}: {e}")
+            logger.error(f"Decision trace save failed for {self.symbol} {self.timeframe}: {e}")
             return -1

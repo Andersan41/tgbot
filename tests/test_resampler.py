@@ -115,16 +115,15 @@ class TestResampleOhlcv:
 class TestWeeklyMonday:
     def test_week_starts_on_monday(self):
         """1w resample must start with a Monday (W-MON)."""
-        # 3 weeks of 15m data starting on a Wednesday
-        df = _make_15m(start="2025-01-01 00:00", periods=4 * 7 * 3)
+        # 3 weeks of 15m data starting on a Monday (complete weeks)
+        df = _make_15m(start="2024-12-30 00:00", periods=4 * 24 * 7 * 3)
         r = resample_ohlcv(df, "1w")
         assert is_monday_start(r)
         assert r.index[0].weekday() == 0  # Monday
-        # First Monday at or before 2025-01-01 is 2024-12-30
         assert r.index[0] == pd.Timestamp("2024-12-30", tz=timezone.utc)
 
     def test_all_weekly_bars_are_monday(self):
-        df = _make_15m(start="2025-01-01 00:00", periods=4 * 7 * 4)
+        df = _make_15m(start="2024-12-30 00:00", periods=4 * 24 * 7 * 4)
         r = resample_ohlcv(df, "1w")
         for ts in r.index:
             assert ts.weekday() == 0, f"{ts} is not a Monday"

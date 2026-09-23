@@ -68,56 +68,52 @@ def _ensure_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def resample_ohlcv(df_15m: pd.DataFrame, target_tf: str) -> pd.DataFrame:
-    """Resample a 15m OHLCV DataFrame to *target_tf*.
-
-    Агрегация: open=first, high=max, low=min, close=last, volume=sum.
-    Неполные бары (например, последний, не закончившийся на момент исходных
-    данных) удаляются через dropna().
-
-    Args:
-        df_15m: DataFrame с DatetimeIndex (UTC) и колонками
-                open/high/low/close/volume.
-        target_tf: один из "1h", "2h", "4h", "1d", "1w".
-
-    Returns:
-        pd.DataFrame с тем же DatetimeIndex (UTC) и теми же колонками.
-        Индекс — closed="left", label="left": бар 00:00 содержит данные
-        с 00:00 (включительно) до 00:59 (исключительно).
-    """
+def resample_ohlcv(
+    df_15m: pd.DataFrame,
+    target_tf: str,
+    source_tf: str = "15m",
+) -> pd.DataFrame:
+    """Aggregate closed source bars; reject partial buckets and missing samples."""
     tf = _normalize_target_tf(target_tf)
-    pandas_rule = _TF_MAP[tf]
-
     if df_15m is None or len(df_15m) == 0:
-        logger.warning(f"resample_ohlcv: empty input for {target_tf}")
         return df_15m
 
-    df = _ensure_datetime_index(df_15m.copy())
+    def duration(value: str) -> pd.Timedelta:
+        units = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+        unit = value[-1].lower()
+        if unit not in units or int(value[:-1]) <= 0:
+            raise ValueError(f"Unsupported timeframe: {value}")
+        return pd.Timedelta(seconds=int(value[:-1]) * units[unit])
 
-    # Берём только OHLCV-колонки, игнорируем посторонние (taker_buy_volume и т.д.)
-    cols = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
-    if not cols:
-        raise ValueError(
-            f"df_15m must contain at least one of open/high/low/close/volume, "
-            f"got columns: {list(df.columns)}"
-        )
+    source_step = duration(source_tf)
+    target_step = duration(tf)
+    if source_step > target_step or target_step.value % source_step.value:
+        raise ValueError(f"Cannot aggregate {source_tf} into {tf}")
+    expected = target_step.value // source_step.value
+    df = _ensure_datetime_index(df_15m.copy()).sort_index()
+    cols = ["open", "high", "low", "close", "volume"]
+    if not set(cols).issubset(df.columns):
+        raise ValueError("All OHLCV columns are required")
+    if df.index.has_duplicates:
+        raise ValueError("Duplicate source candle timestamps")
+    if any(ts.value % source_step.value != 0 for ts in df.index):
+        raise ValueError(f"Source candles are not aligned to {source_tf}")
     df = df[cols]
-
-    # closed="left", label="left" — стандарт для OHLCV:
-    # бар [00:00, 01:00) помечается меткой 00:00.
-    resampled = df.resample(
-        pandas_rule, closed="left", label="left",
-    ).agg(_AGG)
-
-    # dropna() убирает неполные бары (например, последний бар, в который
-    # попали не все 4 x 15m свечи — если исходные данные обрываются посередине).
-    resampled = resampled.dropna()
-
-    logger.debug(
-        f"resample_ohlcv: {len(df_15m)} x 15m -> {len(resampled)} x {target_tf} "
-        f"({df.index[0]} -> {df.index[-1]})"
+    rule = _TF_MAP[tf]
+    grouped = df.resample(rule, closed="left", label="left")
+    result = grouped.agg(_AGG)
+    counts = grouped.count().min(axis=1)
+    times = pd.Series(df.index, index=df.index).resample(
+        rule, closed="left", label="left",
     )
-    return resampled
+    first = times.first()
+    last = times.last()
+    complete = (
+        (counts == expected)
+        & (first == result.index)
+        & (last + source_step == result.index + target_step)
+    )
+    return result.loc[complete].dropna()
 
 
 def resample_to_all_tfs(df_15m: pd.DataFrame) -> dict[str, pd.DataFrame]:

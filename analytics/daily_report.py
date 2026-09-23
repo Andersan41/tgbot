@@ -76,13 +76,16 @@ async def get_daily_data(date: Optional[datetime] = None) -> dict:
     }
 
 
-def _calc_profit_factor(pnls: list[float]) -> float:
-    """Calculate profit factor from list of PnL values."""
-    gains = sum(p for p in pnls if p > 0)
-    losses = abs(sum(p for p in pnls if p < 0))
-    if losses == 0:
-        return float("inf") if gains > 0 else 0.0
-    return gains / losses
+def _calc_profit_factor(pnls: list[float]) -> float | None:
+    """Calculate profit factor from list of PnL values.
+
+    Returns None if no observed loss exists (undefined PF).
+    """
+    import math
+    values = [float(p) for p in pnls if p is not None and math.isfinite(float(p))]
+    gains = sum(p for p in values if p > 0)
+    losses = -sum(p for p in values if p < 0)
+    return gains / losses if losses > 0 else None
 
 
 def format_daily_report(data: dict) -> str:
@@ -106,23 +109,31 @@ def format_daily_report(data: dict) -> str:
         lines.append("")
     else:
         # Summary
-        pnls = [o.pnl_pct for o, s in closed if o.pnl_pct is not None]
-        wins = sum(1 for o, s in closed if o.status == "HIT_TP")
-        losses_count = sum(1 for o, s in closed if o.status == "HIT_SL")
-        expired = sum(1 for o, s in closed if o.status == "EXPIRED")
+        import math
+        pnls = [float(o.pnl_pct) for o, s in closed if o.pnl_pct is not None and math.isfinite(float(o.pnl_pct))]
+        wins = sum(p > 0 for p in pnls)
+        losses_count = sum(p < 0 for p in pnls)
+        zero = sum(p == 0 for p in pnls)
+        unknown = len(closed) - len(pnls)
+        expired = sum(o.status == "EXPIRED" for o, s in closed)
+        tp_events = sum(o.status == "HIT_TP" for o, s in closed)
         avg_pnl = sum(pnls) / len(pnls) if pnls else 0.0
         pf = _calc_profit_factor(pnls)
+        pf_text = f"{pf:.2f}" if pf is not None else "—"
+        wr_text = f"{wins / len(pnls) * 100:.1f}%" if pnls else "—"
 
-        lines.append(f"| Метрика | Значение |")
-        lines.append(f"|---------|----------|")
+        lines.append("| Метрика | Значение |")
+        lines.append("|---------|----------|")
         lines.append(f"| Всего закрыто | {len(closed)} |")
-        lines.append(f"| WIN (TP) | {wins} |")
-        lines.append(f"| LOSS (SL) | {losses_count} |")
-        if expired:
-            lines.append(f"| EXPIRED | {expired} |")
-        lines.append(f"| Винрейт | {wins/len(closed)*100:.1f}% |" if closed else "")
-        lines.append(f"| Средний PnL | {avg_pnl:+.2f}% |")
-        lines.append(f"| Profit Factor | {pf:.2f} |")
+        lines.append(f"| Известный PnL / неизвестный | {len(pnls)} / {unknown} |")
+        lines.append(f"| WIN (PnL > 0) | {wins} |")
+        lines.append(f"| LOSS (PnL < 0) | {losses_count} |")
+        lines.append(f"| Нулевой сохраненный PnL | {zero} |")
+        lines.append(f"| События HIT_TP | {tp_events} |")
+        lines.append(f"| EXPIRED (закрытие требует сверки) | {expired} |")
+        lines.append(f"| Винрейт по известному PnL | {wr_text} |")
+        lines.append(f"| Средний ценовой PnL | {avg_pnl:+.2f}% |")
+        lines.append(f"| Ценовой Profit Factor | {pf_text} |")
         lines.append("")
 
         # Details table
@@ -130,7 +141,7 @@ def format_daily_report(data: dict) -> str:
         lines.append("|---|--------|-----|-------------|-------|------|-----|--------|")
         for i, (outcome, signal) in enumerate(closed, 1):
             status_emoji = {"HIT_TP": "TP", "HIT_SL": "SL", "EXPIRED": "EXPIRED"}.get(outcome.status, "?")
-            pnl_str = f"{outcome.pnl_pct:+.2f}%" if outcome.pnl_pct else "—"
+            pnl_str = f"{outcome.pnl_pct:+.2f}%" if outcome.pnl_pct is not None and math.isfinite(float(outcome.pnl_pct)) else "—"
             entry_str = f"{signal.close_price:.4f}" if signal.close_price else "—"
             exit_str = f"{outcome.close_price:.4f}" if outcome.close_price else "—"
             lines.append(
@@ -166,22 +177,33 @@ def format_daily_report(data: dict) -> str:
     lines.append("")
 
     if all_closed:
-        all_pnls = [o.pnl_pct for o, s in all_closed if o.pnl_pct is not None]
-        all_wins = sum(1 for o, s in all_closed if o.status == "HIT_TP")
-        all_losses = sum(1 for o, s in all_closed if o.status == "HIT_SL")
+        import math
+        all_pnls = [float(o.pnl_pct) for o, s in all_closed if o.pnl_pct is not None and math.isfinite(float(o.pnl_pct))]
+        all_wins = sum(p > 0 for p in all_pnls)
+        all_losses = sum(p < 0 for p in all_pnls)
+        all_zero = sum(p == 0 for p in all_pnls)
+        all_unknown = len(all_closed) - len(all_pnls)
+        all_expired = sum(o.status == "EXPIRED" for o, s in all_closed)
+        all_tp_events = sum(o.status == "HIT_TP" for o, s in all_closed)
         all_avg = sum(all_pnls) / len(all_pnls) if all_pnls else 0.0
         all_pf = _calc_profit_factor(all_pnls)
+        all_pf_text = f"{all_pf:.2f}" if all_pf is not None else "—"
+        all_wr_text = f"{all_wins / len(all_pnls) * 100:.1f}%" if all_pnls else "—"
         all_best = max(all_pnls) if all_pnls else 0.0
         all_worst = min(all_pnls) if all_pnls else 0.0
 
         lines.append(f"| Метрика | Значение |")
         lines.append(f"|---------|----------|")
         lines.append(f"| Всего закрыто | {len(all_closed)} |")
-        lines.append(f"| WIN | {all_wins} |")
-        lines.append(f"| LOSS | {all_losses} |")
-        lines.append(f"| Винрейт | {all_wins/len(all_closed)*100:.1f}% |" if all_closed else "")
-        lines.append(f"| Средний PnL | {all_avg:+.2f}% |")
-        lines.append(f"| Profit Factor | {all_pf:.2f} |")
+        lines.append(f"| Известный PnL / неизвестный | {len(all_pnls)} / {all_unknown} |")
+        lines.append(f"| WIN (PnL > 0) | {all_wins} |")
+        lines.append(f"| LOSS (PnL < 0) | {all_losses} |")
+        lines.append(f"| Нулевой сохраненный PnL | {all_zero} |")
+        lines.append(f"| События HIT_TP | {all_tp_events} |")
+        lines.append(f"| EXPIRED (закрытие требует сверки) | {all_expired} |")
+        lines.append(f"| Винрейт по известному PnL | {all_wr_text} |")
+        lines.append(f"| Средний ценовой PnL | {all_avg:+.2f}% |")
+        lines.append(f"| Ценовой Profit Factor | {all_pf_text} |")
         lines.append(f"| Лучшая | {all_best:+.2f}% |")
         lines.append(f"| Худшая | {all_worst:+.2f}% |")
         lines.append("")

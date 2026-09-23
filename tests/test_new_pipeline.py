@@ -181,7 +181,7 @@ class TestMSSClassification:
 
     def test_classify_choch_as_mss(self):
         choch = CHoCH(type="bearish", level=49000, timestamp=datetime.now(timezone.utc), candle_index=5)
-        sweep = MockSweep(type="bullish", candle_index=2, is_valid=True)  # bullish sweep precedes bearish CHoCH
+        sweep = MockSweep(type="bearish", candle_index=2, is_valid=True)  # bearish sweep precedes bearish CHoCH (same type)
         result = classify_choch(
             choch, sweeps=[sweep],
             displacement_atr=1.5, reclaim_bars=1,
@@ -202,7 +202,7 @@ class TestMSSClassification:
 
     def test_classify_choch_normal_with_sweep(self):
         choch = CHoCH(type="bearish", level=49000, timestamp=datetime.now(timezone.utc), candle_index=5)
-        sweep = MockSweep(type="bullish", candle_index=2, is_valid=True)  # bullish sweep precedes bearish CHoCH
+        sweep = MockSweep(type="bearish", candle_index=2, is_valid=True)  # bearish sweep precedes bearish CHoCH (same type)
         result = classify_choch(
             choch, sweeps=[sweep],
             displacement_atr=0.6, reclaim_bars=3,

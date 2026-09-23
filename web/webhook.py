@@ -303,12 +303,14 @@ async def process_webhook_signal(payload: WebhookPayload) -> dict:
             _sl_source=sl_source,
         )
 
-        # Save to DB
-        saved_signal = await db.save_signal(
+        # Save to DB using atomic admission API
+        from datetime import datetime, timezone
+        saved_signal, admission_reason = await db.save_signal_with_risk(
+            risk_pct=risk_decision.risk_pct,
             symbol=result.symbol,
             timeframe=result.timeframe,
             signal_type=result.signal.value,
-            close_price=result.close,
+            close_price=entry_price,
             sl=result.sl,
             tp=result.tp,
             score=result.score,
@@ -318,8 +320,11 @@ async def process_webhook_signal(payload: WebhookPayload) -> dict:
             confidence_v2_pct=p_tp * 100,
             confidence_v2_factors=[],
             entry_price_source="WEBHOOK",
-            signal_detected_at=time.time(),
+            signal_detected_at=datetime.now(timezone.utc),
         )
+
+        if saved_signal is None:
+            return {"status": "rejected", "reason": admission_reason}
 
         logger.info(
             f"Webhook signal processed: {result.signal.value} {symbol} {timeframe} | "

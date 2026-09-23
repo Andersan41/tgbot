@@ -1,0 +1,49 @@
+{
+  "scanner_non_compression": "historical NameError fixed in 9d0da045; pattern reached",
+  "budget_overflow": {
+    "existing": 2.9,
+    "added": 1.0,
+    "total": 3.9
+  },
+  "nonpositive_kelly": {
+    "should_trade": true,
+    "risk_pct": 0.1,
+    "rr_ratio": 2.0,
+    "sl_price": 99.0,
+    "tp_price": 102.0,
+    "rejection_reason": null,
+    "kelly_fraction": 0.0,
+    "volatility_adjustment": 1.0,
+    "probability_confidence": 0.2
+  },
+  "nan_accepted": {
+    "should_trade": true,
+    "risk_pct": 0.1,
+    "rr_ratio": NaN,
+    "sl_price": 99.0,
+    "tp_price": 102.0,
+    "rejection_reason": null,
+    "kelly_fraction": 0.0,
+    "volatility_adjustment": 1.0,
+    "probability_confidence": 0.65
+  },
+  "fresh_sqlite_trace_save": 1,
+  "missing_htf_in_path": [
+    "cooldown:PASS",
+    "portfolio_risk:PASS",
+    "indicators:PASS",
+    "pattern_engine:PASS"
+  ],
+  "retained_live_features": {
+    "atr_pct": 1.5,
+    "context_score": 0.2
+  },
+  "lost_downstream_wr": {
+    "gate": "cooldown",
+    "entered": 2,
+    "passed": 2,
+    "dropped": 0,
+    "wr_downstream": null,
+    "pf_downstream": null
+  }
+}

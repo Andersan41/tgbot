@@ -309,23 +309,20 @@ class PatternEngine:
         current_price: float,
     ) -> ICTSetup:
         """Try to detect a REVERSAL setup: sweep + displacement + MSS."""
-        # 1. Sweep required
-        has_sweep = False
-        sweep_type = None
-        sweep_strength = 0.0
-        sweep_reclaim = 0
-        sweep_candle_index = -1
+        from market_structure.structure import select_causal_sweep
 
-        valid_sweeps = [s for s in sweeps if s.is_valid]
-        if valid_sweeps:
-            # Use the NEWEST valid sweep (last in chronological order),
-            # not the oldest. Earlier sweeps may be stale/irrelevant.
-            s = valid_sweeps[-1]
-            has_sweep = True
-            sweep_type = s.type
-            sweep_strength = s.strength
-            sweep_reclaim = s.reclaim_candles
-            sweep_candle_index = s.candle_index
+        mss = getattr(structure, "last_mss", None)
+        if mss is None:
+            return ICTSetup(
+                detected=False,
+                rejection_reason="reversal: no MSS (strong CHoCH)",
+            )
+        s = select_causal_sweep(sweeps, mss)
+        has_sweep = s is not None
+        sweep_type = s.type if s is not None else None
+        sweep_strength = s.strength if s is not None else 0.0
+        sweep_reclaim = s.reclaim_candles if s is not None else 0
+        sweep_candle_index = s.candle_index if s is not None else -1
 
         if not has_sweep:
             return ICTSetup(

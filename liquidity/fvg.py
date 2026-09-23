@@ -79,7 +79,7 @@ def detect_fvg(
         if low3 > high1:
             gap_size_pct = (low3 - high1) / high1 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(_orig_index[i])
+                ts = _to_datetime(_orig_index[i + 1])
                 fvgs.append(FairValueGap(
                     type="bullish",
                     top=low3,
@@ -91,7 +91,7 @@ def detect_fvg(
         if high3 < low1:
             gap_size_pct = (low1 - high3) / high3 * 100
             if gap_size_pct >= min_size_pct:
-                ts = _to_datetime(_orig_index[i])
+                ts = _to_datetime(_orig_index[i + 1])
                 fvgs.append(FairValueGap(
                     type="bearish",
                     top=low1,
@@ -100,10 +100,10 @@ def detect_fvg(
                     index=offset + i + 1,  # absolute index of candle3
                 ))
 
-    # Проверка: какие FVG уже закрыты ценой
-    # Use local index (i+2) — highs/lows are local to the sliced data.
-    for fvg, local_idx in zip(fvgs, range(1, len(data) - 1)):
-        _fill_start = local_idx + 2
+    # A gap exists only after candle 3; inspect strictly later bars.
+    for fvg in fvgs:
+        candle3_idx = fvg.index - offset  # back to local index
+        _fill_start = candle3_idx + 1
         if _fill_start < len(highs):
             fvg.filled = _is_fvg_filled_np(fvg, highs[_fill_start:], lows[_fill_start:])
 

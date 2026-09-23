@@ -1,0 +1,28 @@
+{
+  "commit": "9d0da045c617917e210e2ff802a2602a5068cfa1",
+  "cap_bypass": [
+    {
+      "side": "buy",
+      "configured_atr_cap": 3,
+      "invalidation": 90,
+      "final_sl": 89.85,
+      "plan_is_valid": true,
+      "planned_rr": 0.3
+    },
+    {
+      "side": "sell",
+      "configured_atr_cap": 3,
+      "invalidation": 110,
+      "final_sl": 110.15,
+      "plan_is_valid": true,
+      "planned_rr": 0.3
+    }
+  ],
+  "continuation_gate": {
+    "has_bos": true,
+    "has_ob": true,
+    "has_sweep": false,
+    "backtest_phase_1_4_passes": false,
+    "live_sweep_policy": "optional (scanner.py:492-501)"
+  }
+}

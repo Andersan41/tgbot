@@ -233,7 +233,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
 
         # ── Phase 1: liquidity + structure ──
         try:
-            sweeps = detect_sweeps(_df_clean, lookback=50)
+            sweeps = detect_sweeps(_df_clean, lookback=100)
         except Exception:
             _detector_errors["sweeps"] = _detector_errors.get("sweeps", 0) + 1
             if _detector_errors["sweeps"] % _DETECTOR_ERROR_LOG_EVERY == 1:
@@ -241,7 +241,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             logger.exception(f"replay: detect_sweeps failed [{symbol} {timeframe}]")
             sweeps = []
         try:
-            order_blocks = detect_order_blocks(_df_clean, lookback=100)
+            order_blocks = detect_order_blocks(_df_clean, lookback=150)
         except Exception:
             _detector_errors["order_blocks"] = _detector_errors.get("order_blocks", 0) + 1
             if _detector_errors["order_blocks"] % _DETECTOR_ERROR_LOG_EVERY == 1:
@@ -257,7 +257,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
             logger.exception(f"replay: analyze_last_candle failed [{symbol} {timeframe}]")
             candle_quality = None
         try:
-            fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
+            fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 150))
         except Exception:
             _detector_errors["fvgs"] = _detector_errors.get("fvgs", 0) + 1
             if _detector_errors["fvgs"] % _DETECTOR_ERROR_LOG_EVERY == 1:
@@ -275,7 +275,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None, ttl_bars: int,
 
         try:
             structure = analyze_structure(
-                _df_clean, lookback=50, sweeps=sweeps,
+                _df_clean, lookback=100, sweeps=sweeps,
                 displacement_atr=_disp_atr, reclaim_bars=_reclaim,
                 atr_value=ind.atr if ind.atr else 0.0,
             )

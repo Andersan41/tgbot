@@ -97,15 +97,7 @@ def find_invalidation_buy(
                     buffer_pct=0,
                     distance_pct=dist / entry * 100,
                 )
-        # All swing lows too wide — use closest one anyway (better than ATR fallback)
-        level = max(valid_swings)
-        return Invalidation(
-            level=level,
-            type="swing_point",
-            reason=f"swing low — fractal point (wide SL, {((entry - level) / atr):.1f} ATR)",
-            buffer_pct=0,
-            distance_pct=(entry - level) / entry * 100,
-        )
+        # No swing fits the configured cap; try BOS, then ATR fallback.
 
     # 4. BOS level
     if bos_level and bos_level < entry:
@@ -197,15 +189,7 @@ def find_invalidation_sell(
                     buffer_pct=0,
                     distance_pct=dist / entry * 100,
                 )
-        # All swing highs too wide — use closest one anyway
-        level = min(valid_swings)
-        return Invalidation(
-            level=level,
-            type="swing_point",
-            reason=f"swing high — fractal point (wide SL, {((level - entry) / atr):.1f} ATR)",
-            buffer_pct=0,
-            distance_pct=(level - entry) / entry * 100,
-        )
+        # No swing fits the configured cap; try BOS, then ATR fallback.
 
     # 4. BOS level
     if bos_level and bos_level > entry:

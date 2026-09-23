@@ -280,7 +280,10 @@ class DecisionTrace(Base):
     execution_snapshot = Column(Text, nullable=True)  # JSON: ExecutionSnapshot data
 
     # Hypothesis snapshot (JSON) — for ScenarioMemory tracking
-    hypothesis_snapshot = Column(Text, nullable=True)  # JSON: Hypothesis data
+    hypothesis_snapshot = Column(Text, nullable=True)
+
+    # B-011: Full feature snapshot (JSON) — preserves all V2 features
+    feature_snapshot = Column(Text, nullable=True)  # JSON: Hypothesis data
 
 
 class Database:
@@ -380,6 +383,9 @@ class Database:
                 "gate_structure_alignment": "BOOLEAN",
                 "gate_sweep_required": "BOOLEAN",
                 "gate_regime_block": "BOOLEAN",
+                # B-011: Full feature snapshot
+                "feature_snapshot": "TEXT",
+                "hypothesis_snapshot": "TEXT",
             }
             for col_name, col_type in trace_migrations.items():
                 if col_name not in trace_columns:
@@ -450,6 +456,82 @@ class Database:
             await session.commit()
             await session.refresh(sig)
             return sig
+
+    async def save_signal_with_risk(
+        self, *, risk_pct: float, **signal_values
+    ) -> tuple[Optional[Signal], Optional[str]]:
+        """Check current limits and persist signal, outcome, cooldown in one transaction."""
+        import math
+        from strategy.signal_evaluator import get_cooldown_minutes
+
+        if not math.isfinite(risk_pct) or risk_pct <= 0:
+            return None, "invalid new risk"
+        symbol = signal_values["symbol"]
+        timeframe = signal_values["timeframe"]
+        async with self._session_factory() as session:
+            # A read-only asyncio lock is insufficient: writers must be serialized.
+            if self._engine.dialect.name == "sqlite":
+                await session.execute(text("BEGIN IMMEDIATE"))
+            elif self._engine.dialect.name == "postgresql":
+                await session.execute(text(
+                    "LOCK TABLE signal_outcomes IN SHARE ROW EXCLUSIVE MODE"
+                ))
+            else:
+                raise RuntimeError("Atomic portfolio gate supports SQLite/PostgreSQL only")
+
+            rows = list((await session.execute(
+                select(SignalOutcome, Signal.symbol)
+                .outerjoin(Signal, SignalOutcome.signal_id == Signal.id)
+                .where(SignalOutcome.status == "OPEN")
+            )).all())
+            if any(active_symbol is None for _, active_symbol in rows):
+                return None, "orphan_open_outcome: reconcile OPEN outcomes before admission"
+            same_symbol = sum(1 for _, active_symbol in rows if active_symbol == symbol)
+            if same_symbol >= config.max_active_signals_per_symbol:
+                return None, f"symbol_limit: {same_symbol}/{config.max_active_signals_per_symbol}"
+            if len(rows) >= config.max_active_signals:
+                return None, f"active_limit: {len(rows)}/{config.max_active_signals}"
+            if any(row.risk_pct is None or not math.isfinite(row.risk_pct) or row.risk_pct <= 0
+                   for row, _ in rows):
+                return None, "unknown_open_risk: reconcile OPEN outcomes before admission"
+            current_risk = sum(row.risk_pct for row, _ in rows)
+            if round(current_risk + risk_pct, 10) > config.max_portfolio_risk_pct:
+                return None, (f"risk_budget: {current_risk:.4f}+{risk_pct:.4f}"
+                              f">{config.max_portfolio_risk_pct:.4f}")
+
+            now = datetime.now(timezone.utc)
+            key = f"cooldown:{symbol}:{timeframe}"
+            cooldown = await session.get(BotSetting, key)
+            if cooldown is not None:
+                try:
+                    last = datetime.fromisoformat(cooldown.value)
+                except (TypeError, ValueError):
+                    return None, "invalid_persisted_cooldown"
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                minutes = get_cooldown_minutes(
+                    timeframe, config.signal_cooldown_minutes,
+                    config.signal_cooldown_tf_multiplier,
+                )
+                if (now - last).total_seconds() < minutes * 60:
+                    return None, f"cooldown: {minutes}m"
+
+            values = dict(signal_values)
+            values["reasons"] = "\n".join(values["reasons"])
+            factors = values.get("confidence_v2_factors")
+            values["confidence_v2_factors"] = json.dumps(factors) if factors else None
+            values["sent_at"] = now
+            signal = Signal(**values)
+            session.add(signal)
+            await session.flush()
+            session.add(SignalOutcome(signal_id=signal.id, status="OPEN", risk_pct=risk_pct))
+            if cooldown is None:
+                session.add(BotSetting(key=key, value=now.isoformat(), updated_at=now))
+            else:
+                cooldown.value = now.isoformat()
+                cooldown.updated_at = now
+            await session.commit()
+            return signal, None
 
     async def save_candidate(
         self,
@@ -812,6 +894,8 @@ class Database:
                 execution_snapshot=json.dumps(execution_snapshot) if execution_snapshot else None,
                 # Hypothesis snapshot
                 hypothesis_snapshot=json.dumps(hypothesis_snapshot) if hypothesis_snapshot else None,
+                # B-011: Full feature snapshot
+                feature_snapshot=json.dumps(f, default=str) if f else None,
             )
             session.add(trace)
             await session.commit()
@@ -867,103 +951,61 @@ class Database:
             return result.scalar_one_or_none()
 
     async def get_trace_stats(self, symbol: Optional[str] = None) -> list[dict]:
-        """Aggregate gate pass/drop counts for funnel analysis.
-
-        Returns a list of dicts, one per gate, ordered by pipeline position:
-        {gate, entered, passed, dropped, wr_downstream, pf_downstream}
-        """
-        from sqlalchemy import case, func
-
+        """Aggregate recorded gates; skipped legacy gates do not veto v2 outcomes."""
+        import math
         async with self._session_factory() as session:
-            base_query = select(DecisionTrace)
+            query = select(DecisionTrace)
             if symbol:
-                base_query = base_query.where(DecisionTrace.symbol == symbol)
+                query = query.where(DecisionTrace.symbol == symbol)
+            traces = list((await session.execute(query.order_by(DecisionTrace.id))).scalars().all())
 
-            result = await session.execute(base_query)
-            traces = list(result.scalars().all())
-
-        if not traces:
-            return []
-
-        gate_order = [
-            "cooldown", "portfolio_risk", "btc_global_trend", "indicators",
-            "confirm_tf", "signal_engine", "distance_filter", "tp_path",
-            "mtf_alignment", "btc_correlation", "eth_correlation", "volatility",
-            "context_timeout", "context_block", "context_min_verdict",
-            "news", "sl_distance", "rr_guard", "no_trade_zones",
-            "dynamic_risk", "confidence_v2", "dedup",
-        ]
-        gate_col_map = {
-            "cooldown": "gate_cooldown",
-            "portfolio_risk": "gate_portfolio_risk",
-            "btc_global_trend": "gate_btc_global_trend",
-            "indicators": "gate_indicators",
-            "confirm_tf": "gate_confirm_tf",
-            "signal_engine": "gate_signal_engine",
-            "distance_filter": "gate_distance_filter",
-            "tp_path": "gate_tp_path",
-            "mtf_alignment": "gate_mtf_alignment",
-            "btc_correlation": "gate_btc_correlation",
-            "eth_correlation": "gate_eth_correlation",
-            "volatility": "gate_volatility",
-            "context_timeout": "gate_context_timeout",
-            "context_block": "gate_context_block",
-            "context_min_verdict": "gate_context_min_verdict",
-            "news": "gate_news",
-            "sl_distance": "gate_sl_distance",
-            "rr_guard": "gate_rr_guard",
-            "no_trade_zones": "gate_no_trade_zones",
-            "dynamic_risk": "gate_dynamic_risk",
-            "confidence_v2": "gate_confidence_v2",
-            "dedup": "gate_dedup",
-        }
+        columns = [column.name for column in DecisionTrace.__table__.columns
+                   if column.name.startswith("gate_") and column.name != "gate_path"]
+        parsed = []
+        order = []
+        for trace in traces:
+            gates = {}
+            if trace.gate_path:
+                try:
+                    path = json.loads(trace.gate_path)
+                    if isinstance(path, list):
+                        for item in path:
+                            if not isinstance(item, str):
+                                continue
+                            parts = item.split(":", 2)
+                            if len(parts) >= 2 and parts[1] in ("PASS", "BLOCK"):
+                                gates[parts[0]] = parts[1] == "PASS"
+                except (ValueError, TypeError):
+                    pass
+            for column in columns:
+                value = getattr(trace, column, None)
+                if value is not None:
+                    gates.setdefault(column[5:], bool(value))
+            if not trace.signal_generated and trace.final_stage:
+                gates[trace.final_stage] = False
+            for gate in gates:
+                if gate not in order:
+                    order.append(gate)
+            parsed.append((trace, gates))
 
         stats = []
-        for gate in gate_order:
-            col = gate_col_map[gate]
-            entered = sum(1 for t in traces if getattr(t, col, None) is not None)
-            passed = sum(1 for t in traces if getattr(t, col, None) is True)
-            dropped = entered - passed
-
-            # Downstream: signals that passed this gate and also passed ALL later gates
-            gate_idx = gate_order.index(gate)
-            downstream_signals = []
-            for t in traces:
-                if getattr(t, col, None) is not True:
-                    continue
-                all_later_pass = True
-                for later_gate in gate_order[gate_idx + 1:]:
-                    later_col = gate_col_map[later_gate]
-                    later_val = getattr(t, later_col, None)
-                    if later_val is not True:
-                        all_later_pass = False
-                        break
-                if all_later_pass and t.signal_generated:
-                    downstream_signals.append(t)
-
-            wins = sum(1 for t in downstream_signals if t.outcome == "HIT_TP")
-            total_closed = sum(
-                1 for t in downstream_signals
-                if t.outcome in ("HIT_TP", "HIT_SL")
-            )
-            wr = round(wins / total_closed * 100, 1) if total_closed > 0 else None
-
-            pnls = [t.pnl_pct for t in downstream_signals if t.pnl_pct is not None]
-            pf = None
-            if pnls:
-                gross_profit = sum(p for p in pnls if p > 0)
-                gross_loss = abs(sum(p for p in pnls if p < 0))
-                pf = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
-
+        for gate in order:
+            entered = [(trace, gates[gate]) for trace, gates in parsed if gate in gates]
+            downstream = [trace for trace, passed in entered if passed and trace.signal_generated]
+            closed = [trace for trace in downstream
+                      if trace.outcome in ("HIT_TP", "HIT_SL", "MANUAL_CLOSE", "EXPIRED")
+                      and trace.pnl_pct is not None and math.isfinite(trace.pnl_pct)]
+            wins = sum(trace.pnl_pct > 0 for trace in closed)
+            pnls = [trace.pnl_pct for trace in closed]
+            profit = sum(pnl for pnl in pnls if pnl > 0)
+            loss = -sum(pnl for pnl in pnls if pnl < 0)
+            passed = sum(bool(value) for _, value in entered)
             stats.append({
-                "gate": gate,
-                "entered": entered,
-                "passed": passed,
-                "dropped": dropped,
-                "wr_downstream": wr,
-                "pf_downstream": pf,
+                "gate": gate, "entered": len(entered), "passed": passed,
+                "dropped": len(entered) - passed,
+                "wr_downstream": round(wins / len(closed) * 100, 1) if closed else None,
+                "pf_downstream": round(profit / loss, 2) if loss > 0 else None,
             })
-
         return stats
 
     async def get_counterfactual(
@@ -1185,31 +1227,54 @@ class Database:
                 row.exchange_notified_at = exchange_notified_at
             await session.commit()
 
-    async def touch_outcome_checked(self, outcome_id: int) -> None:
-        """Update checked_at for an open outcome without closing it."""
+    async def touch_outcome_checked(
+        self, outcome_id: int, checked_at: Optional[datetime] = None,
+    ) -> None:
+        """Persist the observation cutoff, not the later network completion time."""
+        observed_at = checked_at if checked_at is not None else datetime.now(timezone.utc)
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        else:
+            observed_at = observed_at.astimezone(timezone.utc)
         async with self._session_factory() as session:
             result = await session.execute(
                 select(SignalOutcome).where(SignalOutcome.id == outcome_id)
             )
             row = result.scalar_one()
-            row.checked_at = datetime.now(timezone.utc)
+            if row.status != "OPEN":
+                return
+            row.checked_at = observed_at
             await session.commit()
 
     async def get_outcome_stats(self) -> dict:
+        import math
+
         async with self._session_factory() as session:
-            closed = await session.execute(
-                select(SignalOutcome).where(SignalOutcome.status != "OPEN")
-            )
-            closed_rows = list(closed.scalars().all())
-            opened = await session.execute(
-                select(SignalOutcome).where(SignalOutcome.status == "OPEN")
-            )
-            opened_rows = list(opened.scalars().all())
-        pnls = [r.pnl_pct for r in closed_rows if r.pnl_pct is not None]
+            result = await session.execute(select(SignalOutcome))
+            rows = list(result.scalars().all())
+        closed_rows = [r for r in rows if r.status != "OPEN"]
+        pnls = [
+            float(r.pnl_pct) for r in closed_rows
+            if r.pnl_pct is not None and math.isfinite(float(r.pnl_pct))
+        ]
+        wins = sum(p > 0 for p in pnls)
+        losses = sum(p < 0 for p in pnls)
+        zero = sum(p == 0 for p in pnls)
+        gross_profit = sum(p for p in pnls if p > 0)
+        gross_loss = -sum(p for p in pnls if p < 0)
         return {
             "closed": len(closed_rows),
-            "open": len(opened_rows),
-            "wins": sum(1 for r in closed_rows if r.status == "HIT_TP"),
+            "open": sum(r.status == "OPEN" for r in rows),
+            "observed": len(pnls),
+            "unknown_pnl": len(closed_rows) - len(pnls),
+            "wins": wins,
+            "losses": losses,
+            "zero_pnl": zero,
+            "tp_events": sum(r.status == "HIT_TP" for r in closed_rows),
+            "winrate_observed_pct": 100.0 * wins / len(pnls) if pnls else None,
+            "winrate_nonzero_pct": 100.0 * wins / (wins + losses) if wins + losses else None,
+            "price_pnl_profit_factor": gross_profit / gross_loss if gross_loss else None,
+            "price_pnl_sum_pp": sum(pnls),
             "avg_pnl": sum(pnls) / len(pnls) if pnls else 0.0,
             "best_pnl": max(pnls) if pnls else 0.0,
             "worst_pnl": min(pnls) if pnls else 0.0,

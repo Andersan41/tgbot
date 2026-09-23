@@ -125,7 +125,7 @@ class TestDynamicRisk:
         assert _base_risk_for_quality("moderate") == 0.5
 
     def test_weak_setup_base_risk(self):
-        assert _base_risk_for_quality("weak") == 0.0
+        assert _base_risk_for_quality("weak") == 0.25
 
     def test_volatility_multiplier_high(self):
         assert _volatility_multiplier("high") == 0.5
@@ -168,7 +168,7 @@ class TestDynamicRisk:
 
     def test_calculate_risk_weak_no_trade(self):
         params = calculate_risk("weak", "medium", True, True)
-        assert params.base_risk_pct == 0.0
+        assert params.base_risk_pct == 0.25
         assert params.should_trade is False
 
     def test_calculate_risk_weak_with_correlation_penalty(self):
@@ -333,13 +333,13 @@ class TestRiskConfig:
         import config.settings as settings_mod
         importlib.reload(settings_mod)
         cfg = settings_mod.config.risk
-        assert cfg.volatility_low_threshold == 1.0
-        assert cfg.volatility_high_threshold == 4.0
+        assert cfg.volatility_low_threshold == 0.8
+        assert cfg.volatility_high_threshold == 6.0
         assert cfg.volatility_atr_period == 14
         assert cfg.risk_strong_pct == 1.0
         assert cfg.risk_moderate_pct == 0.5
         assert cfg.risk_weak_trade is False
-        assert cfg.no_trade_min_atr_pct == 0.5
+        assert cfg.no_trade_min_atr_pct == 0.6
 
     def test_risk_weak_trade_from_env(self, monkeypatch):
         monkeypatch.setenv("RISK_WEAK_TRADE", "true")
@@ -508,7 +508,7 @@ class TestMarketRegime:
     def test_regime_config_defaults(self):
         cfg = config.risk
         assert cfg.regime_trend_adx == 25.0
-        assert cfg.regime_range_adx == 18.0
+        assert cfg.regime_range_adx == 20.0
         assert cfg.regime_compression_atr_pct == 20.0
         assert cfg.regime_atr_lookback == 100
 

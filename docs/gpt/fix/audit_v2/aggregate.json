@@ -1,0 +1,5915 @@
+{
+  "source": {
+    "ref": "9d0da04",
+    "resolved_commit": "9d0da045c617917e210e2ff802a2602a5068cfa1",
+    "db_sha256_at_ref": "950218335fcd31ef26ced8b7e7663e3b344c0a1b1b436e1f2e8774f3bf210687",
+    "working_db_matches_ref": true,
+    "db_sha256_before": "950218335fcd31ef26ced8b7e7663e3b344c0a1b1b436e1f2e8774f3bf210687",
+    "db_sha256_after": "950218335fcd31ef26ced8b7e7663e3b344c0a1b1b436e1f2e8774f3bf210687",
+    "read_only_uri": true,
+    "snapshot_asof_utc": "2026-09-14T19:55:57.310145+00:00",
+    "table_counts": {
+      "signals": 143,
+      "bot_settings": 69,
+      "context_snapshots": 0,
+      "signal_outcomes": 143,
+      "signal_candidates": 0,
+      "decision_traces": 0
+    },
+    "integrity_check": "ok",
+    "foreign_key_violations": 0,
+    "duplicate_outcomes": []
+  },
+  "metrics": {
+    "signals": 143,
+    "closed": 139,
+    "open": 4,
+    "positive": 36,
+    "negative": 91,
+    "zero": 12,
+    "win_rate_all_closed_pct": 25.899280575539567,
+    "win_rate_nonzero_pct": 28.346456692913385,
+    "tp_event_rate_closed_pct": 26.618705035971225,
+    "raw_pnl_sum_percentage_points": -126.12453850951164,
+    "raw_pnl_mean_pct": -0.9073707806439687,
+    "price_pnl_profit_factor": 0.5845528097375183,
+    "gross_positive_price_pnl_pp": 177.462876367035,
+    "gross_negative_price_pnl_pp": 303.58741487654663,
+    "risk_weighted_proxy_n": 139,
+    "risk_weighted_proxy_sum_pp": -37.57436498106477,
+    "risk_weighted_proxy_profit_factor": 0.503071679767212,
+    "planned_rr_absolute": {
+      "n": 143,
+      "min": 0.0429830055707104,
+      "median": 2.4936987182924937,
+      "mean": 3.2084479299106654,
+      "max": 27.01113268962505
+    },
+    "planned_rr_signed": {
+      "n": 143,
+      "min": -0.270568589164972,
+      "median": 2.4936987182924937,
+      "mean": 3.188515926755264,
+      "max": 27.01113268962505
+    },
+    "sl_distance_pct": {
+      "n": 143,
+      "min": 0.5563830057070371,
+      "median": 2.8912252467078305,
+      "mean": 5.429697110549796,
+      "max": 44.66410526315789
+    },
+    "tp_signed_distance_pct": {
+      "n": 143,
+      "min": -12.084703947368434,
+      "median": 7.019185774450171,
+      "mean": 8.44571285923938,
+      "max": 31.942723392537513
+    },
+    "planned_rr_absolute_below_1_5": 34,
+    "invalid_price_geometry": 9,
+    "sl_over_5_pct": 38,
+    "duration_hours": {
+      "n": 139,
+      "min": 0.009653485,
+      "median": 17.941683502222222,
+      "mean": 41.67630194032774,
+      "max": 243.17309742
+    },
+    "realized_r": {
+      "n": 139,
+      "min": -1.4961862808886905,
+      "median": -1.049255011624719,
+      "mean": -0.32371498490110046,
+      "max": 5.044689944947945
+    },
+    "first_created_at_utc": "2026-07-11 21:03:26.128337",
+    "last_created_at_utc": "2026-09-14 10:02:49.261451"
+  },
+  "by_outcome": {
+    "EXPIRED": {
+      "signals": 9,
+      "closed": 9,
+      "open": 0,
+      "positive": 0,
+      "negative": 0,
+      "zero": 9,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": null,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": 0.0,
+      "raw_pnl_mean_pct": 0.0,
+      "price_pnl_profit_factor": null,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 0,
+      "risk_weighted_proxy_n": 9,
+      "risk_weighted_proxy_sum_pp": 0.0,
+      "risk_weighted_proxy_profit_factor": null,
+      "planned_rr_absolute": {
+        "n": 9,
+        "min": 0.5588841759206281,
+        "median": 1.1960704830823574,
+        "mean": 4.856691191344216,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 9,
+        "min": 0.5588841759206281,
+        "median": 1.1960704830823574,
+        "mean": 4.856691191344216,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 9,
+        "min": 0.5563830057070371,
+        "median": 6.21082216792941,
+        "mean": 7.395935717378917,
+        "max": 13.634362036455054
+      },
+      "tp_signed_distance_pct": {
+        "n": 9,
+        "min": 1.7652264673111624,
+        "median": 15.028535193405194,
+        "mean": 15.121047570361135,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 5,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 7,
+      "duration_hours": {
+        "n": 9,
+        "min": 168.01882801083335,
+        "median": 168.07294335472224,
+        "mean": 191.61730705558642,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 9,
+        "min": 0.0,
+        "median": 0.0,
+        "mean": 0.0,
+        "max": 0.0
+      },
+      "first_created_at_utc": "2026-07-31 12:03:43.598864",
+      "last_created_at_utc": "2026-09-04 00:47:51.511259"
+    },
+    "HIT_SL": {
+      "signals": 81,
+      "closed": 81,
+      "open": 0,
+      "positive": 0,
+      "negative": 81,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -258.5261731894556,
+      "raw_pnl_mean_pct": -3.1916811504871063,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 258.5261731894556,
+      "risk_weighted_proxy_n": 81,
+      "risk_weighted_proxy_sum_pp": -74.32028257533467,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 81,
+        "min": 0.9062233464827277,
+        "median": 2.9949683070589836,
+        "mean": 3.986712340916481,
+        "max": 17.409400266404333
+      },
+      "planned_rr_signed": {
+        "n": 81,
+        "min": 0.9062233464827277,
+        "median": 2.9949683070589836,
+        "mean": 3.986712340916481,
+        "max": 17.409400266404333
+      },
+      "sl_distance_pct": {
+        "n": 81,
+        "min": 0.7263564721663419,
+        "median": 2.4404291075056403,
+        "mean": 2.949105171528524,
+        "max": 8.798575949367082
+      },
+      "tp_signed_distance_pct": {
+        "n": 81,
+        "min": 0.7822277847309137,
+        "median": 8.245450315719502,
+        "mean": 9.817106950532613,
+        "max": 27.420187274201872
+      },
+      "planned_rr_absolute_below_1_5": 3,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 11,
+      "duration_hours": {
+        "n": 81,
+        "min": 0.009653485,
+        "median": 18.246101216944442,
+        "mean": 34.06319358766461,
+        "max": 146.80013538083332
+      },
+      "realized_r": {
+        "n": 81,
+        "min": -1.4961862808886905,
+        "median": -1.0976576858295315,
+        "mean": -1.129138626363947,
+        "max": -1.0256163466208532
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-09-13 20:17:47.759639"
+    },
+    "HIT_TP": {
+      "signals": 37,
+      "closed": 37,
+      "open": 0,
+      "positive": 28,
+      "negative": 9,
+      "zero": 0,
+      "win_rate_all_closed_pct": 75.67567567567568,
+      "win_rate_nonzero_pct": 75.67567567567568,
+      "tp_event_rate_closed_pct": 100.0,
+      "raw_pnl_sum_percentage_points": 118.90206557588863,
+      "raw_pnl_mean_pct": 3.2135693398888816,
+      "price_pnl_profit_factor": 3.835284041860241,
+      "gross_positive_price_pnl_pp": 160.83862777580018,
+      "gross_negative_price_pnl_pp": 41.93656219991155,
+      "risk_weighted_proxy_n": 37,
+      "risk_weighted_proxy_sum_pp": 34.03187182544612,
+      "risk_weighted_proxy_profit_factor": 48.72730149959366,
+      "planned_rr_absolute": {
+        "n": 37,
+        "min": 0.0429830055707104,
+        "median": 0.6685579044218681,
+        "mean": 1.2710276764604722,
+        "max": 5.252166518688938
+      },
+      "planned_rr_signed": {
+        "n": 37,
+        "min": -0.270568589164972,
+        "median": 0.6685579044218681,
+        "mean": 1.1939931777787844,
+        "max": 5.252166518688938
+      },
+      "sl_distance_pct": {
+        "n": 37,
+        "min": 0.7405562325164065,
+        "median": 5.089494224788987,
+        "mean": 11.246663658213269,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 37,
+        "min": -12.084703947368434,
+        "median": 2.003905768926263,
+        "mean": 3.4429968360333545,
+        "max": 24.48107448107448
+      },
+      "planned_rr_absolute_below_1_5": 25,
+      "invalid_price_geometry": 9,
+      "sl_over_5_pct": 19,
+      "duration_hours": {
+        "n": 37,
+        "min": 0.4594152427777778,
+        "median": 8.513262843055555,
+        "mean": 23.544231657304806,
+        "max": 150.53622525416668
+      },
+      "realized_r": {
+        "n": 37,
+        "min": -0.27512459929236116,
+        "median": 0.5742401746823305,
+        "mean": 1.1064944353037678,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-07-12 22:03:25.162341",
+      "last_created_at_utc": "2026-09-04 12:48:24.789526"
+    },
+    "MANUAL_CLOSE": {
+      "signals": 12,
+      "closed": 12,
+      "open": 0,
+      "positive": 8,
+      "negative": 1,
+      "zero": 3,
+      "win_rate_all_closed_pct": 66.66666666666667,
+      "win_rate_nonzero_pct": 88.88888888888889,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": 13.499569104055329,
+      "raw_pnl_mean_pct": 1.124964092004611,
+      "price_pnl_profit_factor": 5.320305221525548,
+      "gross_positive_price_pnl_pp": 16.62424859123482,
+      "gross_negative_price_pnl_pp": 3.1246794871794914,
+      "risk_weighted_proxy_n": 12,
+      "risk_weighted_proxy_sum_pp": 2.7140457688237962,
+      "risk_weighted_proxy_profit_factor": 5.680047288207164,
+      "planned_rr_absolute": {
+        "n": 12,
+        "min": 1.2798229740153064,
+        "median": 2.038294563131574,
+        "mean": 2.2500406054414586,
+        "max": 4.4315686876283635
+      },
+      "planned_rr_signed": {
+        "n": 12,
+        "min": 1.2798229740153064,
+        "median": 2.038294563131574,
+        "mean": 2.2500406054414586,
+        "max": 4.4315686876283635
+      },
+      "sl_distance_pct": {
+        "n": 12,
+        "min": 2.112174518911749,
+        "median": 2.8412801145929456,
+        "mean": 3.0301567452521496,
+        "max": 4.498955669643674
+      },
+      "tp_signed_distance_pct": {
+        "n": 12,
+        "min": 3.239053749170531,
+        "median": 5.206384026414362,
+        "mean": 7.1155775424702075,
+        "max": 14.865935060527208
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 12,
+        "min": 0.5094897494444445,
+        "median": 17.943357119444443,
+        "mean": 36.516246190347225,
+        "max": 116.97093467722222
+      },
+      "realized_r": {
+        "n": 12,
+        "min": -0.7248980623717945,
+        "median": 0.6689487537700151,
+        "mean": 0.4602959773322773,
+        "max": 1.143117462007318
+      },
+      "first_created_at_utc": "2026-07-15 20:06:08.072125",
+      "last_created_at_utc": "2026-07-22 12:03:46.341553"
+    },
+    "OPEN": {
+      "signals": 4,
+      "closed": 0,
+      "open": 4,
+      "positive": 0,
+      "negative": 0,
+      "zero": 0,
+      "win_rate_all_closed_pct": null,
+      "win_rate_nonzero_pct": null,
+      "tp_event_rate_closed_pct": null,
+      "raw_pnl_sum_percentage_points": 0,
+      "raw_pnl_mean_pct": null,
+      "price_pnl_profit_factor": null,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 0,
+      "risk_weighted_proxy_n": 0,
+      "risk_weighted_proxy_sum_pp": 0,
+      "risk_weighted_proxy_profit_factor": null,
+      "planned_rr_absolute": {
+        "n": 4,
+        "min": 2.0660176101915178,
+        "median": 4.4406230907909725,
+        "mean": 4.536405586639319,
+        "max": 7.198358554783811
+      },
+      "planned_rr_signed": {
+        "n": 4,
+        "min": 2.0660176101915178,
+        "median": 4.4406230907909725,
+        "mean": 4.536405586639319,
+        "max": 7.198358554783811
+      },
+      "sl_distance_pct": {
+        "n": 4,
+        "min": 2.437524092004631,
+        "median": 3.6677876515277,
+        "mean": 4.629327540370846,
+        "max": 8.744210766423354
+      },
+      "tp_signed_distance_pct": {
+        "n": 4,
+        "min": 10.100074128984424,
+        "median": 17.2253542732493,
+        "mean": 15.921008575490697,
+        "max": 19.133251626479762
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 0
+      },
+      "realized_r": {
+        "n": 0
+      },
+      "first_created_at_utc": "2026-09-09 11:48:01.833407",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    }
+  },
+  "by_direction": {
+    "BUY": {
+      "signals": 78,
+      "closed": 76,
+      "open": 2,
+      "positive": 23,
+      "negative": 46,
+      "zero": 7,
+      "win_rate_all_closed_pct": 30.263157894736842,
+      "win_rate_nonzero_pct": 33.333333333333336,
+      "tp_event_rate_closed_pct": 40.78947368421053,
+      "raw_pnl_sum_percentage_points": 8.732455259894056,
+      "raw_pnl_mean_pct": 0.11490072710386916,
+      "price_pnl_profit_factor": 1.0613076313816971,
+      "gross_positive_price_pnl_pp": 151.16913178922184,
+      "gross_negative_price_pnl_pp": 142.43667652932777,
+      "risk_weighted_proxy_n": 76,
+      "risk_weighted_proxy_sum_pp": -7.572985280449738,
+      "risk_weighted_proxy_profit_factor": 0.7954799019789124,
+      "planned_rr_absolute": {
+        "n": 78,
+        "min": 0.0429830055707104,
+        "median": 2.1184111301868125,
+        "mean": 2.4133079306211696,
+        "max": 14.514844646774316
+      },
+      "planned_rr_signed": {
+        "n": 78,
+        "min": -0.270568589164972,
+        "median": 2.1184111301868125,
+        "mean": 2.3821803174243206,
+        "max": 14.514844646774316
+      },
+      "sl_distance_pct": {
+        "n": 78,
+        "min": 0.7263564721663419,
+        "median": 3.532528321234734,
+        "mean": 7.231868288817862,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 78,
+        "min": -12.084703947368434,
+        "median": 4.600699508334756,
+        "mean": 6.548058117728484,
+        "max": 24.48107448107448
+      },
+      "planned_rr_absolute_below_1_5": 30,
+      "invalid_price_geometry": 8,
+      "sl_over_5_pct": 28,
+      "duration_hours": {
+        "n": 76,
+        "min": 0.27197227555555553,
+        "median": 16.546194677638887,
+        "mean": 44.527877311355994,
+        "max": 237.65909418972223
+      },
+      "realized_r": {
+        "n": 76,
+        "min": -1.4961862808886905,
+        "median": -0.5000113308320778,
+        "mean": -0.11861701620570174,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    },
+    "SELL": {
+      "signals": 65,
+      "closed": 63,
+      "open": 2,
+      "positive": 13,
+      "negative": 45,
+      "zero": 5,
+      "win_rate_all_closed_pct": 20.634920634920636,
+      "win_rate_nonzero_pct": 22.413793103448278,
+      "tp_event_rate_closed_pct": 9.523809523809524,
+      "raw_pnl_sum_percentage_points": -134.8569937694057,
+      "raw_pnl_mean_pct": -2.1405872026889794,
+      "price_pnl_profit_factor": 0.16316242077129112,
+      "gross_positive_price_pnl_pp": 26.293744577813165,
+      "gross_negative_price_pnl_pp": 161.15073834721886,
+      "risk_weighted_proxy_n": 63,
+      "risk_weighted_proxy_sum_pp": -30.00137970061503,
+      "risk_weighted_proxy_profit_factor": 0.2224635686660058,
+      "planned_rr_absolute": {
+        "n": 65,
+        "min": 0.2111613109341057,
+        "median": 2.899592268548864,
+        "mean": 4.16261592905806,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 65,
+        "min": -0.2111613109341057,
+        "median": 2.899592268548864,
+        "mean": 4.156118657952396,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 65,
+        "min": 0.5563830057070371,
+        "median": 2.819883291475853,
+        "mean": 3.2670916966281176,
+        "max": 8.798575949367082
+      },
+      "tp_signed_distance_pct": {
+        "n": 65,
+        "min": -1.4448802264635974,
+        "median": 8.719362325922305,
+        "mean": 10.722898549052454,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 4,
+      "invalid_price_geometry": 1,
+      "sl_over_5_pct": 10,
+      "duration_hours": {
+        "n": 63,
+        "min": 0.009653485,
+        "median": 17.941687349722223,
+        "mean": 38.236306254642855,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 63,
+        "min": -1.2486625077601543,
+        "median": -1.0560953402274778,
+        "mean": -0.5711347566606291,
+        "max": 2.62759828861048
+      },
+      "first_created_at_utc": "2026-07-12 00:03:36.863581",
+      "last_created_at_utc": "2026-09-13 22:17:50.684781"
+    }
+  },
+  "by_timeframe": {
+    "1h": {
+      "signals": 59,
+      "closed": 59,
+      "open": 0,
+      "positive": 20,
+      "negative": 36,
+      "zero": 3,
+      "win_rate_all_closed_pct": 33.898305084745765,
+      "win_rate_nonzero_pct": 35.714285714285715,
+      "tp_event_rate_closed_pct": 23.728813559322035,
+      "raw_pnl_sum_percentage_points": -38.81554444810555,
+      "raw_pnl_mean_pct": -0.6578905838661957,
+      "price_pnl_profit_factor": 0.523327871451921,
+      "gross_positive_price_pnl_pp": 42.61473461254747,
+      "gross_negative_price_pnl_pp": 81.43027906065302,
+      "risk_weighted_proxy_n": 59,
+      "risk_weighted_proxy_sum_pp": -11.978161097566028,
+      "risk_weighted_proxy_profit_factor": 0.643594608894819,
+      "planned_rr_absolute": {
+        "n": 59,
+        "min": 0.2111613109341057,
+        "median": 2.3653793510355823,
+        "mean": 2.432292984971486,
+        "max": 6.987350208679847
+      },
+      "planned_rr_signed": {
+        "n": 59,
+        "min": -0.2111613109341057,
+        "median": 2.3653793510355823,
+        "mean": 2.4251349744313466,
+        "max": 6.987350208679847
+      },
+      "sl_distance_pct": {
+        "n": 59,
+        "min": 0.7263564721663419,
+        "median": 1.8546839115194027,
+        "mean": 2.1733360559571757,
+        "max": 6.842542414952529
+      },
+      "tp_signed_distance_pct": {
+        "n": 59,
+        "min": -1.4448802264635974,
+        "median": 4.125694741342459,
+        "mean": 4.676424656964099,
+        "max": 14.865935060527208
+      },
+      "planned_rr_absolute_below_1_5": 12,
+      "invalid_price_geometry": 1,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 59,
+        "min": 0.27197227555555553,
+        "median": 17.94168245527778,
+        "mean": 36.22979612303202,
+        "max": 168.03621888111113
+      },
+      "realized_r": {
+        "n": 59,
+        "min": -1.4961862808886905,
+        "median": -1.0622565435872748,
+        "mean": -0.24510185587641295,
+        "max": 4.95155120822748
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-08-14 18:34:50.846826"
+    },
+    "4h": {
+      "signals": 84,
+      "closed": 80,
+      "open": 4,
+      "positive": 16,
+      "negative": 55,
+      "zero": 9,
+      "win_rate_all_closed_pct": 20.0,
+      "win_rate_nonzero_pct": 22.535211267605632,
+      "tp_event_rate_closed_pct": 28.75,
+      "raw_pnl_sum_percentage_points": -87.3089940614061,
+      "raw_pnl_mean_pct": -1.0913624257675762,
+      "price_pnl_profit_factor": 0.6069944197796963,
+      "gross_positive_price_pnl_pp": 134.84814175448753,
+      "gross_negative_price_pnl_pp": 222.1571358158936,
+      "risk_weighted_proxy_n": 80,
+      "risk_weighted_proxy_sum_pp": -25.596203883498738,
+      "risk_weighted_proxy_profit_factor": 0.3906391233613268,
+      "planned_rr_absolute": {
+        "n": 84,
+        "min": 0.0429830055707104,
+        "median": 2.7928805644481125,
+        "mean": 3.753604379332232,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 84,
+        "min": -0.270568589164972,
+        "median": 2.7928805644481125,
+        "mean": 3.724700167078015,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 84,
+        "min": 0.5563830057070371,
+        "median": 4.342891232212253,
+        "mean": 7.716903089370803,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 84,
+        "min": -12.084703947368434,
+        "median": 10.806893737980051,
+        "mean": 11.093189096551779,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 22,
+      "invalid_price_geometry": 8,
+      "sl_over_5_pct": 37,
+      "duration_hours": {
+        "n": 80,
+        "min": 0.009653485,
+        "median": 19.197991160416667,
+        "mean": 45.693099980583334,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 80,
+        "min": -1.2824983147828228,
+        "median": -1.0401310769560328,
+        "mean": -0.3816921675568075,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-07-12 00:03:36.863581",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    }
+  },
+  "by_symbol": {
+    "1000PEPE/USDT": {
+      "signals": 1,
+      "closed": 1,
+      "open": 0,
+      "positive": 1,
+      "negative": 0,
+      "zero": 0,
+      "win_rate_all_closed_pct": 100.0,
+      "win_rate_nonzero_pct": 100.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": 1.7983195119278115,
+      "raw_pnl_mean_pct": 1.7983195119278115,
+      "price_pnl_profit_factor": null,
+      "gross_positive_price_pnl_pp": 1.7983195119278115,
+      "gross_negative_price_pnl_pp": 0,
+      "risk_weighted_proxy_n": 1,
+      "risk_weighted_proxy_sum_pp": 0.06005294619982903,
+      "risk_weighted_proxy_profit_factor": null,
+      "planned_rr_absolute": {
+        "n": 1,
+        "min": 1.9458338416493777,
+        "median": 1.9458338416493777,
+        "mean": 1.9458338416493777,
+        "max": 1.9458338416493777
+      },
+      "planned_rr_signed": {
+        "n": 1,
+        "min": 1.9458338416493777,
+        "median": 1.9458338416493777,
+        "mean": 1.9458338416493777,
+        "max": 1.9458338416493777
+      },
+      "sl_distance_pct": {
+        "n": 1,
+        "min": 2.994556679940095,
+        "median": 2.994556679940095,
+        "mean": 2.994556679940095,
+        "max": 2.994556679940095
+      },
+      "tp_signed_distance_pct": {
+        "n": 1,
+        "min": 5.826909728564641,
+        "median": 5.826909728564641,
+        "mean": 5.826909728564641,
+        "max": 5.826909728564641
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 1,
+        "min": 17.941683502222222,
+        "median": 17.941683502222222,
+        "mean": 17.941683502222222,
+        "max": 17.941683502222222
+      },
+      "realized_r": {
+        "n": 1,
+        "min": 0.6005294619982903,
+        "median": 0.6005294619982903,
+        "mean": 0.6005294619982903,
+        "max": 0.6005294619982903
+      },
+      "first_created_at_utc": "2026-07-16 21:21:29.704227",
+      "last_created_at_utc": "2026-07-16 21:21:29.704227"
+    },
+    "AAVE/USDT": {
+      "signals": 1,
+      "closed": 1,
+      "open": 0,
+      "positive": 0,
+      "negative": 1,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -2.119243052765517,
+      "raw_pnl_mean_pct": -2.119243052765517,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 2.119243052765517,
+      "risk_weighted_proxy_n": 1,
+      "risk_weighted_proxy_sum_pp": -1.1266142281416647,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 1,
+        "min": 1.126418184322136,
+        "median": 1.126418184322136,
+        "mean": 1.126418184322136,
+        "max": 1.126418184322136
+      },
+      "planned_rr_signed": {
+        "n": 1,
+        "min": 1.126418184322136,
+        "median": 1.126418184322136,
+        "mean": 1.126418184322136,
+        "max": 1.126418184322136
+      },
+      "sl_distance_pct": {
+        "n": 1,
+        "min": 1.8810725089644753,
+        "median": 1.8810725089644753,
+        "mean": 1.8810725089644753,
+        "max": 1.8810725089644753
+      },
+      "tp_signed_distance_pct": {
+        "n": 1,
+        "min": 2.118874280126049,
+        "median": 2.118874280126049,
+        "mean": 2.118874280126049,
+        "max": 2.118874280126049
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 1,
+        "min": 30.540692261944443,
+        "median": 30.540692261944443,
+        "mean": 30.540692261944443,
+        "max": 30.540692261944443
+      },
+      "realized_r": {
+        "n": 1,
+        "min": -1.1266142281416647,
+        "median": -1.1266142281416647,
+        "mean": -1.1266142281416647,
+        "max": -1.1266142281416647
+      },
+      "first_created_at_utc": "2026-08-10 09:49:27.348820",
+      "last_created_at_utc": "2026-08-10 09:49:27.348820"
+    },
+    "ADA/USDT": {
+      "signals": 4,
+      "closed": 3,
+      "open": 1,
+      "positive": 0,
+      "negative": 2,
+      "zero": 1,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -4.621782935812359,
+      "raw_pnl_mean_pct": -1.5405943119374528,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 4.621782935812359,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -2.3495743941079796,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 4,
+        "min": 2.0660176101915178,
+        "median": 3.2522821782693367,
+        "mean": 3.53667225699643,
+        "max": 5.576107061255529
+      },
+      "planned_rr_signed": {
+        "n": 4,
+        "min": 2.0660176101915178,
+        "median": 3.2522821782693367,
+        "mean": 3.53667225699643,
+        "max": 5.576107061255529
+      },
+      "sl_distance_pct": {
+        "n": 4,
+        "min": 0.769121338912139,
+        "median": 4.43370941920856,
+        "mean": 4.595187735938153,
+        "max": 8.744210766423354
+      },
+      "tp_signed_distance_pct": {
+        "n": 4,
+        "min": 4.2887029288702845,
+        "median": 14.264630702661458,
+        "mean": 12.72091444121253,
+        "max": 18.06569343065692
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 2,
+      "duration_hours": {
+        "n": 3,
+        "min": 13.719957249722222,
+        "median": 145.30399726638888,
+        "mean": 132.22768290194443,
+        "max": 237.65909418972223
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.4961862808886905,
+        "median": -1.066735141524111,
+        "mean": -0.8543071408042672,
+        "max": 0.0
+      },
+      "first_created_at_utc": "2026-07-31 12:03:43.598864",
+      "last_created_at_utc": "2026-09-09 11:48:01.833407"
+    },
+    "APE/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 1,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 33.333333333333336,
+      "win_rate_nonzero_pct": 33.333333333333336,
+      "tp_event_rate_closed_pct": 33.333333333333336,
+      "raw_pnl_sum_percentage_points": -1.9101085375305131,
+      "raw_pnl_mean_pct": -0.6367028458435043,
+      "price_pnl_profit_factor": 0.7510356967180294,
+      "gross_positive_price_pnl_pp": 5.7621099787407655,
+      "gross_negative_price_pnl_pp": 7.672218516271279,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -0.5971257308337435,
+      "risk_weighted_proxy_profit_factor": 0.37227324420253854,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 0.36652923241107177,
+        "median": 1.5146706673206118,
+        "mean": 1.3182571367836358,
+        "max": 2.0735715106192236
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 0.36652923241107177,
+        "median": 1.5146706673206118,
+        "mean": 1.3182571367836358,
+        "max": 2.0735715106192236
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 2.81415426251693,
+        "median": 4.3164262717321265,
+        "mean": 7.800655832267022,
+        "max": 16.27138696255201
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 4.262516914749662,
+        "median": 5.96393897364771,
+        "mean": 6.392291477716488,
+        "max": 8.950418544752091
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 3,
+        "min": 1.4639182355555556,
+        "median": 10.918523411111112,
+        "mean": 38.2608007287963,
+        "max": 102.39996053972222
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.1165528819561832,
+        "median": -1.049494692833214,
+        "mean": -0.603974087720317,
+        "max": 0.35412531162844607
+      },
+      "first_created_at_utc": "2026-07-15 22:05:49.785296",
+      "last_created_at_utc": "2026-08-22 02:32:57.386195"
+    },
+    "APT/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 2,
+      "negative": 1,
+      "zero": 0,
+      "win_rate_all_closed_pct": 66.66666666666667,
+      "win_rate_nonzero_pct": 66.66666666666667,
+      "tp_event_rate_closed_pct": 33.333333333333336,
+      "raw_pnl_sum_percentage_points": 4.89201771206698,
+      "raw_pnl_mean_pct": 1.630672570688993,
+      "price_pnl_profit_factor": 6.279046495276603,
+      "gross_positive_price_pnl_pp": 5.8187035664999875,
+      "gross_negative_price_pnl_pp": 0.9266858544330087,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": 3.365674750528892,
+      "risk_weighted_proxy_profit_factor": 27.380888696626027,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 2.0775671227310952,
+        "median": 2.1307552846137705,
+        "mean": 2.3300302884874644,
+        "max": 2.781768458117528
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 2.0775671227310952,
+        "median": 2.1307552846137705,
+        "mean": 2.3300302884874644,
+        "max": 2.781768458117528
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 0.7263564721663419,
+        "median": 1.345660346783341,
+        "mean": 1.5697156139393453,
+        "max": 2.637130022868353
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 1.5090543259557356,
+        "median": 3.743315508021392,
+        "mean": 3.6238161888058347,
+        "max": 5.619078732440377
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 3,
+        "min": 0.27197227555555553,
+        "median": 5.9697073675,
+        "mean": 8.061120699444444,
+        "max": 17.94168245527778
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.2758003679229137,
+        "median": 0.8656564987107036,
+        "mean": 0.7391514731327565,
+        "max": 2.62759828861048
+      },
+      "first_created_at_utc": "2026-07-12 22:03:25.162341",
+      "last_created_at_utc": "2026-08-10 09:49:28.359843"
+    },
+    "ARB/USDT": {
+      "signals": 2,
+      "closed": 2,
+      "open": 0,
+      "positive": 1,
+      "negative": 1,
+      "zero": 0,
+      "win_rate_all_closed_pct": 50.0,
+      "win_rate_nonzero_pct": 50.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -2.951817741301837,
+      "raw_pnl_mean_pct": -1.4759088706509185,
+      "price_pnl_profit_factor": 0.230879545076683,
+      "gross_positive_price_pnl_pp": 0.8860957121846391,
+      "gross_negative_price_pnl_pp": 3.8379134534864763,
+      "risk_weighted_proxy_n": 2,
+      "risk_weighted_proxy_sum_pp": -0.6384875345639267,
+      "risk_weighted_proxy_profit_factor": 0.2486660373871016,
+      "planned_rr_absolute": {
+        "n": 2,
+        "min": 2.4936987182924937,
+        "median": 3.462633702960429,
+        "mean": 3.462633702960429,
+        "max": 4.4315686876283635
+      },
+      "planned_rr_signed": {
+        "n": 2,
+        "min": 2.4936987182924937,
+        "median": 3.462633702960429,
+        "mean": 3.462633702960429,
+        "max": 4.4315686876283635
+      },
+      "sl_distance_pct": {
+        "n": 2,
+        "min": 3.3545536825432785,
+        "median": 3.483767691648384,
+        "mean": 3.483767691648384,
+        "max": 3.61298170075349
+      },
+      "tp_signed_distance_pct": {
+        "n": 2,
+        "min": 9.009687836383211,
+        "median": 11.93781144845521,
+        "mean": 11.93781144845521,
+        "max": 14.865935060527208
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 2,
+        "min": 19.945902494166667,
+        "median": 21.32425426486111,
+        "mean": 21.32425426486111,
+        "max": 22.702606035555554
+      },
+      "realized_r": {
+        "n": 2,
+        "min": -1.0622565435872748,
+        "median": -0.3990547091024541,
+        "mean": -0.3990547091024541,
+        "max": 0.2641471253823666
+      },
+      "first_created_at_utc": "2026-07-13 01:03:28.629142",
+      "last_created_at_utc": "2026-07-16 16:35:45.390505"
+    },
+    "ATOM/USDT": {
+      "signals": 11,
+      "closed": 11,
+      "open": 0,
+      "positive": 2,
+      "negative": 7,
+      "zero": 2,
+      "win_rate_all_closed_pct": 18.181818181818183,
+      "win_rate_nonzero_pct": 22.22222222222222,
+      "tp_event_rate_closed_pct": 45.45454545454545,
+      "raw_pnl_sum_percentage_points": -14.138078826509894,
+      "raw_pnl_mean_pct": -1.2852798933190812,
+      "price_pnl_profit_factor": 0.11445523819040178,
+      "gross_positive_price_pnl_pp": 1.8273239811572526,
+      "gross_negative_price_pnl_pp": 15.965402807667147,
+      "risk_weighted_proxy_n": 11,
+      "risk_weighted_proxy_sum_pp": -4.555372741397994,
+      "risk_weighted_proxy_profit_factor": 0.02886085598935635,
+      "planned_rr_absolute": {
+        "n": 11,
+        "min": 0.08084644875714672,
+        "median": 1.5335161560605237,
+        "mean": 6.20353527336249,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 11,
+        "min": -0.20291706273493335,
+        "median": 1.5335161560605237,
+        "mean": 6.121294885371699,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 11,
+        "min": 0.5563830057070371,
+        "median": 4.930092184368724,
+        "mean": 6.404436822993671,
+        "max": 13.663639875389414
+      },
+      "tp_signed_distance_pct": {
+        "n": 11,
+        "min": -2.7725856697819307,
+        "median": 3.239053749170531,
+        "mean": 6.258001705230398,
+        "max": 15.028535193405194
+      },
+      "planned_rr_absolute_below_1_5": 5,
+      "invalid_price_geometry": 3,
+      "sl_over_5_pct": 5,
+      "duration_hours": {
+        "n": 11,
+        "min": 2.9846393433333334,
+        "median": 4.898816240833333,
+        "mean": 31.556927768358587,
+        "max": 168.01882801083335
+      },
+      "realized_r": {
+        "n": 11,
+        "min": -1.2486625077601543,
+        "median": -0.18402121639642996,
+        "mean": -0.44800096281487006,
+        "max": 0.11092430583862498
+      },
+      "first_created_at_utc": "2026-07-17 15:36:05.139813",
+      "last_created_at_utc": "2026-09-04 06:02:53.344070"
+    },
+    "AVAX/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 1,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 33.333333333333336,
+      "win_rate_nonzero_pct": 33.333333333333336,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -7.10700793966085,
+      "raw_pnl_mean_pct": -2.3690026465536165,
+      "price_pnl_profit_factor": 0.26257419152039974,
+      "gross_positive_price_pnl_pp": 2.5305825242718405,
+      "gross_negative_price_pnl_pp": 9.63759046393269,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -0.13595825967158637,
+      "risk_weighted_proxy_profit_factor": 0.8937058554335403,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 0.9062233464827277,
+        "median": 2.165410500157736,
+        "mean": 4.463290215481843,
+        "max": 10.318236799805064
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 0.9062233464827277,
+        "median": 2.165410500157736,
+        "mean": 4.463290215481843,
+        "max": 10.318236799805064
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 1.5015485333333345,
+        "median": 2.2137554611650576,
+        "mean": 3.735547361338254,
+        "max": 7.491338089516369
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 4.7936893203883475,
+        "median": 6.788825473115049,
+        "mean": 9.025282708945575,
+        "max": 15.49333333333333
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 3,
+        "min": 17.941687926666667,
+        "median": 48.963883790555556,
+        "mean": 71.23523569935185,
+        "max": 146.80013538083332
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.173956479429397,
+        "median": -1.0511924224950717,
+        "mean": -0.3606771466390503,
+        "max": 1.143117462007318
+      },
+      "first_created_at_utc": "2026-07-16 21:21:26.705566",
+      "last_created_at_utc": "2026-09-03 17:02:53.607575"
+    },
+    "BCH/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 1,
+      "negative": 1,
+      "zero": 1,
+      "win_rate_all_closed_pct": 33.333333333333336,
+      "win_rate_nonzero_pct": 50.0,
+      "tp_event_rate_closed_pct": 33.333333333333336,
+      "raw_pnl_sum_percentage_points": 0.7458074200267995,
+      "raw_pnl_mean_pct": 0.24860247334226648,
+      "price_pnl_profit_factor": 1.4532544069712865,
+      "gross_positive_price_pnl_pp": 2.3912573231185217,
+      "gross_negative_price_pnl_pp": 1.6454499030917222,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": 0.06636350117638487,
+      "risk_weighted_proxy_profit_factor": 3.7597015913455794,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 0.2111613109341057,
+        "median": 1.6311096646526522,
+        "mean": 1.6260216121037945,
+        "max": 3.0357938607246253
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": -0.2111613109341057,
+        "median": 1.6311096646526522,
+        "mean": 1.4852474048143907,
+        "max": 3.0357938607246253
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 2.6448787697160876,
+        "median": 6.842542414952529,
+        "mean": 5.63059680624702,
+        "max": 7.404369234072443
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": -1.4448802264635974,
+        "median": 4.314087323118527,
+        "mean": 8.449115253330117,
+        "max": 22.478138663335418
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 1,
+      "sl_over_5_pct": 2,
+      "duration_hours": {
+        "n": 3,
+        "min": 0.4594152427777778,
+        "median": 17.941687349722223,
+        "mean": 84.60791054518518,
+        "max": 235.42262904305554
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -0.24047346779992707,
+        "median": 0.0,
+        "mean": 0.22121167058794955,
+        "max": 0.9041084795637757
+      },
+      "first_created_at_utc": "2026-07-16 21:21:28.705021",
+      "last_created_at_utc": "2026-09-04 00:47:51.511259"
+    },
+    "BNB/USDT": {
+      "signals": 9,
+      "closed": 8,
+      "open": 1,
+      "positive": 6,
+      "negative": 1,
+      "zero": 1,
+      "win_rate_all_closed_pct": 75.0,
+      "win_rate_nonzero_pct": 85.71428571428571,
+      "tp_event_rate_closed_pct": 75.0,
+      "raw_pnl_sum_percentage_points": 7.112131970177191,
+      "raw_pnl_mean_pct": 0.8890164962721488,
+      "price_pnl_profit_factor": 8.339217291362123,
+      "gross_positive_price_pnl_pp": 8.081190616055927,
+      "gross_negative_price_pnl_pp": 0.9690586458787369,
+      "risk_weighted_proxy_n": 8,
+      "risk_weighted_proxy_sum_pp": 3.2798815160343526,
+      "risk_weighted_proxy_profit_factor": 3.586133133026458,
+      "planned_rr_absolute": {
+        "n": 9,
+        "min": 0.5057792923473308,
+        "median": 1.0237418427738207,
+        "mean": 1.777955310177713,
+        "max": 6.721991043939416
+      },
+      "planned_rr_signed": {
+        "n": 9,
+        "min": 0.5057792923473308,
+        "median": 1.0237418427738207,
+        "mean": 1.777955310177713,
+        "max": 6.721991043939416
+      },
+      "sl_distance_pct": {
+        "n": 9,
+        "min": 0.7405562325164065,
+        "median": 1.644498641496978,
+        "mean": 1.5476556502029204,
+        "max": 2.437524092004631
+      },
+      "tp_signed_distance_pct": {
+        "n": 9,
+        "min": 0.7822277847309137,
+        "median": 1.9438660946900346,
+        "mean": 3.169373267947581,
+        "max": 16.385015115841682
+      },
+      "planned_rr_absolute_below_1_5": 7,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 8,
+        "min": 3.0110708080555555,
+        "median": 11.086906834027777,
+        "mean": 52.57502033489584,
+        "max": 168.03621888111113
+      },
+      "realized_r": {
+        "n": 8,
+        "min": -1.2682570259621655,
+        "median": 0.6859529429185058,
+        "mean": 0.6063924717440896,
+        "max": 2.3238206206977465
+      },
+      "first_created_at_utc": "2026-07-27 16:49:04.348556",
+      "last_created_at_utc": "2026-09-13 22:17:50.684781"
+    },
+    "BTC/USDT": {
+      "signals": 9,
+      "closed": 8,
+      "open": 1,
+      "positive": 1,
+      "negative": 6,
+      "zero": 1,
+      "win_rate_all_closed_pct": 12.5,
+      "win_rate_nonzero_pct": 14.285714285714286,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -5.6690965629331656,
+      "raw_pnl_mean_pct": -0.7086370703666457,
+      "price_pnl_profit_factor": 0.22072996710126136,
+      "gross_positive_price_pnl_pp": 1.6057841890510824,
+      "gross_negative_price_pnl_pp": 7.274880751984248,
+      "risk_weighted_proxy_n": 8,
+      "risk_weighted_proxy_sum_pp": -7.505445924910808,
+      "risk_weighted_proxy_profit_factor": 0.009728859586339476,
+      "planned_rr_absolute": {
+        "n": 9,
+        "min": 1.2798229740153064,
+        "median": 2.788141487038435,
+        "mean": 3.109242561121287,
+        "max": 7.198358554783811
+      },
+      "planned_rr_signed": {
+        "n": 9,
+        "min": 1.2798229740153064,
+        "median": 2.788141487038435,
+        "mean": 3.109242561121287,
+        "max": 7.198358554783811
+      },
+      "sl_distance_pct": {
+        "n": 9,
+        "min": 0.7999588098210865,
+        "median": 1.1317094051882404,
+        "mean": 1.5751384565032043,
+        "max": 3.5555467951323423
+      },
+      "tp_signed_distance_pct": {
+        "n": 9,
+        "min": 1.55806837420978,
+        "median": 2.735189952701807,
+        "mean": 4.979790071748406,
+        "max": 19.133251626479762
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 8,
+        "min": 0.5094897494444445,
+        "median": 4.468720450555556,
+        "mean": 31.300191042187503,
+        "max": 146.29768286944446
+      },
+      "realized_r": {
+        "n": 8,
+        "min": -1.447113213791242,
+        "median": -1.2246722614392573,
+        "mean": -0.8552268354904053,
+        "max": 0.7373680455417398
+      },
+      "first_created_at_utc": "2026-07-16 21:21:13.685230",
+      "last_created_at_utc": "2026-09-13 20:17:36.463316"
+    },
+    "CRV/USDT": {
+      "signals": 2,
+      "closed": 2,
+      "open": 0,
+      "positive": 0,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -5.7604765673388645,
+      "raw_pnl_mean_pct": -2.8802382836694322,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 5.7604765673388645,
+      "risk_weighted_proxy_n": 2,
+      "risk_weighted_proxy_sum_pp": -2.1588232842699613,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 2,
+        "min": 2.3820753593360666,
+        "median": 2.75691745122465,
+        "mean": 2.75691745122465,
+        "max": 3.1317595431132332
+      },
+      "planned_rr_signed": {
+        "n": 2,
+        "min": 2.3820753593360666,
+        "median": 2.75691745122465,
+        "mean": 2.75691745122465,
+        "max": 3.1317595431132332
+      },
+      "sl_distance_pct": {
+        "n": 2,
+        "min": 2.39333333333334,
+        "median": 2.670000779909536,
+        "mean": 2.670000779909536,
+        "max": 2.946668226485732
+      },
+      "tp_signed_distance_pct": {
+        "n": 2,
+        "min": 7.019185774450171,
+        "median": 7.257265140483932,
+        "mean": 7.257265140483932,
+        "max": 7.495344506517693
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 2,
+        "min": 4.453234530277777,
+        "median": 8.196826477916666,
+        "mean": 8.196826477916666,
+        "max": 11.940418425555555
+      },
+      "realized_r": {
+        "n": 2,
+        "min": -1.0858874407754469,
+        "median": -1.0794116421349806,
+        "mean": -1.0794116421349806,
+        "max": -1.0729358434945147
+      },
+      "first_created_at_utc": "2026-07-16 09:06:28.286308",
+      "last_created_at_utc": "2026-07-16 16:35:46.404411"
+    },
+    "DOT/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 0,
+      "negative": 3,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -10.111835014006815,
+      "raw_pnl_mean_pct": -3.3706116713356047,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 10.111835014006815,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -2.747665567450657,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 3.496562180064538,
+        "median": 3.70890707804391,
+        "mean": 4.267605007493966,
+        "max": 5.59734576437345
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 3.496562180064538,
+        "median": 3.70890707804391,
+        "mean": 4.267605007493966,
+        "max": 5.59734576437345
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 0.8115641316685644,
+        "median": 2.7826932975271355,
+        "mean": 3.1266460104513456,
+        "max": 5.785680602158337
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 2.837684449489219,
+        "median": 15.575696542463898,
+        "mean": 13.29064424286651,
+        "max": 21.45855173664641
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 3,
+        "min": 2.018715189722222,
+        "median": 9.578319540277777,
+        "mean": 35.173544622962964,
+        "max": 93.92359913888889
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.2495464507307383,
+        "median": -1.0761751501500847,
+        "mean": -1.1268605057684693,
+        "max": -1.054859916424585
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-09-09 22:17:55.321890"
+    },
+    "ETH/USDT": {
+      "signals": 2,
+      "closed": 2,
+      "open": 0,
+      "positive": 0,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -5.858666578316596,
+      "raw_pnl_mean_pct": -2.929333289158298,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 5.858666578316596,
+      "risk_weighted_proxy_n": 2,
+      "risk_weighted_proxy_sum_pp": -1.1321602760478269,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 2,
+        "min": 1.8696971260975215,
+        "median": 2.2625528232371024,
+        "mean": 2.2625528232371024,
+        "max": 2.655408520376683
+      },
+      "planned_rr_signed": {
+        "n": 2,
+        "min": 1.8696971260975215,
+        "median": 2.2625528232371024,
+        "mean": 2.2625528232371024,
+        "max": 2.655408520376683
+      },
+      "sl_distance_pct": {
+        "n": 2,
+        "min": 2.4404291075056403,
+        "median": 2.6658271771067357,
+        "mean": 2.6658271771067357,
+        "max": 2.8912252467078305
+      },
+      "tp_signed_distance_pct": {
+        "n": 2,
+        "min": 5.405715534670228,
+        "median": 5.943025890057985,
+        "mean": 5.943025890057985,
+        "max": 6.480336245445742
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 2,
+        "min": 27.965898245277778,
+        "median": 50.80619790916667,
+        "mean": 50.80619790916667,
+        "max": 73.64649757305557
+      },
+      "realized_r": {
+        "n": 2,
+        "min": -1.1010144759920513,
+        "median": -1.09864562073153,
+        "mean": -1.09864562073153,
+        "max": -1.096276765471009
+      },
+      "first_created_at_utc": "2026-07-12 00:03:36.863581",
+      "last_created_at_utc": "2026-07-17 16:05:24.336822"
+    },
+    "FET/USDT": {
+      "signals": 1,
+      "closed": 1,
+      "open": 0,
+      "positive": 1,
+      "negative": 0,
+      "zero": 0,
+      "win_rate_all_closed_pct": 100.0,
+      "win_rate_nonzero_pct": 100.0,
+      "tp_event_rate_closed_pct": 100.0,
+      "raw_pnl_sum_percentage_points": 5.290606174788899,
+      "raw_pnl_mean_pct": 5.290606174788899,
+      "price_pnl_profit_factor": null,
+      "gross_positive_price_pnl_pp": 5.290606174788899,
+      "gross_negative_price_pnl_pp": 0,
+      "risk_weighted_proxy_n": 1,
+      "risk_weighted_proxy_sum_pp": 3.783517458710959,
+      "risk_weighted_proxy_profit_factor": null,
+      "planned_rr_absolute": {
+        "n": 1,
+        "min": 5.252166518688938,
+        "median": 5.252166518688938,
+        "mean": 5.252166518688938,
+        "max": 5.252166518688938
+      },
+      "planned_rr_signed": {
+        "n": 1,
+        "min": 5.252166518688938,
+        "median": 5.252166518688938,
+        "mean": 5.252166518688938,
+        "max": 5.252166518688938
+      },
+      "sl_distance_pct": {
+        "n": 1,
+        "min": 1.0487475409836098,
+        "median": 1.0487475409836098,
+        "mean": 1.0487475409836098,
+        "max": 1.0487475409836098
+      },
+      "tp_signed_distance_pct": {
+        "n": 1,
+        "min": 5.508196721311469,
+        "median": 5.508196721311469,
+        "mean": 5.508196721311469,
+        "max": 5.508196721311469
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 1,
+        "min": 14.073305517222222,
+        "median": 14.073305517222222,
+        "mean": 14.073305517222222,
+        "max": 14.073305517222222
+      },
+      "realized_r": {
+        "n": 1,
+        "min": 5.044689944947945,
+        "median": 5.044689944947945,
+        "mean": 5.044689944947945,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-09-04 12:48:24.789526",
+      "last_created_at_utc": "2026-09-04 12:48:24.789526"
+    },
+    "INJ/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 0,
+      "negative": 3,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -14.853653220696994,
+      "raw_pnl_mean_pct": -4.951217740232331,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 14.853653220696994,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -2.5703933929242133,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 2.2334409680076717,
+        "median": 2.63906187825054,
+        "mean": 3.1905030876558755,
+        "max": 4.699006416709415
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 2.2334409680076717,
+        "median": 2.63906187825054,
+        "mean": 3.1905030876558755,
+        "max": 4.699006416709415
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 1.762341603811045,
+        "median": 4.842479553903354,
+        "mean": 4.7319543390670535,
+        "max": 7.591041859486761
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 4.650928543072646,
+        "median": 16.954143878838863,
+        "mean": 14.786638306162507,
+        "max": 22.75484249657601
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 3,
+        "min": 2.0253029247222223,
+        "median": 20.9393282975,
+        "mean": 15.411431063981482,
+        "max": 23.269661969722222
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.114921454758458,
+        "median": -1.0467060468012734,
+        "mean": -1.063935334255875,
+        "max": -1.030178501207894
+      },
+      "first_created_at_utc": "2026-07-11 22:03:22.080623",
+      "last_created_at_utc": "2026-09-06 02:33:13.269820"
+    },
+    "LDO/USDT": {
+      "signals": 7,
+      "closed": 7,
+      "open": 0,
+      "positive": 4,
+      "negative": 3,
+      "zero": 0,
+      "win_rate_all_closed_pct": 57.142857142857146,
+      "win_rate_nonzero_pct": 57.142857142857146,
+      "tp_event_rate_closed_pct": 57.142857142857146,
+      "raw_pnl_sum_percentage_points": 46.574905892945054,
+      "raw_pnl_mean_pct": 6.653557984706436,
+      "price_pnl_profit_factor": 5.177392995749277,
+      "gross_positive_price_pnl_pp": 57.72418151540565,
+      "gross_negative_price_pnl_pp": 11.149275622460596,
+      "risk_weighted_proxy_n": 7,
+      "risk_weighted_proxy_sum_pp": 5.669808652621267,
+      "risk_weighted_proxy_profit_factor": 2.946325211364455,
+      "planned_rr_absolute": {
+        "n": 7,
+        "min": 0.5022511274590173,
+        "median": 2.6501708401900705,
+        "mean": 3.2049306563980537,
+        "max": 6.987350208679847
+      },
+      "planned_rr_signed": {
+        "n": 7,
+        "min": 0.5022511274590173,
+        "median": 2.6501708401900705,
+        "mean": 3.2049306563980537,
+        "max": 6.987350208679847
+      },
+      "sl_distance_pct": {
+        "n": 7,
+        "min": 0.846000680735195,
+        "median": 7.324997173544381,
+        "mean": 7.581229904981649,
+        "max": 19.926471540329096
+      },
+      "tp_signed_distance_pct": {
+        "n": 7,
+        "min": 4.407076242341736,
+        "median": 10.008092797410312,
+        "mean": 13.437873772866292,
+        "max": 24.48107448107448
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 4,
+      "duration_hours": {
+        "n": 7,
+        "min": 0.9793863755555555,
+        "median": 41.22923793472222,
+        "mean": 42.784327886547615,
+        "max": 90.97471552666666
+      },
+      "realized_r": {
+        "n": 7,
+        "min": -1.191482270735163,
+        "median": 0.48962795375337587,
+        "mean": 0.8977269064200678,
+        "max": 4.95155120822748
+      },
+      "first_created_at_utc": "2026-07-31 11:49:06.016523",
+      "last_created_at_utc": "2026-08-31 09:48:01.887507"
+    },
+    "LINK/USDT": {
+      "signals": 7,
+      "closed": 7,
+      "open": 0,
+      "positive": 5,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 71.42857142857143,
+      "win_rate_nonzero_pct": 71.42857142857143,
+      "tp_event_rate_closed_pct": 71.42857142857143,
+      "raw_pnl_sum_percentage_points": 7.264854287714995,
+      "raw_pnl_mean_pct": 1.037836326816428,
+      "price_pnl_profit_factor": 2.2487895606167663,
+      "gross_positive_price_pnl_pp": 13.082371119075235,
+      "gross_negative_price_pnl_pp": 5.81751683136024,
+      "risk_weighted_proxy_n": 7,
+      "risk_weighted_proxy_sum_pp": 5.7246878935140435,
+      "risk_weighted_proxy_profit_factor": 5.6276779055181345,
+      "planned_rr_absolute": {
+        "n": 7,
+        "min": 0.5906037560228051,
+        "median": 1.6159525263242505,
+        "mean": 3.2635099030621166,
+        "max": 13.03519638638105
+      },
+      "planned_rr_signed": {
+        "n": 7,
+        "min": 0.5906037560228051,
+        "median": 1.6159525263242505,
+        "mean": 3.2635099030621166,
+        "max": 13.03519638638105
+      },
+      "sl_distance_pct": {
+        "n": 7,
+        "min": 0.769860116873638,
+        "median": 2.2567453994614057,
+        "mean": 2.504181136352986,
+        "max": 3.7449718240842698
+      },
+      "tp_signed_distance_pct": {
+        "n": 7,
+        "min": 2.1526646497556494,
+        "median": 3.0284723967683935,
+        "mean": 5.82831219089847,
+        "max": 20.552514539856315
+      },
+      "planned_rr_absolute_below_1_5": 3,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 7,
+        "min": 3.0377822458333332,
+        "median": 17.090750927777776,
+        "mean": 23.712591697817462,
+        "max": 73.64832217277778
+      },
+      "realized_r": {
+        "n": 7,
+        "min": -1.1292555097352308,
+        "median": 0.5952031078311983,
+        "mean": 0.764346445567803,
+        "max": 3.391036617153189
+      },
+      "first_created_at_utc": "2026-07-17 16:05:26.819743",
+      "last_created_at_utc": "2026-09-03 17:02:50.907958"
+    },
+    "LTC/USDT": {
+      "signals": 2,
+      "closed": 1,
+      "open": 1,
+      "positive": 0,
+      "negative": 1,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -1.0812630619119181,
+      "raw_pnl_mean_pct": -1.0812630619119181,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 1.0812630619119181,
+      "risk_weighted_proxy_n": 1,
+      "risk_weighted_proxy_sum_pp": -1.2824983147828228,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 2,
+        "min": 2.1592551376425293,
+        "median": 3.684747885912334,
+        "mean": 3.684747885912334,
+        "max": 5.210240634182139
+      },
+      "planned_rr_signed": {
+        "n": 2,
+        "min": 2.1592551376425293,
+        "median": 3.684747885912334,
+        "mean": 3.684747885912334,
+        "max": 5.210240634182139
+      },
+      "sl_distance_pct": {
+        "n": 2,
+        "min": 0.8430912145837932,
+        "median": 2.760332245542453,
+        "mean": 2.760332245542453,
+        "max": 4.677573276501112
+      },
+      "tp_signed_distance_pct": {
+        "n": 2,
+        "min": 4.392708104546453,
+        "median": 7.246391116765439,
+        "mean": 7.246391116765439,
+        "max": 10.100074128984424
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 1,
+        "min": 30.54062225472222,
+        "median": 30.54062225472222,
+        "mean": 30.54062225472222,
+        "max": 30.54062225472222
+      },
+      "realized_r": {
+        "n": 1,
+        "min": -1.2824983147828228,
+        "median": -1.2824983147828228,
+        "mean": -1.2824983147828228,
+        "max": -1.2824983147828228
+      },
+      "first_created_at_utc": "2026-08-10 09:49:23.594662",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    },
+    "NEAR/USDT": {
+      "signals": 5,
+      "closed": 5,
+      "open": 0,
+      "positive": 3,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 60.0,
+      "win_rate_nonzero_pct": 60.0,
+      "tp_event_rate_closed_pct": 60.0,
+      "raw_pnl_sum_percentage_points": 33.61201895063837,
+      "raw_pnl_mean_pct": 6.722403790127674,
+      "price_pnl_profit_factor": 4.92568223250548,
+      "gross_positive_price_pnl_pp": 42.17410242044236,
+      "gross_negative_price_pnl_pp": 8.562083469803985,
+      "risk_weighted_proxy_n": 5,
+      "risk_weighted_proxy_sum_pp": 1.4044664663238953,
+      "risk_weighted_proxy_profit_factor": 1.8491801962904941,
+      "planned_rr_absolute": {
+        "n": 5,
+        "min": 0.2350294024205416,
+        "median": 1.8677331385155607,
+        "mean": 4.4182262335879425,
+        "max": 14.514844646774316
+      },
+      "planned_rr_signed": {
+        "n": 5,
+        "min": 0.2350294024205416,
+        "median": 1.8677331385155607,
+        "mean": 4.4182262335879425,
+        "max": 14.514844646774316
+      },
+      "sl_distance_pct": {
+        "n": 5,
+        "min": 1.4168968553459176,
+        "median": 10.195312752452397,
+        "mean": 9.879621220016746,
+        "max": 20.992590030518823
+      },
+      "tp_signed_distance_pct": {
+        "n": 5,
+        "min": 4.933875890132258,
+        "median": 19.042123485285632,
+        "mean": 17.414140081057937,
+        "max": 23.623764158576062
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 4,
+      "duration_hours": {
+        "n": 5,
+        "min": 1.4646742052777777,
+        "median": 49.61102979583333,
+        "mean": 57.357692606166665,
+        "max": 105.47792891305556
+      },
+      "realized_r": {
+        "n": 5,
+        "min": -1.2342066386028387,
+        "median": 0.22541511937266415,
+        "mean": 0.31917220331727697,
+        "max": 1.8420337317257123
+      },
+      "first_created_at_utc": "2026-08-14 18:34:43.846349",
+      "last_created_at_utc": "2026-09-09 22:17:48.214235"
+    },
+    "OP/USDT": {
+      "signals": 7,
+      "closed": 7,
+      "open": 0,
+      "positive": 0,
+      "negative": 7,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -27.640519814224493,
+      "raw_pnl_mean_pct": -3.9486456877463563,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 27.640519814224493,
+      "risk_weighted_proxy_n": 7,
+      "risk_weighted_proxy_sum_pp": -6.002730243010908,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 7,
+        "min": 2.0581191122465277,
+        "median": 2.8301451976476337,
+        "mean": 3.0896630810103716,
+        "max": 5.0597656819476775
+      },
+      "planned_rr_signed": {
+        "n": 7,
+        "min": 2.0581191122465277,
+        "median": 2.8301451976476337,
+        "mean": 3.0896630810103716,
+        "max": 5.0597656819476775
+      },
+      "sl_distance_pct": {
+        "n": 7,
+        "min": 1.8155197305101136,
+        "median": 3.4809915518007952,
+        "mean": 3.7262490726846496,
+        "max": 5.654565436395269
+      },
+      "tp_signed_distance_pct": {
+        "n": 7,
+        "min": 7.164295242329915,
+        "median": 9.18610442733397,
+        "mean": 10.967593117261318,
+        "max": 18.632757816145578
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 2,
+      "duration_hours": {
+        "n": 7,
+        "min": 1.464485668611111,
+        "median": 15.219726104166668,
+        "mean": 17.918684516031746,
+        "max": 37.29969683416666
+      },
+      "realized_r": {
+        "n": 7,
+        "min": -1.1302309365789773,
+        "median": -1.0629199530470628,
+        "mean": -1.0676164875061451,
+        "max": -1.040061049210347
+      },
+      "first_created_at_utc": "2026-08-18 18:17:45.329182",
+      "last_created_at_utc": "2026-09-07 22:18:19.223867"
+    },
+    "PENDLE/USDT": {
+      "signals": 7,
+      "closed": 7,
+      "open": 0,
+      "positive": 2,
+      "negative": 5,
+      "zero": 0,
+      "win_rate_all_closed_pct": 28.571428571428573,
+      "win_rate_nonzero_pct": 28.571428571428573,
+      "tp_event_rate_closed_pct": 28.571428571428573,
+      "raw_pnl_sum_percentage_points": -8.453903317533861,
+      "raw_pnl_mean_pct": -1.2077004739334087,
+      "price_pnl_profit_factor": 0.2968316488431805,
+      "gross_positive_price_pnl_pp": 3.5686845927807838,
+      "gross_negative_price_pnl_pp": 12.022587910314645,
+      "risk_weighted_proxy_n": 7,
+      "risk_weighted_proxy_sum_pp": -2.4997745529708464,
+      "risk_weighted_proxy_profit_factor": 0.5041523381277473,
+      "planned_rr_absolute": {
+        "n": 7,
+        "min": 0.5142159962695378,
+        "median": 2.9144738406161577,
+        "mean": 2.5451175053764272,
+        "max": 4.257262161321543
+      },
+      "planned_rr_signed": {
+        "n": 7,
+        "min": 0.5142159962695378,
+        "median": 2.9144738406161577,
+        "mean": 2.5451175053764272,
+        "max": 4.257262161321543
+      },
+      "sl_distance_pct": {
+        "n": 7,
+        "min": 0.9690957674219801,
+        "median": 1.5971185487273165,
+        "mean": 2.0102933872660627,
+        "max": 4.106816103059583
+      },
+      "tp_signed_distance_pct": {
+        "n": 7,
+        "min": 1.2308868501529053,
+        "median": 4.125694741342459,
+        "mean": 4.525463424851206,
+        "max": 8.012049001130801
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 7,
+        "min": 7.775679203611111,
+        "median": 89.46855444222223,
+        "mean": 68.05188643996031,
+        "max": 100.81194552416667
+      },
+      "realized_r": {
+        "n": 7,
+        "min": -1.3364110340506123,
+        "median": -1.1193312678644964,
+        "mean": -0.5009197473210719,
+        "max": 2.072377581324774
+      },
+      "first_created_at_utc": "2026-07-17 16:05:25.337988",
+      "last_created_at_utc": "2026-08-19 04:17:50.657397"
+    },
+    "POL/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 0,
+      "negative": 3,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -5.785417027919068,
+      "raw_pnl_mean_pct": -1.9284723426396893,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 5.785417027919068,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -3.3837037190687314,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 2.735505619529836,
+        "median": 3.2596371882085924,
+        "mean": 3.558185764790485,
+        "max": 4.679414486633027
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 2.735505619529836,
+        "median": 3.2596371882085924,
+        "mean": 3.558185764790485,
+        "max": 4.679414486633027
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 1.53040125316304,
+        "median": 1.748134283299125,
+        "mean": 1.7110731493271891,
+        "max": 1.8546839115194027
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 4.78203115565752,
+        "median": 4.9885528376912776,
+        "mean": 6.149806252345965,
+        "max": 8.6788347636891
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 3,
+        "min": 5.9815216583333335,
+        "median": 16.7221522275,
+        "mean": 13.925772296018518,
+        "max": 19.073643002222223
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.1443378966418816,
+        "median": -1.1206863113289904,
+        "mean": -1.1279012396895771,
+        "max": -1.1186795110978596
+      },
+      "first_created_at_utc": "2026-07-15 20:06:18.086224",
+      "last_created_at_utc": "2026-07-16 09:06:27.281733"
+    },
+    "SNX/USDT": {
+      "signals": 4,
+      "closed": 4,
+      "open": 0,
+      "positive": 1,
+      "negative": 3,
+      "zero": 0,
+      "win_rate_all_closed_pct": 25.0,
+      "win_rate_nonzero_pct": 25.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -6.572085795706415,
+      "raw_pnl_mean_pct": -1.6430214489266037,
+      "price_pnl_profit_factor": 0.2388776709840279,
+      "gross_positive_price_pnl_pp": 2.0626441881100237,
+      "gross_negative_price_pnl_pp": 8.634729983816438,
+      "risk_weighted_proxy_n": 4,
+      "risk_weighted_proxy_sum_pp": -3.1982889233157867,
+      "risk_weighted_proxy_profit_factor": 0.02343041494188459,
+      "planned_rr_absolute": {
+        "n": 4,
+        "min": 1.7330278802923271,
+        "median": 2.435955914624037,
+        "mean": 4.913136955505309,
+        "max": 13.047608112480836
+      },
+      "planned_rr_signed": {
+        "n": 4,
+        "min": 1.7330278802923271,
+        "median": 2.435955914624037,
+        "mean": 4.913136955505309,
+        "max": 13.047608112480836
+      },
+      "sl_distance_pct": {
+        "n": 4,
+        "min": 0.8978725398313014,
+        "median": 2.836181688949404,
+        "mean": 2.662094987165732,
+        "max": 4.078144030932819
+      },
+      "tp_signed_distance_pct": {
+        "n": 4,
+        "min": 4.658385093167694,
+        "median": 8.468854965379323,
+        "mean": 8.327796014650751,
+        "max": 11.71508903467666
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 4,
+        "min": 0.009653485,
+        "median": 12.350068488472221,
+        "mean": 19.356645415347224,
+        "max": 52.716791199444444
+      },
+      "realized_r": {
+        "n": 4,
+        "min": -1.2227611365327582,
+        "median": -1.0701047496419012,
+        "mean": -0.648904725119495,
+        "max": 0.7673517353385799
+      },
+      "first_created_at_utc": "2026-07-16 21:21:30.715430",
+      "last_created_at_utc": "2026-09-01 11:18:12.379159"
+    },
+    "SOL/USDT": {
+      "signals": 6,
+      "closed": 6,
+      "open": 0,
+      "positive": 1,
+      "negative": 4,
+      "zero": 1,
+      "win_rate_all_closed_pct": 16.666666666666668,
+      "win_rate_nonzero_pct": 20.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -3.559099847626093,
+      "raw_pnl_mean_pct": -0.5931833079376821,
+      "price_pnl_profit_factor": 0.46284356305170776,
+      "gross_positive_price_pnl_pp": 3.066716400329806,
+      "gross_negative_price_pnl_pp": 6.6258162479559,
+      "risk_weighted_proxy_n": 6,
+      "risk_weighted_proxy_sum_pp": -3.9439638848440906,
+      "risk_weighted_proxy_profit_factor": 0.16386539371506048,
+      "planned_rr_absolute": {
+        "n": 6,
+        "min": 0.5588841759206281,
+        "median": 2.83486568238642,
+        "mean": 3.517273965728413,
+        "max": 9.35773864371248
+      },
+      "planned_rr_signed": {
+        "n": 6,
+        "min": 0.5588841759206281,
+        "median": 2.83486568238642,
+        "mean": 3.517273965728413,
+        "max": 9.35773864371248
+      },
+      "sl_distance_pct": {
+        "n": 6,
+        "min": 0.8934560160160226,
+        "median": 1.9017320724532878,
+        "mean": 2.5145247382105524,
+        "max": 6.21082216792941
+      },
+      "tp_signed_distance_pct": {
+        "n": 6,
+        "min": 2.791125925925918,
+        "median": 5.116705176862224,
+        "mean": 5.774951003265003,
+        "max": 9.407458700168156
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 6,
+        "min": 1.4983564116666668,
+        "median": 17.606291202500003,
+        "mean": 49.52247978291667,
+        "max": 168.07294335472224
+      },
+      "realized_r": {
+        "n": 6,
+        "min": -1.2308733760803015,
+        "median": -1.1423794943844094,
+        "mean": -0.6251216147468035,
+        "max": 0.9661709818163479
+      },
+      "first_created_at_utc": "2026-07-14 08:03:25.271671",
+      "last_created_at_utc": "2026-09-13 20:17:47.759639"
+    },
+    "STG/USDT": {
+      "signals": 7,
+      "closed": 7,
+      "open": 0,
+      "positive": 0,
+      "negative": 4,
+      "zero": 3,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -28.672676930514072,
+      "raw_pnl_mean_pct": -4.096096704359153,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 28.672676930514072,
+      "risk_weighted_proxy_n": 7,
+      "risk_weighted_proxy_sum_pp": -2.7951283325921836,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 7,
+        "min": 1.0234060335778603,
+        "median": 2.4038742961057995,
+        "mean": 2.1649240159230247,
+        "max": 3.262760205126347
+      },
+      "planned_rr_signed": {
+        "n": 7,
+        "min": 1.0234060335778603,
+        "median": 2.4038742961057995,
+        "mean": 2.1649240159230247,
+        "max": 3.262760205126347
+      },
+      "sl_distance_pct": {
+        "n": 7,
+        "min": 2.664322541966434,
+        "median": 8.798575949367082,
+        "mean": 9.580240641555738,
+        "max": 13.634362036455054
+      },
+      "tp_signed_distance_pct": {
+        "n": 7,
+        "min": 8.693045563549152,
+        "median": 15.184243964421839,
+        "mean": 17.714601715178027,
+        "max": 26.242920075519198
+      },
+      "planned_rr_absolute_below_1_5": 3,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 6,
+      "duration_hours": {
+        "n": 7,
+        "min": 20.311730479722222,
+        "median": 51.981633643888884,
+        "mean": 89.97628305019842,
+        "max": 168.08386374583333
+      },
+      "realized_r": {
+        "n": 7,
+        "min": -1.0994534722442106,
+        "median": -1.0256163466208532,
+        "mean": -0.5974999749345634,
+        "max": 0.0
+      },
+      "first_created_at_utc": "2026-08-24 12:02:25.101839",
+      "last_created_at_utc": "2026-09-05 18:03:11.404025"
+    },
+    "SUI/USDT": {
+      "signals": 3,
+      "closed": 3,
+      "open": 0,
+      "positive": 1,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 33.333333333333336,
+      "win_rate_nonzero_pct": 33.333333333333336,
+      "tp_event_rate_closed_pct": 33.333333333333336,
+      "raw_pnl_sum_percentage_points": -6.006954181497381,
+      "raw_pnl_mean_pct": -2.002318060499127,
+      "price_pnl_profit_factor": 0.22871107606736307,
+      "gross_positive_price_pnl_pp": 1.7812481316762727,
+      "gross_negative_price_pnl_pp": 7.788202313173654,
+      "risk_weighted_proxy_n": 3,
+      "risk_weighted_proxy_sum_pp": -1.3694561323454513,
+      "risk_weighted_proxy_profit_factor": 0.044092141690601445,
+      "planned_rr_absolute": {
+        "n": 3,
+        "min": 0.7386921167929847,
+        "median": 2.459949146592831,
+        "mean": 2.4614424120623557,
+        "max": 4.1856859728012505
+      },
+      "planned_rr_signed": {
+        "n": 3,
+        "min": 0.7386921167929847,
+        "median": 2.459949146592831,
+        "mean": 2.4614424120623557,
+        "max": 4.1856859728012505
+      },
+      "sl_distance_pct": {
+        "n": 3,
+        "min": 2.819883291475853,
+        "median": 4.310508814102565,
+        "mean": 3.835221918633453,
+        "max": 4.37527365032194
+      },
+      "tp_signed_distance_pct": {
+        "n": 3,
+        "min": 2.083025557689467,
+        "median": 10.60363247863248,
+        "mean": 10.333393193880474,
+        "max": 18.31352154531947
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 3,
+        "min": 43.19574915027778,
+        "median": 70.60000165055555,
+        "mean": 65.0738088961111,
+        "max": 81.42567588749999
+      },
+      "realized_r": {
+        "n": 3,
+        "min": -1.0658814050753174,
+        "median": -0.7248980623717945,
+        "mean": -0.38636835044157636,
+        "max": 0.6316744161223828
+      },
+      "first_created_at_utc": "2026-07-15 20:06:08.072125",
+      "last_created_at_utc": "2026-09-06 23:33:05.774513"
+    },
+    "TIA/USDT": {
+      "signals": 2,
+      "closed": 2,
+      "open": 0,
+      "positive": 0,
+      "negative": 2,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -5.732967219819634,
+      "raw_pnl_mean_pct": -2.866483609909817,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 5.732967219819634,
+      "risk_weighted_proxy_n": 2,
+      "risk_weighted_proxy_sum_pp": -1.9757127328622337,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 2,
+        "min": 2.4867253930877107,
+        "median": 3.7523588780207793,
+        "mean": 3.7523588780207793,
+        "max": 5.017992362953848
+      },
+      "planned_rr_signed": {
+        "n": 2,
+        "min": 2.4867253930877107,
+        "median": 3.7523588780207793,
+        "mean": 3.7523588780207793,
+        "max": 5.017992362953848
+      },
+      "sl_distance_pct": {
+        "n": 2,
+        "min": 1.6431771352608846,
+        "median": 2.6516298047438447,
+        "mean": 2.6516298047438447,
+        "max": 3.660082474226805
+      },
+      "tp_signed_distance_pct": {
+        "n": 2,
+        "min": 8.245450315719502,
+        "median": 8.673535172587297,
+        "mean": 8.673535172587297,
+        "max": 9.101620029455091
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 2,
+        "min": 7.7741193158333335,
+        "median": 11.884285464166666,
+        "mean": 11.884285464166666,
+        "max": 15.994451612499999
+      },
+      "realized_r": {
+        "n": 2,
+        "min": -1.1276281402220967,
+        "median": -1.0938669405111339,
+        "mean": -1.0938669405111339,
+        "max": -1.060105740800171
+      },
+      "first_created_at_utc": "2026-08-19 04:17:58.638137",
+      "last_created_at_utc": "2026-08-20 16:03:03.234378"
+    },
+    "UNI/USDT": {
+      "signals": 1,
+      "closed": 1,
+      "open": 0,
+      "positive": 1,
+      "negative": 0,
+      "zero": 0,
+      "win_rate_all_closed_pct": 100.0,
+      "win_rate_nonzero_pct": 100.0,
+      "tp_event_rate_closed_pct": 100.0,
+      "raw_pnl_sum_percentage_points": 17.22724598355575,
+      "raw_pnl_mean_pct": 17.22724598355575,
+      "price_pnl_profit_factor": null,
+      "gross_positive_price_pnl_pp": 17.22724598355575,
+      "gross_negative_price_pnl_pp": 0,
+      "risk_weighted_proxy_n": 1,
+      "risk_weighted_proxy_sum_pp": 2.0309184240329894,
+      "risk_weighted_proxy_profit_factor": null,
+      "planned_rr_absolute": {
+        "n": 1,
+        "min": 3.4375138759152413,
+        "median": 3.4375138759152413,
+        "mean": 3.4375138759152413,
+        "max": 3.4375138759152413
+      },
+      "planned_rr_signed": {
+        "n": 1,
+        "min": 3.4375138759152413,
+        "median": 3.4375138759152413,
+        "mean": 3.4375138759152413,
+        "max": 3.4375138759152413
+      },
+      "sl_distance_pct": {
+        "n": 1,
+        "min": 5.089494224788987,
+        "median": 5.089494224788987,
+        "mean": 5.089494224788987,
+        "max": 5.089494224788987
+      },
+      "tp_signed_distance_pct": {
+        "n": 1,
+        "min": 17.495207019102626,
+        "median": 17.495207019102626,
+        "mean": 17.495207019102626,
+        "max": 17.495207019102626
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 1,
+        "min": 54.36992268416667,
+        "median": 54.36992268416667,
+        "mean": 54.36992268416667,
+        "max": 54.36992268416667
+      },
+      "realized_r": {
+        "n": 1,
+        "min": 3.3848640400549823,
+        "median": 3.3848640400549823,
+        "mean": 3.3848640400549823,
+        "max": 3.3848640400549823
+      },
+      "first_created_at_utc": "2026-08-28 14:17:31.559306",
+      "last_created_at_utc": "2026-08-28 14:17:31.559306"
+    },
+    "XRP/USDT": {
+      "signals": 5,
+      "closed": 5,
+      "open": 0,
+      "positive": 1,
+      "negative": 3,
+      "zero": 1,
+      "win_rate_all_closed_pct": 20.0,
+      "win_rate_nonzero_pct": 25.0,
+      "tp_event_rate_closed_pct": 20.0,
+      "raw_pnl_sum_percentage_points": -6.855111296599294,
+      "raw_pnl_mean_pct": -1.3710222593198589,
+      "price_pnl_profit_factor": 0.10259548792947434,
+      "gross_positive_price_pnl_pp": 0.7837084378623946,
+      "gross_negative_price_pnl_pp": 7.6388197344616895,
+      "risk_weighted_proxy_n": 5,
+      "risk_weighted_proxy_sum_pp": -2.0845566847596784,
+      "risk_weighted_proxy_profit_factor": 0.026808839784833415,
+      "planned_rr_absolute": {
+        "n": 5,
+        "min": 0.7248870567388811,
+        "median": 2.3020411804692746,
+        "mean": 3.796577061374446,
+        "max": 8.510353958870697
+      },
+      "planned_rr_signed": {
+        "n": 5,
+        "min": 0.7248870567388811,
+        "median": 2.3020411804692746,
+        "mean": 3.796577061374446,
+        "max": 8.510353958870697
+      },
+      "sl_distance_pct": {
+        "n": 5,
+        "min": 1.3647746577395807,
+        "median": 2.0493183624801405,
+        "mean": 2.7770843491131485,
+        "max": 5.679984166322459
+      },
+      "tp_signed_distance_pct": {
+        "n": 5,
+        "min": 0.9893074847606586,
+        "median": 4.717615262321143,
+        "mean": 13.585801989545724,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 5,
+        "min": 4.485712023055555,
+        "median": 20.05762510166667,
+        "mean": 81.23835899611112,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 5,
+        "min": -1.173758076281439,
+        "median": -1.0673518505872641,
+        "mean": -0.5620562413905965,
+        "max": 0.5742401746823305
+      },
+      "first_created_at_utc": "2026-07-15 22:05:46.777722",
+      "last_created_at_utc": "2026-09-13 20:17:46.772481"
+    },
+    "ZEC/USDT": {
+      "signals": 6,
+      "closed": 6,
+      "open": 0,
+      "positive": 0,
+      "negative": 5,
+      "zero": 1,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -18.08448623353392,
+      "raw_pnl_mean_pct": -3.01408103892232,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 18.08448623353392,
+      "risk_weighted_proxy_n": 6,
+      "risk_weighted_proxy_sum_pp": -4.559964345732966,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 6,
+        "min": 2.451599577213872,
+        "median": 2.7018522585210074,
+        "mean": 2.9403014558988763,
+        "max": 4.113289877909091
+      },
+      "planned_rr_signed": {
+        "n": 6,
+        "min": 2.451599577213872,
+        "median": 2.7018522585210074,
+        "mean": 2.9403014558988763,
+        "max": 4.113289877909091
+      },
+      "sl_distance_pct": {
+        "n": 6,
+        "min": 1.175968015178399,
+        "median": 3.986696009455234,
+        "mean": 3.579506481918951,
+        "max": 4.498955669643674
+      },
+      "tp_signed_distance_pct": {
+        "n": 6,
+        "min": 4.8370973335781535,
+        "median": 10.13925845219973,
+        "mean": 9.993538081806438,
+        "max": 14.389958594054637
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 6,
+        "min": 7.483763650833334,
+        "median": 19.37419885375,
+        "mean": 33.687435371018516,
+        "max": 116.97064398833334
+      },
+      "realized_r": {
+        "n": 6,
+        "min": -1.1780142002347347,
+        "median": -1.0560632126841591,
+        "mean": -0.9009086470179205,
+        "max": 0.0
+      },
+      "first_created_at_utc": "2026-07-17 15:36:06.186293",
+      "last_created_at_utc": "2026-08-14 18:34:49.924107"
+    },
+    "ZRO/USDT": {
+      "signals": 11,
+      "closed": 11,
+      "open": 0,
+      "positive": 0,
+      "negative": 11,
+      "zero": 0,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 45.45454545454545,
+      "raw_pnl_sum_percentage_points": -57.09619470959394,
+      "raw_pnl_mean_pct": -5.190563155417631,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 57.09619470959394,
+      "risk_weighted_proxy_n": 11,
+      "risk_weighted_proxy_sum_pp": -4.3463373896013175,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 11,
+        "min": 0.0429830055707104,
+        "median": 2.2830585805549997,
+        "mean": 1.8038456967008762,
+        "max": 3.9664443938833402
+      },
+      "planned_rr_signed": {
+        "n": 11,
+        "min": -0.270568589164972,
+        "median": 2.2830585805549997,
+        "mean": 1.6653630092958274,
+        "max": 3.9664443938833402
+      },
+      "sl_distance_pct": {
+        "n": 11,
+        "min": 2.0051894210150136,
+        "median": 5.216735330836443,
+        "mean": 21.390846390019504,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 11,
+        "min": -12.084703947368434,
+        "median": 7.183555399719492,
+        "mean": 3.201440514925531,
+        "max": 14.90593342981187
+      },
+      "planned_rr_absolute_below_1_5": 5,
+      "invalid_price_geometry": 5,
+      "sl_over_5_pct": 6,
+      "duration_hours": {
+        "n": 11,
+        "min": 1.9669646566666665,
+        "median": 7.676677268055556,
+        "mean": 7.662186426616161,
+        "max": 19.304286429166666
+      },
+      "realized_r": {
+        "n": 11,
+        "min": -1.1009652483548604,
+        "median": -1.0402011047017188,
+        "mean": -0.6519788935263481,
+        "max": -0.047738100393064614
+      },
+      "first_created_at_utc": "2026-08-19 04:17:50.339684",
+      "last_created_at_utc": "2026-08-28 14:17:40.443590"
+    }
+  },
+  "by_month": {
+    "2026-07": {
+      "signals": 51,
+      "closed": 51,
+      "open": 0,
+      "positive": 16,
+      "negative": 31,
+      "zero": 4,
+      "win_rate_all_closed_pct": 31.372549019607842,
+      "win_rate_nonzero_pct": 34.04255319148936,
+      "tp_event_rate_closed_pct": 15.686274509803921,
+      "raw_pnl_sum_percentage_points": -43.11294409631195,
+      "raw_pnl_mean_pct": -0.8453518450257245,
+      "price_pnl_profit_factor": 0.4387641548916237,
+      "gross_positive_price_pnl_pp": 33.70492930232443,
+      "gross_negative_price_pnl_pp": 76.81787339863638,
+      "risk_weighted_proxy_n": 51,
+      "risk_weighted_proxy_sum_pp": -15.951242069303978,
+      "risk_weighted_proxy_profit_factor": 0.44263278373575243,
+      "planned_rr_absolute": {
+        "n": 51,
+        "min": 0.5906037560228051,
+        "median": 2.459949146592831,
+        "mean": 2.4588581552116864,
+        "max": 6.987350208679847
+      },
+      "planned_rr_signed": {
+        "n": 51,
+        "min": 0.5906037560228051,
+        "median": 2.459949146592831,
+        "mean": 2.4588581552116864,
+        "max": 6.987350208679847
+      },
+      "sl_distance_pct": {
+        "n": 51,
+        "min": 0.7405562325164065,
+        "median": 2.2137554611650576,
+        "mean": 2.443527655376857,
+        "max": 5.613533215755442
+      },
+      "tp_signed_distance_pct": {
+        "n": 51,
+        "min": 0.7822277847309137,
+        "median": 4.658385093167694,
+        "mean": 5.726146533442145,
+        "max": 17.519106407995295
+      },
+      "planned_rr_absolute_below_1_5": 7,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 1,
+      "duration_hours": {
+        "n": 51,
+        "min": 0.5094897494444445,
+        "median": 17.941683502222222,
+        "mean": 32.95505176538126,
+        "max": 237.65909418972223
+      },
+      "realized_r": {
+        "n": 51,
+        "min": -1.3364110340506123,
+        "median": -1.061139687631284,
+        "mean": -0.36053920997620265,
+        "max": 2.62759828861048
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-07-31 16:18:26.867756"
+    },
+    "2026-08": {
+      "signals": 68,
+      "closed": 68,
+      "open": 0,
+      "positive": 19,
+      "negative": 43,
+      "zero": 6,
+      "win_rate_all_closed_pct": 27.941176470588236,
+      "win_rate_nonzero_pct": 30.64516129032258,
+      "tp_event_rate_closed_pct": 41.1764705882353,
+      "raw_pnl_sum_percentage_points": -25.42354435402266,
+      "raw_pnl_mean_pct": -0.3738756522650391,
+      "price_pnl_profit_factor": 0.8448751782859625,
+      "gross_positive_price_pnl_pp": 138.46734088992167,
+      "gross_negative_price_pnl_pp": 163.89088524394433,
+      "risk_weighted_proxy_n": 68,
+      "risk_weighted_proxy_sum_pp": -9.554171986081155,
+      "risk_weighted_proxy_profit_factor": 0.6932049481327648,
+      "planned_rr_absolute": {
+        "n": 68,
+        "min": 0.0429830055707104,
+        "median": 2.2640293609033426,
+        "mean": 2.9380929528770654,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 68,
+        "min": -0.270568589164972,
+        "median": 2.2640293609033426,
+        "mean": 2.8961771227120297,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 68,
+        "min": 0.5563830057070371,
+        "median": 3.795385957696176,
+        "mean": 8.240716482692585,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 68,
+        "min": -12.084703947368434,
+        "median": 6.976560357722482,
+        "mean": 7.825456726626279,
+        "max": 26.242920075519198
+      },
+      "planned_rr_absolute_below_1_5": 27,
+      "invalid_price_geometry": 9,
+      "sl_over_5_pct": 30,
+      "duration_hours": {
+        "n": 68,
+        "min": 0.27197227555555553,
+        "median": 15.607088858333334,
+        "mean": 45.33537269022876,
+        "max": 168.08386374583333
+      },
+      "realized_r": {
+        "n": 68,
+        "min": -1.4961862808886905,
+        "median": -0.6503704729566072,
+        "mean": -0.19095858862446255,
+        "max": 4.95155120822748
+      },
+      "first_created_at_utc": "2026-08-05 13:33:39.250715",
+      "last_created_at_utc": "2026-08-31 09:48:01.887507"
+    },
+    "2026-09": {
+      "signals": 24,
+      "closed": 20,
+      "open": 4,
+      "positive": 1,
+      "negative": 17,
+      "zero": 2,
+      "win_rate_all_closed_pct": 5.0,
+      "win_rate_nonzero_pct": 5.555555555555555,
+      "tp_event_rate_closed_pct": 5.0,
+      "raw_pnl_sum_percentage_points": -57.588050059177036,
+      "raw_pnl_mean_pct": -2.8794025029588517,
+      "price_pnl_profit_factor": 0.08413993700983399,
+      "gross_positive_price_pnl_pp": 5.290606174788899,
+      "gross_negative_price_pnl_pp": 62.878656233965934,
+      "risk_weighted_proxy_n": 20,
+      "risk_weighted_proxy_sum_pp": -12.068950925679632,
+      "risk_weighted_proxy_profit_factor": 0.23867055697373069,
+      "planned_rr_absolute": {
+        "n": 24,
+        "min": 2.0660176101915178,
+        "median": 4.442346194755332,
+        "mean": 5.567331969407863,
+        "max": 13.047608112480836
+      },
+      "planned_rr_signed": {
+        "n": 24,
+        "min": 2.0660176101915178,
+        "median": 4.442346194755332,
+        "mean": 5.567331969407863,
+        "max": 13.047608112480836
+      },
+      "sl_distance_pct": {
+        "n": 24,
+        "min": 0.8978725398313014,
+        "median": 3.1031697395863986,
+        "mean": 3.8107523150543856,
+        "max": 8.744210766423354
+      },
+      "tp_signed_distance_pct": {
+        "n": 24,
+        "min": 5.508196721311469,
+        "median": 15.98035582915279,
+        "mean": 15.982183677295621,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 7,
+      "duration_hours": {
+        "n": 20,
+        "min": 0.009653485,
+        "median": 22.10449513361111,
+        "mean": 51.47464933677777,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 20,
+        "min": -1.2227611365327582,
+        "median": -1.0666166278312907,
+        "mean": -0.6811849583001587,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-09-01 00:03:08.795160",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    }
+  },
+  "by_logging_cohort_NOT_version": {
+    "compact_components": {
+      "signals": 81,
+      "closed": 77,
+      "open": 4,
+      "positive": 18,
+      "negative": 53,
+      "zero": 6,
+      "win_rate_all_closed_pct": 23.376623376623378,
+      "win_rate_nonzero_pct": 25.35211267605634,
+      "tp_event_rate_closed_pct": 35.064935064935064,
+      "raw_pnl_sum_percentage_points": -71.3391838782996,
+      "raw_pnl_mean_pct": -0.9264829075103843,
+      "price_pnl_profit_factor": 0.6617592839921411,
+      "gross_positive_price_pnl_pp": 139.57328319630906,
+      "gross_negative_price_pnl_pp": 210.91246707460866,
+      "risk_weighted_proxy_n": 77,
+      "risk_weighted_proxy_sum_pp": -18.267454947244314,
+      "risk_weighted_proxy_profit_factor": 0.5451500057526851,
+      "planned_rr_absolute": {
+        "n": 81,
+        "min": 0.0429830055707104,
+        "median": 2.8301451976476337,
+        "mean": 3.776399825450137,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 81,
+        "min": -0.270568589164972,
+        "median": 2.8301451976476337,
+        "mean": 3.741211227286897,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 81,
+        "min": 0.5563830057070371,
+        "median": 4.190873616773442,
+        "mean": 7.747223023136251,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 81,
+        "min": -12.084703947368434,
+        "median": 11.010154997327621,
+        "mean": 10.861251164284221,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 22,
+      "invalid_price_geometry": 9,
+      "sl_over_5_pct": 35,
+      "duration_hours": {
+        "n": 77,
+        "min": 0.009653485,
+        "median": 14.073305517222222,
+        "mean": 39.255079094595956,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 77,
+        "min": -1.2486625077601543,
+        "median": -1.040061049210347,
+        "mean": -0.2848597129703503,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-08-14 18:34:34.836627",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    },
+    "feature_names_with_quality": {
+      "signals": 34,
+      "closed": 34,
+      "open": 0,
+      "positive": 9,
+      "negative": 21,
+      "zero": 4,
+      "win_rate_all_closed_pct": 26.470588235294116,
+      "win_rate_nonzero_pct": 30.0,
+      "tp_event_rate_closed_pct": 26.470588235294116,
+      "raw_pnl_sum_percentage_points": -28.59706791138614,
+      "raw_pnl_mean_pct": -0.8410902326878276,
+      "price_pnl_profit_factor": 0.3827068240817644,
+      "gross_positive_price_pnl_pp": 17.729489755232226,
+      "gross_negative_price_pnl_pp": 46.32655766661836,
+      "risk_weighted_proxy_n": 34,
+      "risk_weighted_proxy_sum_pp": -12.248218048009779,
+      "risk_weighted_proxy_profit_factor": 0.4549443897033012,
+      "planned_rr_absolute": {
+        "n": 34,
+        "min": 0.5588841759206281,
+        "median": 2.4084894641247274,
+        "mean": 2.444910981228139,
+        "max": 6.987350208679847
+      },
+      "planned_rr_signed": {
+        "n": 34,
+        "min": 0.5588841759206281,
+        "median": 2.4084894641247274,
+        "mean": 2.444910981228139,
+        "max": 6.987350208679847
+      },
+      "sl_distance_pct": {
+        "n": 34,
+        "min": 0.7263564721663419,
+        "median": 1.5621843724541704,
+        "mean": 2.215666919286699,
+        "max": 7.491338089516369
+      },
+      "tp_signed_distance_pct": {
+        "n": 34,
+        "min": 0.7822277847309137,
+        "median": 3.159962484899715,
+        "mean": 4.404439419456501,
+        "max": 17.519106407995295
+      },
+      "planned_rr_absolute_below_1_5": 12,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 3,
+      "duration_hours": {
+        "n": 34,
+        "min": 0.27197227555555553,
+        "median": 19.922906920694444,
+        "mean": 54.624803290285946,
+        "max": 237.65909418972223
+      },
+      "realized_r": {
+        "n": 34,
+        "min": -1.4961862808886905,
+        "median": -1.0590438350022389,
+        "mean": -0.3928635095534313,
+        "max": 3.391036617153189
+      },
+      "first_created_at_utc": "2026-07-22 12:03:46.341553",
+      "last_created_at_utc": "2026-08-11 18:04:20.786163"
+    },
+    "feature_names_with_smt": {
+      "signals": 22,
+      "closed": 22,
+      "open": 0,
+      "positive": 8,
+      "negative": 12,
+      "zero": 2,
+      "win_rate_all_closed_pct": 36.36363636363637,
+      "win_rate_nonzero_pct": 40.0,
+      "tp_event_rate_closed_pct": 0.0,
+      "raw_pnl_sum_percentage_points": -19.13215159447865,
+      "raw_pnl_mean_pct": -0.869643254294484,
+      "price_pnl_profit_factor": 0.4649307118415424,
+      "gross_positive_price_pnl_pp": 16.62424859123482,
+      "gross_negative_price_pnl_pp": 35.75640018571347,
+      "risk_weighted_proxy_n": 22,
+      "risk_weighted_proxy_sum_pp": -4.219084929533213,
+      "risk_weighted_proxy_profit_factor": 0.4384324065664524,
+      "planned_rr_absolute": {
+        "n": 22,
+        "min": 1.5146706673206118,
+        "median": 2.102163397616497,
+        "mean": 2.39101042382561,
+        "max": 4.679414486633027
+      },
+      "planned_rr_signed": {
+        "n": 22,
+        "min": 1.5146706673206118,
+        "median": 2.102163397616497,
+        "mean": 2.39101042382561,
+        "max": 4.679414486633027
+      },
+      "sl_distance_pct": {
+        "n": 22,
+        "min": 1.53040125316304,
+        "median": 2.751078905881363,
+        "mean": 2.8510233532863003,
+        "max": 4.498955669643674
+      },
+      "tp_signed_distance_pct": {
+        "n": 22,
+        "min": 2.8591765339074287,
+        "median": 5.722994230502509,
+        "mean": 6.759617081561373,
+        "max": 14.865935060527208
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 22,
+        "min": 4.453234530277777,
+        "median": 18.509334657222222,
+        "mean": 38.64434272354798,
+        "max": 116.97093467722222
+      },
+      "realized_r": {
+        "n": 22,
+        "min": -1.1443378966418816,
+        "median": -0.8871963776025042,
+        "mean": -0.2990249716228193,
+        "max": 1.143117462007318
+      },
+      "first_created_at_utc": "2026-07-15 20:06:08.072125",
+      "last_created_at_utc": "2026-07-17 16:05:26.819743"
+    },
+    "feature_names_without_smt": {
+      "signals": 6,
+      "closed": 6,
+      "open": 0,
+      "positive": 1,
+      "negative": 5,
+      "zero": 0,
+      "win_rate_all_closed_pct": 16.666666666666668,
+      "win_rate_nonzero_pct": 16.666666666666668,
+      "tp_event_rate_closed_pct": 16.666666666666668,
+      "raw_pnl_sum_percentage_points": -7.05613512534726,
+      "raw_pnl_mean_pct": -1.1760225208912098,
+      "price_pnl_profit_factor": 0.3338234685910335,
+      "gross_positive_price_pnl_pp": 3.535854824258892,
+      "gross_negative_price_pnl_pp": 10.591989949606152,
+      "risk_weighted_proxy_n": 6,
+      "risk_weighted_proxy_sum_pp": -2.83960705627746,
+      "risk_weighted_proxy_profit_factor": 0.48061086475696246,
+      "planned_rr_absolute": {
+        "n": 6,
+        "min": 2.4936987182924937,
+        "median": 2.7185884892471055,
+        "mean": 2.865077571640654,
+        "max": 3.496562180064538
+      },
+      "planned_rr_signed": {
+        "n": 6,
+        "min": 2.4936987182924937,
+        "median": 2.7185884892471055,
+        "mean": 2.865077571640654,
+        "max": 3.496562180064538
+      },
+      "sl_distance_pct": {
+        "n": 6,
+        "min": 0.8115641316685644,
+        "median": 1.554000975297193,
+        "mean": 1.811072151089684,
+        "max": 3.61298170075349
+      },
+      "tp_signed_distance_pct": {
+        "n": 6,
+        "min": 2.791125925925918,
+        "median": 4.197122025547019,
+        "mean": 4.918846418056354,
+        "max": 9.009687836383211
+      },
+      "planned_rr_absolute_below_1_5": 0,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 6,
+        "min": 2.018715189722222,
+        "median": 5.49510439,
+        "mean": 10.491004605648149,
+        "max": 27.965898245277778
+      },
+      "realized_r": {
+        "n": 6,
+        "min": -1.2495464507307383,
+        "median": -1.1055991101147336,
+        "mean": -0.521046050336217,
+        "max": 2.62759828861048
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-07-14 08:03:25.271671"
+    }
+  },
+  "by_logged_components": {
+    "1": {
+      "signals": 57,
+      "closed": 53,
+      "open": 4,
+      "positive": 16,
+      "negative": 32,
+      "zero": 5,
+      "win_rate_all_closed_pct": 30.18867924528302,
+      "win_rate_nonzero_pct": 33.333333333333336,
+      "tp_event_rate_closed_pct": 37.735849056603776,
+      "raw_pnl_sum_percentage_points": 20.671580630306202,
+      "raw_pnl_mean_pct": 0.3900298232133246,
+      "price_pnl_profit_factor": 1.1836006204636305,
+      "gross_positive_price_pnl_pp": 133.26150858428636,
+      "gross_negative_price_pnl_pp": 112.58992795398015,
+      "risk_weighted_proxy_n": 53,
+      "risk_weighted_proxy_sum_pp": -8.636616329097768,
+      "risk_weighted_proxy_profit_factor": 0.6713350281081931,
+      "planned_rr_absolute": {
+        "n": 57,
+        "min": 0.08084644875714672,
+        "median": 2.6501708401900705,
+        "mean": 4.0703842049466035,
+        "max": 27.01113268962505
+      },
+      "planned_rr_signed": {
+        "n": 57,
+        "min": -0.2111613109341057,
+        "median": 2.6501708401900705,
+        "mean": 4.047104084073499,
+        "max": 27.01113268962505
+      },
+      "sl_distance_pct": {
+        "n": 57,
+        "min": 0.5563830057070371,
+        "median": 4.555736460848569,
+        "mean": 5.9104678745657315,
+        "max": 20.992590030518823
+      },
+      "tp_signed_distance_pct": {
+        "n": 57,
+        "min": -2.7725856697819307,
+        "median": 12.941176470588244,
+        "mean": 11.79062144961528,
+        "max": 31.942723392537513
+      },
+      "planned_rr_absolute_below_1_5": 15,
+      "invalid_price_geometry": 4,
+      "sl_over_5_pct": 25,
+      "duration_hours": {
+        "n": 53,
+        "min": 0.009653485,
+        "median": 15.994451612499999,
+        "mean": 46.478756468778826,
+        "max": 243.17309742
+      },
+      "realized_r": {
+        "n": 53,
+        "min": -1.2486625077601543,
+        "median": -1.0399065854350245,
+        "mean": -0.17545670430364274,
+        "max": 4.95155120822748
+      },
+      "first_created_at_utc": "2026-08-14 18:34:34.836627",
+      "last_created_at_utc": "2026-09-14 10:02:49.261451"
+    },
+    "2": {
+      "signals": 16,
+      "closed": 16,
+      "open": 0,
+      "positive": 0,
+      "negative": 15,
+      "zero": 1,
+      "win_rate_all_closed_pct": 0.0,
+      "win_rate_nonzero_pct": 0.0,
+      "tp_event_rate_closed_pct": 31.25,
+      "raw_pnl_sum_percentage_points": -85.39649244683544,
+      "raw_pnl_mean_pct": -5.337280777927215,
+      "price_pnl_profit_factor": 0.0,
+      "gross_positive_price_pnl_pp": 0,
+      "gross_negative_price_pnl_pp": 85.39649244683544,
+      "risk_weighted_proxy_n": 16,
+      "risk_weighted_proxy_sum_pp": -8.253496659460492,
+      "risk_weighted_proxy_profit_factor": 0.0,
+      "planned_rr_absolute": {
+        "n": 16,
+        "min": 0.0429830055707104,
+        "median": 2.4977492556876184,
+        "mean": 2.26494164073199,
+        "max": 8.510353958870697
+      },
+      "planned_rr_signed": {
+        "n": 16,
+        "min": -0.270568589164972,
+        "median": 2.4977492556876184,
+        "mean": 2.1697347931410187,
+        "max": 8.510353958870697
+      },
+      "sl_distance_pct": {
+        "n": 16,
+        "min": 2.1707124303018657,
+        "median": 8.126354181541146,
+        "mean": 17.220968667010855,
+        "max": 44.66410526315789
+      },
+      "tp_signed_distance_pct": {
+        "n": 16,
+        "min": -12.084703947368434,
+        "median": 8.446601837965288,
+        "mean": 8.97826095595926,
+        "max": 27.420187274201872
+      },
+      "planned_rr_absolute_below_1_5": 6,
+      "invalid_price_geometry": 5,
+      "sl_over_5_pct": 10,
+      "duration_hours": {
+        "n": 16,
+        "min": 1.4983564116666668,
+        "median": 14.412788483472223,
+        "mean": 29.807381018350693,
+        "max": 168.05801840027777
+      },
+      "realized_r": {
+        "n": 16,
+        "min": -1.0994534722442106,
+        "median": -1.0287150028384402,
+        "mean": -0.7113338449353487,
+        "max": 0.0
+      },
+      "first_created_at_utc": "2026-08-19 04:17:58.123718",
+      "last_created_at_utc": "2026-09-13 20:17:46.772481"
+    },
+    "3": {
+      "signals": 8,
+      "closed": 8,
+      "open": 0,
+      "positive": 2,
+      "negative": 6,
+      "zero": 0,
+      "win_rate_all_closed_pct": 25.0,
+      "win_rate_nonzero_pct": 25.0,
+      "tp_event_rate_closed_pct": 25.0,
+      "raw_pnl_sum_percentage_points": -6.614272061770366,
+      "raw_pnl_mean_pct": -0.8267840077212958,
+      "price_pnl_profit_factor": 0.4882989185563999,
+      "gross_positive_price_pnl_pp": 6.311774612022708,
+      "gross_negative_price_pnl_pp": 12.926046673793074,
+      "risk_weighted_proxy_n": 8,
+      "risk_weighted_proxy_sum_pp": -1.3773419586860536,
+      "risk_weighted_proxy_profit_factor": 0.7553620440542853,
+      "planned_rr_absolute": {
+        "n": 8,
+        "min": 0.5142159962695378,
+        "median": 5.038879022450763,
+        "mean": 4.7046774909741105,
+        "max": 9.35773864371248
+      },
+      "planned_rr_signed": {
+        "n": 8,
+        "min": 0.5142159962695378,
+        "median": 5.038879022450763,
+        "mean": 4.7046774909741105,
+        "max": 9.35773864371248
+      },
+      "sl_distance_pct": {
+        "n": 8,
+        "min": 1.0053132555148978,
+        "median": 1.9103545757625637,
+        "mean": 1.8866121689519988,
+        "max": 2.7826932975271355
+      },
+      "tp_signed_distance_pct": {
+        "n": 8,
+        "min": 1.2308868501529053,
+        "median": 7.975923871226438,
+        "mean": 8.005468297950346,
+        "max": 15.575696542463898
+      },
+      "planned_rr_absolute_below_1_5": 1,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 0,
+      "duration_hours": {
+        "n": 8,
+        "min": 1.8714766125,
+        "median": 8.676999371944444,
+        "mean": 10.293612643125,
+        "max": 29.151131081944445
+      },
+      "realized_r": {
+        "n": 8,
+        "min": -1.2012683054480484,
+        "median": -1.0948211880249727,
+        "mean": -0.15670638145729104,
+        "max": 5.044689944947945
+      },
+      "first_created_at_utc": "2026-08-18 18:17:45.329182",
+      "last_created_at_utc": "2026-09-13 20:17:47.759639"
+    },
+    "unavailable": {
+      "signals": 62,
+      "closed": 62,
+      "open": 0,
+      "positive": 18,
+      "negative": 38,
+      "zero": 6,
+      "win_rate_all_closed_pct": 29.032258064516128,
+      "win_rate_nonzero_pct": 32.142857142857146,
+      "tp_event_rate_closed_pct": 16.129032258064516,
+      "raw_pnl_sum_percentage_points": -54.785354631212044,
+      "raw_pnl_mean_pct": -0.8836347521163234,
+      "price_pnl_profit_factor": 0.40884396559577674,
+      "gross_positive_price_pnl_pp": 37.88959317072594,
+      "gross_negative_price_pnl_pp": 92.67494780193799,
+      "risk_weighted_proxy_n": 62,
+      "risk_weighted_proxy_sum_pp": -19.30691003382045,
+      "risk_weighted_proxy_profit_factor": 0.45540328230902266,
+      "planned_rr_absolute": {
+        "n": 62,
+        "min": 0.5588841759206281,
+        "median": 2.416837468274969,
+        "mean": 2.4664462599316783,
+        "max": 6.987350208679847
+      },
+      "planned_rr_signed": {
+        "n": 62,
+        "min": 0.5588841759206281,
+        "median": 2.416837468274969,
+        "mean": 2.4664462599316783,
+        "max": 6.987350208679847
+      },
+      "sl_distance_pct": {
+        "n": 62,
+        "min": 0.7263564721663419,
+        "median": 2.051850642031319,
+        "mean": 2.4019616441062013,
+        "max": 7.491338089516369
+      },
+      "tp_signed_distance_pct": {
+        "n": 62,
+        "min": 0.7822277847309137,
+        "median": 4.471589289071659,
+        "mean": 5.289928944584022,
+        "max": 17.519106407995295
+      },
+      "planned_rr_absolute_below_1_5": 12,
+      "invalid_price_geometry": 0,
+      "sl_over_5_pct": 3,
+      "duration_hours": {
+        "n": 62,
+        "min": 0.27197227555555553,
+        "median": 18.659872109583333,
+        "mean": 44.68330450680108,
+        "max": 237.65909418972223
+      },
+      "realized_r": {
+        "n": 62,
+        "min": -1.4961862808886905,
+        "median": -1.0616981156092793,
+        "mean": -0.3719707258473547,
+        "max": 3.391036617153189
+      },
+      "first_created_at_utc": "2026-07-11 21:03:26.128337",
+      "last_created_at_utc": "2026-08-11 18:04:20.786163"
+    }
+  },
+  "invalid_geometry_rows": [
+    {
+      "id": 71,
+      "symbol": "BCH/USDT",
+      "timeframe": "1h",
+      "signal_type": "SELL",
+      "created_at": "2026-08-14 18:34:48.846632",
+      "close_price": 202.24,
+      "sl": 216.07835778,
+      "tp": 205.16212577,
+      "exit_price": 205.16212577,
+      "status": "HIT_TP",
+      "pnl_pct": -1.6454499030917222,
+      "risk_pct": 0.1,
+      "planned_rr_absolute": 0.2111613109341057,
+      "planned_rr_signed": -0.2111613109341057
+    },
+    {
+      "id": 100,
+      "symbol": "ATOM/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-23 12:32:40.394067",
+      "close_price": 1.577,
+      "sl": 1.38527853,
+      "tp": 1.5615,
+      "exit_price": 1.5615,
+      "status": "HIT_TP",
+      "pnl_pct": -1.1872860038221482,
+      "risk_pct": 0.75,
+      "planned_rr_absolute": 0.08084644875714672,
+      "planned_rr_signed": -0.08084644875714672
+    },
+    {
+      "id": 101,
+      "symbol": "ATOM/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-23 16:47:32.426130",
+      "close_price": 1.596,
+      "sl": 1.38539078,
+      "tp": 1.5605,
+      "exit_price": 1.5605,
+      "status": "HIT_TP",
+      "pnl_pct": -2.4283561935277778,
+      "risk_pct": 0.75,
+      "planned_rr_absolute": 0.16855862245726982,
+      "planned_rr_signed": -0.16855862245726982
+    },
+    {
+      "id": 102,
+      "symbol": "ATOM/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-23 21:02:40.734169",
+      "close_price": 1.605,
+      "sl": 1.38569858,
+      "tp": 1.5605,
+      "exit_price": 1.5605,
+      "status": "HIT_TP",
+      "pnl_pct": -2.976316194282278,
+      "risk_pct": 0.75,
+      "planned_rr_absolute": 0.20291706273493335,
+      "planned_rr_signed": -0.20291706273493335
+    },
+    {
+      "id": 109,
+      "symbol": "ZRO/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-26 16:02:26.371620",
+      "close_price": 1.1261,
+      "sl": 0.66426375,
+      "tp": 1.0690499999999998,
+      "exit_price": 1.0690499999999998,
+      "status": "HIT_TP",
+      "pnl_pct": -5.27110812936004,
+      "risk_pct": 0.4,
+      "planned_rr_absolute": 0.12352863163080044,
+      "planned_rr_signed": -0.12352863163080044
+    },
+    {
+      "id": 110,
+      "symbol": "ZRO/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-26 20:17:43.720197",
+      "close_price": 1.1255,
+      "sl": 0.66794991,
+      "tp": 1.0690499999999998,
+      "exit_price": 1.0690499999999998,
+      "status": "HIT_TP",
+      "pnl_pct": -5.22025011225117,
+      "risk_pct": 0.4,
+      "planned_rr_absolute": 0.12337447032301999,
+      "planned_rr_signed": -0.12337447032301999
+    },
+    {
+      "id": 111,
+      "symbol": "ZRO/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-27 00:32:36.746265",
+      "close_price": 1.1697,
+      "sl": 0.6694517,
+      "tp": 1.0690499999999998,
+      "exit_price": 1.0690499999999998,
+      "status": "HIT_TP",
+      "pnl_pct": -8.815409849914996,
+      "risk_pct": 0.4,
+      "planned_rr_absolute": 0.20120008403826686,
+      "planned_rr_signed": -0.20120008403826686
+    },
+    {
+      "id": 113,
+      "symbol": "ZRO/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-27 09:17:28.809424",
+      "close_price": 1.216,
+      "sl": 0.67288448,
+      "tp": 1.0690499999999998,
+      "exit_price": 1.0690499999999998,
+      "status": "HIT_TP",
+      "pnl_pct": -12.288194063278155,
+      "risk_pct": 0.4,
+      "planned_rr_absolute": 0.270568589164972,
+      "planned_rr_signed": -0.270568589164972
+    },
+    {
+      "id": 114,
+      "symbol": "ZRO/USDT",
+      "timeframe": "4h",
+      "signal_type": "BUY",
+      "created_at": "2026-08-27 13:32:23.710063",
+      "close_price": 1.2087,
+      "sl": 0.6759313,
+      "tp": 1.1858,
+      "exit_price": 1.1858,
+      "status": "HIT_TP",
+      "pnl_pct": -2.104191750383265,
+      "risk_pct": 0.4,
+      "planned_rr_absolute": 0.0429830055707104,
+      "planned_rr_signed": -0.0429830055707104
+    }
+  ],
+  "open_rows": [
+    {
+      "id": 136,
+      "symbol": "ADA/USDT",
+      "timeframe": "4h",
+      "created_at": "2026-09-09 11:48:01.833407",
+      "checked_at": "2026-09-14 19:55:54.346530",
+      "risk_pct": 0.6,
+      "age_hours_at_snapshot": 128.13207687166667,
+      "age_bars_at_snapshot": 32.03301921791667
+    },
+    {
+      "id": 139,
+      "symbol": "BTC/USDT",
+      "timeframe": "4h",
+      "created_at": "2026-09-13 20:17:36.463316",
+      "checked_at": "2026-09-14 19:55:55.133572",
+      "risk_pct": 1.0,
+      "age_hours_at_snapshot": 23.639124119166667,
+      "age_bars_at_snapshot": 5.909781029791667
+    },
+    {
+      "id": 142,
+      "symbol": "BNB/USDT",
+      "timeframe": "4h",
+      "created_at": "2026-09-13 22:17:50.684781",
+      "checked_at": "2026-09-14 19:55:56.524993",
+      "risk_pct": 1.0,
+      "age_hours_at_snapshot": 21.635173712222223,
+      "age_bars_at_snapshot": 5.408793428055556
+    },
+    {
+      "id": 143,
+      "symbol": "LTC/USDT",
+      "timeframe": "4h",
+      "created_at": "2026-09-14 10:02:49.261451",
+      "checked_at": "2026-09-14 19:55:57.310145",
+      "risk_pct": 0.8,
+      "age_hours_at_snapshot": 9.885569081666667,
+      "age_bars_at_snapshot": 2.4713922704166666
+    }
+  ],
+  "open_risk_sum_pct": 3.4,
+  "null_risk_rows": 0,
+  "evidence_field_nonnull_counts": {
+    "execution_snapshot": 0,
+    "confidence_v2_factors": 0,
+    "entry_price_source": 143,
+    "entry_candle_open": 25,
+    "mfe_pct": 118,
+    "mae_pct": 118,
+    "signal_detected_at": 143,
+    "telegram_sent_at": 0
+  },
+  "limitations": [
+    "Database is a September 14 snapshot, not the live September 21 account.",
+    "pnl_pct is a price-return estimate; arithmetic sum is percentage points, not account return.",
+    "Risk-weighted proxy = risk_pct * pnl_pct / SL_distance_pct; no actual size/equity/fill/funding ledger exists.",
+    "No setup_type or strategy_version is persisted on signals; fingerprint cohorts describe logging format only.",
+    "Log timestamps appear UTC+3 versus signal UTC timestamps (match signal 143 to notifier); log timezone is not explicitly persisted.",
+    "Do not concatenate rotated logs: overlapping records require deduplication; bot.log is the single 250-cycle baseline.",
+    "Counterfactual throughput at 5/8% cannot be inferred because blocked candidates have neither downstream traces nor outcomes."
+  ],
+  "logs": [
+    {
+      "path": "logs/bot.log",
+      "git_ref": "9d0da04",
+      "sha256": "6d5c02f7314bef286234e4741359e1536e6e62bc71616b73ba30457c9e3b8874",
+      "lines": 29009,
+      "first_timestamp_local": "2026-09-08 13:45:35",
+      "last_timestamp_local": "2026-09-14 22:55:53",
+      "cycles": 250,
+      "zero_signal_cycles": 245,
+      "summary_totals": {
+        "entered": 8750,
+        "sent": 8,
+        "portfolio_risk": 8526,
+        "pattern_engine": 34,
+        "portfolio_risk_recheck": 34,
+        "risk_engine": 5,
+        "htf_bias": 14,
+        "symbol_filter": 1,
+        "cooldown": 128
+      },
+      "portfolio_gate_fraction_all_scan_entries_pct": 97.44,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 8526,
+        "pattern_engine": 34,
+        "htf_bias": 14,
+        "risk_engine": 5,
+        "portfolio_risk_recheck": 34,
+        "symbol_filter": 1,
+        "cooldown": 128
+      },
+      "portfolio_subreasons": {
+        "portfolio_budget": 7591,
+        "per_symbol_limit": 935
+      },
+      "portfolio_risk_logged_values": {
+        "3.0>=3.0": 4714,
+        "3.8>=3.0": 223,
+        "3.4>=3.0": 2654
+      },
+      "portfolio_subreason_examples": {
+        "portfolio_budget": {
+          "line": 17,
+          "timestamp_local": "2026-09-08 13:47:00",
+          "reason": "portfolio risk 3.0% >= 3.0%"
+        },
+        "per_symbol_limit": {
+          "line": 18,
+          "timestamp_local": "2026-09-08 13:47:00",
+          "reason": "max active signals for XRP/USDT (1/1)"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 8742
+      },
+      "daily": {
+        "2026-09-08": {
+          "entered": 1435,
+          "sent": 0,
+          "portfolio_risk": 1435,
+          "cycles": 41,
+          "zero_signal_cycles": 41
+        },
+        "2026-09-09": {
+          "entered": 1925,
+          "sent": 1,
+          "portfolio_risk": 1888,
+          "cycles": 55,
+          "zero_signal_cycles": 54,
+          "pattern_engine": 8,
+          "portfolio_risk_recheck": 6,
+          "risk_engine": 3,
+          "htf_bias": 2,
+          "symbol_filter": 1,
+          "cooldown": 16
+        },
+        "2026-09-10": {
+          "entered": 2065,
+          "sent": 2,
+          "portfolio_risk": 2014,
+          "cycles": 59,
+          "zero_signal_cycles": 58,
+          "portfolio_risk_recheck": 8,
+          "pattern_engine": 6,
+          "risk_engine": 2,
+          "htf_bias": 1,
+          "cooldown": 32
+        },
+        "2026-09-13": {
+          "entered": 105,
+          "sent": 3,
+          "portfolio_risk": 79,
+          "pattern_engine": 7,
+          "portfolio_risk_recheck": 7,
+          "htf_bias": 3,
+          "cycles": 3,
+          "zero_signal_cycles": 2,
+          "cooldown": 6
+        },
+        "2026-09-14": {
+          "entered": 3220,
+          "sent": 2,
+          "portfolio_risk": 3110,
+          "cooldown": 74,
+          "cycles": 92,
+          "zero_signal_cycles": 90,
+          "pattern_engine": 13,
+          "portfolio_risk_recheck": 13,
+          "htf_bias": 8
+        }
+      },
+      "summaries": [
+        {
+          "timestamp_local": "2026-09-08 13:47:00",
+          "line": 53,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 14:02:01",
+          "line": 166,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 14:17:01",
+          "line": 279,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 14:32:01",
+          "line": 390,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 14:47:00",
+          "line": 502,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 15:02:01",
+          "line": 615,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 15:17:00",
+          "line": 727,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 15:32:01",
+          "line": 838,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 15:47:00",
+          "line": 951,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 16:02:00",
+          "line": 1085,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 16:17:00",
+          "line": 1197,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 16:32:00",
+          "line": 1310,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 16:47:00",
+          "line": 1422,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 17:02:00",
+          "line": 1533,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 17:17:00",
+          "line": 1646,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 17:32:00",
+          "line": 1758,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 17:47:00",
+          "line": 1870,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 18:02:00",
+          "line": 2054,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 18:17:00",
+          "line": 2164,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 18:32:00",
+          "line": 2277,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 18:47:00",
+          "line": 2387,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 19:02:00",
+          "line": 2500,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 19:17:00",
+          "line": 2613,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 19:32:00",
+          "line": 2726,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 19:47:00",
+          "line": 2838,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 20:02:00",
+          "line": 2950,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 20:17:00",
+          "line": 3062,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 20:32:00",
+          "line": 3174,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 20:47:00",
+          "line": 3285,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 21:02:00",
+          "line": 3398,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 21:17:00",
+          "line": 3509,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 21:32:00",
+          "line": 3621,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 21:47:00",
+          "line": 3732,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 22:02:00",
+          "line": 3844,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 22:17:01",
+          "line": 3956,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 22:32:01",
+          "line": 4069,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 22:47:00",
+          "line": 4181,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 23:02:00",
+          "line": 4294,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 23:17:01",
+          "line": 4407,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 23:32:00",
+          "line": 4518,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-08 23:47:00",
+          "line": 4631,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 00:02:01",
+          "line": 4814,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 00:17:00",
+          "line": 4927,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 00:32:00",
+          "line": 5039,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 00:47:01",
+          "line": 5151,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 01:02:00",
+          "line": 5262,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 01:17:01",
+          "line": 5375,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 01:32:00",
+          "line": 5488,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 01:47:00",
+          "line": 5600,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 02:02:01",
+          "line": 5711,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 02:17:01",
+          "line": 5823,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 02:32:00",
+          "line": 5934,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 02:47:00",
+          "line": 6046,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 03:02:00",
+          "line": 6159,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 03:17:00",
+          "line": 6272,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 03:32:00",
+          "line": 6384,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 03:47:00",
+          "line": 6496,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 04:02:00",
+          "line": 6606,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 04:17:00",
+          "line": 6719,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 14:48:30",
+          "line": 6913,
+          "entered": 35,
+          "sent": 1,
+          "portfolio_risk": 14,
+          "pattern_engine": 8,
+          "portfolio_risk_recheck": 6,
+          "risk_engine": 3,
+          "htf_bias": 2,
+          "symbol_filter": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 15:02:00",
+          "line": 7025,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 15:17:01",
+          "line": 7135,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 15:32:00",
+          "line": 7248,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 15:47:00",
+          "line": 7357,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 16:02:00",
+          "line": 7470,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 16:17:00",
+          "line": 7581,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 16:32:00",
+          "line": 7693,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 16:47:00",
+          "line": 7805,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 17:02:00",
+          "line": 7917,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 17:17:00",
+          "line": 8029,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 17:32:00",
+          "line": 8142,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 17:47:00",
+          "line": 8255,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 18:02:00",
+          "line": 8439,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 18:17:00",
+          "line": 8549,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 18:32:00",
+          "line": 8662,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 18:47:00",
+          "line": 8773,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-09 19:02:00",
+          "line": 8885,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 19:17:00",
+          "line": 8996,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 19:32:00",
+          "line": 9107,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 19:47:00",
+          "line": 9220,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 20:02:00",
+          "line": 9332,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 20:17:00",
+          "line": 9445,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 20:32:00",
+          "line": 9557,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 20:47:00",
+          "line": 9670,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 21:02:00",
+          "line": 9782,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 21:17:00",
+          "line": 9894,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 21:32:00",
+          "line": 10007,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 21:47:00",
+          "line": 10118,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 22:02:00",
+          "line": 10231,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 22:17:00",
+          "line": 10342,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 22:32:01",
+          "line": 10450,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 22:47:00",
+          "line": 10563,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 23:02:00",
+          "line": 10676,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 23:17:00",
+          "line": 10789,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 23:32:01",
+          "line": 10902,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-09 23:47:00",
+          "line": 11012,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 00:02:00",
+          "line": 11196,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 00:17:00",
+          "line": 11310,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 00:32:00",
+          "line": 11421,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 00:47:00",
+          "line": 11532,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 01:02:00",
+          "line": 11643,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 01:18:14",
+          "line": 11810,
+          "entered": 35,
+          "sent": 2,
+          "portfolio_risk": 16,
+          "portfolio_risk_recheck": 8,
+          "pattern_engine": 6,
+          "risk_engine": 2,
+          "htf_bias": 1
+        },
+        {
+          "timestamp_local": "2026-09-10 01:32:00",
+          "line": 11922,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 01:47:00",
+          "line": 12035,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 02:02:00",
+          "line": 12147,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 02:17:00",
+          "line": 12260,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 02:32:00",
+          "line": 12372,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 02:47:00",
+          "line": 12484,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 03:02:00",
+          "line": 12597,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 03:17:00",
+          "line": 12709,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 03:32:00",
+          "line": 12820,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 03:47:00",
+          "line": 12932,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 04:02:00",
+          "line": 13044,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 04:17:00",
+          "line": 13156,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 04:32:00",
+          "line": 13268,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 04:47:00",
+          "line": 13380,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 05:02:00",
+          "line": 13493,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 05:17:00",
+          "line": 13605,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 33,
+          "cooldown": 2
+        },
+        {
+          "timestamp_local": "2026-09-10 05:32:00",
+          "line": 13716,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 05:47:00",
+          "line": 13828,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 06:02:00",
+          "line": 13969,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 06:17:00",
+          "line": 14157,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 06:32:00",
+          "line": 14268,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 06:47:00",
+          "line": 14380,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 07:02:00",
+          "line": 14490,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 07:17:00",
+          "line": 14601,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 07:32:00",
+          "line": 14712,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 07:47:00",
+          "line": 14824,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 08:02:00",
+          "line": 14937,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 08:17:00",
+          "line": 15048,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 08:32:00",
+          "line": 15160,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 08:47:00",
+          "line": 15272,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 09:02:00",
+          "line": 15384,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 09:17:00",
+          "line": 15497,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 09:32:00",
+          "line": 15606,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 09:47:00",
+          "line": 15717,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 10:02:00",
+          "line": 15829,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 10:17:00",
+          "line": 15942,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 10:47:00",
+          "line": 16125,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 11:02:01",
+          "line": 16238,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 11:17:01",
+          "line": 16343,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 11:32:01",
+          "line": 16456,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 11:47:00",
+          "line": 16568,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 12:02:00",
+          "line": 16752,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 12:17:01",
+          "line": 16859,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 12:32:01",
+          "line": 16972,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 12:47:01",
+          "line": 17085,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 13:02:01",
+          "line": 17198,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 13:17:00",
+          "line": 17309,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 13:32:00",
+          "line": 17418,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 13:47:01",
+          "line": 17530,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 14:02:00",
+          "line": 17643,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 14:17:00",
+          "line": 17756,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 14:32:00",
+          "line": 17869,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-10 14:47:01",
+          "line": 17981,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-13 23:18:15",
+          "line": 18161,
+          "entered": 35,
+          "sent": 3,
+          "portfolio_risk": 15,
+          "pattern_engine": 7,
+          "portfolio_risk_recheck": 7,
+          "htf_bias": 3
+        },
+        {
+          "timestamp_local": "2026-09-13 23:32:00",
+          "line": 18273,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-13 23:47:00",
+          "line": 18386,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 00:02:00",
+          "line": 18569,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 00:17:00",
+          "line": 18681,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 00:32:00",
+          "line": 18794,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 00:47:00",
+          "line": 18906,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 01:02:00",
+          "line": 19019,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 32,
+          "cooldown": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 01:18:10",
+          "line": 19172,
+          "entered": 35,
+          "sent": 1,
+          "portfolio_risk": 13,
+          "pattern_engine": 8,
+          "portfolio_risk_recheck": 7,
+          "cooldown": 3,
+          "htf_bias": 3
+        },
+        {
+          "timestamp_local": "2026-09-14 01:32:01",
+          "line": 19285,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 01:47:00",
+          "line": 19396,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 02:02:00",
+          "line": 19509,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 02:17:01",
+          "line": 19621,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 02:32:00",
+          "line": 19732,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 02:47:00",
+          "line": 19845,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 03:02:00",
+          "line": 19958,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 03:17:00",
+          "line": 20068,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 31,
+          "cooldown": 4
+        },
+        {
+          "timestamp_local": "2026-09-14 03:32:00",
+          "line": 20180,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 03:47:00",
+          "line": 20292,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 04:02:00",
+          "line": 20405,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 04:17:00",
+          "line": 20516,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 04:32:00",
+          "line": 20629,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 04:47:00",
+          "line": 20740,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 05:02:00",
+          "line": 20853,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 05:17:00",
+          "line": 20966,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 05:32:00",
+          "line": 21079,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 05:47:00",
+          "line": 21191,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 06:02:00",
+          "line": 21375,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 06:17:00",
+          "line": 21484,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 06:32:00",
+          "line": 21597,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 06:47:00",
+          "line": 21708,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 07:02:00",
+          "line": 21820,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 07:17:00",
+          "line": 21932,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 07:32:00",
+          "line": 22044,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 07:47:00",
+          "line": 22155,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 08:02:00",
+          "line": 22267,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 08:17:00",
+          "line": 22379,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 08:32:00",
+          "line": 22490,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 08:47:00",
+          "line": 22600,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 09:02:00",
+          "line": 22713,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 09:17:00",
+          "line": 22824,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 09:32:00",
+          "line": 22937,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 09:47:00",
+          "line": 23049,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 10:02:00",
+          "line": 23162,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 10:17:00",
+          "line": 23203,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 10:32:01",
+          "line": 23316,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 10:47:00",
+          "line": 23429,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 11:02:00",
+          "line": 23542,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 11:17:00",
+          "line": 23652,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 11:32:00",
+          "line": 23765,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 11:47:00",
+          "line": 23877,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 12:02:00",
+          "line": 24061,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 12:17:00",
+          "line": 24168,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 12:32:00",
+          "line": 24280,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 12:47:01",
+          "line": 24393,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 13:03:04",
+          "line": 24542,
+          "entered": 35,
+          "sent": 1,
+          "portfolio_risk": 18,
+          "portfolio_risk_recheck": 6,
+          "pattern_engine": 5,
+          "htf_bias": 5
+        },
+        {
+          "timestamp_local": "2026-09-14 13:17:01",
+          "line": 24655,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 13:32:01",
+          "line": 24765,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 13:47:01",
+          "line": 24876,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 14:02:01",
+          "line": 24989,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 14:17:00",
+          "line": 25100,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 14:32:00",
+          "line": 25213,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 14:47:00",
+          "line": 25324,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 15:02:00",
+          "line": 25437,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 15:17:00",
+          "line": 25571,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 15:32:00",
+          "line": 25683,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 15:47:00",
+          "line": 25796,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 16:02:00",
+          "line": 25908,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 16:17:00",
+          "line": 26021,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 16:32:00",
+          "line": 26134,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 16:47:00",
+          "line": 26246,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 17:02:00",
+          "line": 26359,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 34,
+          "cooldown": 1
+        },
+        {
+          "timestamp_local": "2026-09-14 17:17:00",
+          "line": 26472,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 17:32:00",
+          "line": 26583,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 17:47:00",
+          "line": 26695,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 18:02:00",
+          "line": 26878,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 18:17:01",
+          "line": 26987,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 18:32:01",
+          "line": 27100,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 18:47:00",
+          "line": 27213,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 19:02:00",
+          "line": 27326,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 19:17:00",
+          "line": 27439,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 19:32:00",
+          "line": 27549,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 19:47:00",
+          "line": 27662,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 20:02:00",
+          "line": 27774,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 20:17:00",
+          "line": 27886,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 20:32:00",
+          "line": 27999,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 20:47:00",
+          "line": 28112,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 21:02:00",
+          "line": 28222,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 21:17:00",
+          "line": 28334,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 21:32:00",
+          "line": 28447,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 21:47:00",
+          "line": 28558,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 22:02:00",
+          "line": 28671,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 22:17:01",
+          "line": 28783,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 22:32:01",
+          "line": 28894,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        },
+        {
+          "timestamp_local": "2026-09-14 22:47:01",
+          "line": 29006,
+          "entered": 35,
+          "sent": 0,
+          "portfolio_risk": 35
+        }
+      ]
+    },
+    {
+      "path": "logs/logs.2026-09-06_21-02-00_202951.txt",
+      "git_ref": "9d0da04",
+      "sha256": "ffe19bcfd2c276a21038c2ff626092982698b5293486c019eede23d06eeda186",
+      "lines": 3360,
+      "first_timestamp_local": "2026-09-06 21:02:00",
+      "last_timestamp_local": "2026-09-07 21:02:00",
+      "cycles": 0,
+      "zero_signal_cycles": 0,
+      "summary_totals": {},
+      "portfolio_gate_fraction_all_scan_entries_pct": null,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 3313,
+        "pattern_engine": 20,
+        "htf_bias": 2,
+        "symbol_filter": 1,
+        "risk_engine": 1,
+        "portfolio_risk_recheck": 7,
+        "cooldown": 16
+      },
+      "portfolio_subreasons": {
+        "portfolio_budget": 2945,
+        "per_symbol_limit": 368
+      },
+      "portfolio_risk_logged_values": {
+        "3.4>=3.0": 2945
+      },
+      "portfolio_subreason_examples": {
+        "portfolio_budget": {
+          "line": 1,
+          "timestamp_local": "2026-09-06 21:02:00",
+          "reason": "portfolio risk 3.4% >= 3.0%"
+        },
+        "per_symbol_limit": {
+          "line": 4,
+          "timestamp_local": "2026-09-06 21:02:00",
+          "reason": "max active signals for XRP/USDT (1/1)"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 3360
+      },
+      "daily": {},
+      "summaries": []
+    },
+    {
+      "path": "logs/logs.2026-09-07_21-02-00_184722.txt",
+      "git_ref": "9d0da04",
+      "sha256": "2e01028bc5d5bb896ee40591930be644f6cfbbeaceb9204421e0ba141e336d7f",
+      "lines": 3362,
+      "first_timestamp_local": "2026-09-07 21:02:00",
+      "last_timestamp_local": "2026-09-08 21:02:00",
+      "cycles": 0,
+      "zero_signal_cycles": 0,
+      "summary_totals": {},
+      "portfolio_gate_fraction_all_scan_entries_pct": null,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 3319,
+        "pattern_engine": 15,
+        "htf_bias": 2,
+        "symbol_filter": 1,
+        "risk_engine": 3,
+        "portfolio_risk_recheck": 6,
+        "cooldown": 16
+      },
+      "portfolio_subreasons": {
+        "portfolio_budget": 2953,
+        "per_symbol_limit": 366
+      },
+      "portfolio_risk_logged_values": {
+        "3.4>=3.0": 523,
+        "3.0>=3.0": 2430
+      },
+      "portfolio_subreason_examples": {
+        "portfolio_budget": {
+          "line": 1,
+          "timestamp_local": "2026-09-07 21:02:00",
+          "reason": "portfolio risk 3.4% >= 3.0%"
+        },
+        "per_symbol_limit": {
+          "line": 8,
+          "timestamp_local": "2026-09-07 21:02:00",
+          "reason": "max active signals for BCH/USDT (1/1)"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 3362
+      },
+      "daily": {},
+      "summaries": []
+    },
+    {
+      "path": "logs/logs.2026-09-08_21-02-00_193569.txt",
+      "git_ref": "9d0da04",
+      "sha256": "d957e47191ca5f7497d799a31096bfafaf487af876a3967b0912ae12b4b4bbc6",
+      "lines": 1922,
+      "first_timestamp_local": "2026-09-08 21:02:00",
+      "last_timestamp_local": "2026-09-09 21:02:00",
+      "cycles": 0,
+      "zero_signal_cycles": 0,
+      "summary_totals": {},
+      "portfolio_gate_fraction_all_scan_entries_pct": null,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 1886,
+        "pattern_engine": 8,
+        "htf_bias": 2,
+        "risk_engine": 3,
+        "portfolio_risk_recheck": 6,
+        "symbol_filter": 1,
+        "cooldown": 16
+      },
+      "portfolio_subreasons": {
+        "portfolio_budget": 1681,
+        "per_symbol_limit": 205
+      },
+      "portfolio_risk_logged_values": {
+        "3.0>=3.0": 1681
+      },
+      "portfolio_subreason_examples": {
+        "portfolio_budget": {
+          "line": 1,
+          "timestamp_local": "2026-09-08 21:02:00",
+          "reason": "portfolio risk 3.0% >= 3.0%"
+        },
+        "per_symbol_limit": {
+          "line": 2,
+          "timestamp_local": "2026-09-08 21:02:00",
+          "reason": "max active signals for XRP/USDT (1/1)"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 1922
+      },
+      "daily": {},
+      "summaries": []
+    },
+    {
+      "path": "logs/logs.2026-09-09_21-02-00_223274.txt",
+      "git_ref": "9d0da04",
+      "sha256": "edac20d8ee7ff42460409e647aef0c723e4ff8d5216b9f866aae1e92a1fd1f1b",
+      "lines": 2477,
+      "first_timestamp_local": "2026-09-09 21:02:00",
+      "last_timestamp_local": "2026-09-10 14:47:01",
+      "cycles": 0,
+      "zero_signal_cycles": 0,
+      "summary_totals": {},
+      "portfolio_gate_fraction_all_scan_entries_pct": null,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 2428,
+        "pattern_engine": 6,
+        "htf_bias": 1,
+        "risk_engine": 2,
+        "portfolio_risk_recheck": 8,
+        "cooldown": 32
+      },
+      "portfolio_subreasons": {
+        "portfolio_budget": 2126,
+        "per_symbol_limit": 302
+      },
+      "portfolio_risk_logged_values": {
+        "3.0>=3.0": 2126
+      },
+      "portfolio_subreason_examples": {
+        "portfolio_budget": {
+          "line": 1,
+          "timestamp_local": "2026-09-09 21:02:00",
+          "reason": "portfolio risk 3.0% >= 3.0%"
+        },
+        "per_symbol_limit": {
+          "line": 7,
+          "timestamp_local": "2026-09-09 21:02:00",
+          "reason": "max active signals for BCH/USDT (1/1)"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 2477
+      },
+      "daily": {},
+      "summaries": []
+    },
+    {
+      "path": "logs/logs.txt",
+      "git_ref": "9d0da04",
+      "sha256": "ddc50638d45958c31237a46fe9730e34a8b83745e1c1a0ae4fd519bf9ef4ea3d",
+      "lines": 3320,
+      "first_timestamp_local": "2026-09-13 23:17:00",
+      "last_timestamp_local": "2026-09-14 22:47:01",
+      "cycles": 0,
+      "zero_signal_cycles": 0,
+      "summary_totals": {},
+      "portfolio_gate_fraction_all_scan_entries_pct": null,
+      "blocked_gate_log_counts": {
+        "portfolio_risk": 3189,
+        "pattern_engine": 20,
+        "htf_bias": 11,
+        "portfolio_risk_recheck": 20,
+        "cooldown": 80
+      },
+      "portfolio_subreasons": {
+        "per_symbol_limit": 312,
+        "portfolio_budget": 2877
+      },
+      "portfolio_risk_logged_values": {
+        "3.8>=3.0": 223,
+        "3.4>=3.0": 2654
+      },
+      "portfolio_subreason_examples": {
+        "per_symbol_limit": {
+          "line": 1,
+          "timestamp_local": "2026-09-13 23:17:00",
+          "reason": "max active signals for NEAR/USDT (1/1)"
+        },
+        "portfolio_budget": {
+          "line": 11,
+          "timestamp_local": "2026-09-13 23:17:47",
+          "reason": "portfolio risk 3.8% >= 3.0%"
+        }
+      },
+      "blocked_attempts_by_timeframe": {
+        "4h": 3320
+      },
+      "daily": {},
+      "summaries": []
+    }
+  ]
+}

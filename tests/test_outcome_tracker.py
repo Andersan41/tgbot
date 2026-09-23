@@ -188,6 +188,9 @@ class TestExpired:
         with patch(
             "scheduler.outcome_tracker.exchange_client.fetch_ticker_price",
             new_callable=AsyncMock, return_value=51.0,
+        ), patch(
+            "scheduler.outcome_tracker.load_outcome_window",
+            new_callable=AsyncMock, return_value=[],
         ):
             await check_open_outcomes()
 

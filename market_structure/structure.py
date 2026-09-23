@@ -119,6 +119,19 @@ def calc_mss_score(
     return round(sweep_score + disp_score + reclaim_score + vol_score + htf_score, 1)
 
 
+def select_causal_sweep(sweeps, event, max_causal_bars: int = 5):
+    """Same type means bullish low sweep -> bullish structure shift (and mirror)."""
+    if event is None or event.candle_index < 0:
+        return None
+    candidates = [
+        s for s in sweeps or []
+        if s.is_valid and s.type == event.type and s.candle_index >= 0
+        and 0 < event.candle_index - s.candle_index <= max_causal_bars
+        and s.candle_index + s.reclaim_candles <= event.candle_index
+    ]
+    return max(candidates, key=lambda s: s.candle_index, default=None)
+
+
 def classify_choch(
     choch: CHoCH,
     sweeps: list,
@@ -130,93 +143,42 @@ def classify_choch(
     df: Optional[pd.DataFrame] = None,
     atr_value: float = 0.0,
 ) -> CHoCH:
-    """Classify CHoCH strength as weak/normal/mss.
+    """Classify using one causally matched sweep and that sweep's reclaim."""
+    matching_sweep = select_causal_sweep(sweeps, choch, max_causal_bars)
+    choch.strength = "weak"
+    choch.mss_score = 0.0
+    choch.has_sweep_reference = matching_sweep is not None
+    choch.causality_score = 0.0
+    choch.displacement_score = 0.0
+    choch.reclaim_bars = 0
+    if matching_sweep is None:
+        return choch
 
-    MSS criteria (all must pass):
-    1. Sweep within causal window (max_causal_bars, default 5)
-    2. Displacement >= 1 ATR (measured as max body between sweep and CHoCH)
-    3. Reclaim <= 2 bars
-    """
-    choch.displacement_score = displacement_atr
+    bars_since = choch.candle_index - matching_sweep.candle_index
+    choch.causality_score = calc_causality(bars_since)
+    reclaim_bars = matching_sweep.reclaim_candles
     choch.reclaim_bars = reclaim_bars
-
-    # Find matching sweep (OPPOSITE direction, within causal window)
-    matching_sweep = None
-    bars_since = 999
-
-    for s in sweeps:
-        if not s.is_valid:
-            continue
-        # Sweep direction must OPPOSE CHoCH direction
-        # Bullish CHoCH = structure shifts up AFTER bearish sweep (sell-side grab)
-        # Bearish CHoCH = structure shifts down AFTER bullish sweep (buy-side grab)
-        sweep_dir = "buy" if s.type == "bullish" else "sell"
-        choch_dir = "buy" if choch.type == "bullish" else "sell"
-        if sweep_dir == choch_dir:
-            continue
-
-        # Check causal window
-        if choch.candle_index >= 0 and s.candle_index >= 0:
-            delta = choch.candle_index - s.candle_index
-        else:
-            delta = 0  # unknown index, assume close
-        if 0 <= delta <= max_causal_bars:
-            if matching_sweep is None or delta < bars_since:
-                matching_sweep = s
-                bars_since = delta
-
-    if matching_sweep is not None:
-        choch.has_sweep_reference = True
-        choch.causality_score = calc_causality(bars_since)
-
-        # Measure displacement as max body/ATR between sweep and CHoCH
-        # (not just the CHoCH candle — ICT: displacement leg causes the structure break)
-        if df is not None and atr_value > 0 and matching_sweep.candle_index >= 0 and choch.candle_index >= 0:
-            start = max(0, matching_sweep.candle_index)
-            end = min(choch.candle_index + 1, len(df))
-            max_disp = 0.0
-            for idx in range(start, end):
-                candle = df.iloc[idx]
-                body = abs(float(candle["close"]) - float(candle["open"]))
-                disp = body / atr_value
-                if disp > max_disp:
-                    max_disp = disp
-            if max_disp > displacement_atr:
-                displacement_atr = max_disp
-                choch.displacement_score = displacement_atr
-    else:
-        choch.has_sweep_reference = False
-        choch.causality_score = 0.0
-
-    # Classify
-    is_mss = (
-        choch.has_sweep_reference
-        and displacement_atr >= 1.0
-        and reclaim_bars <= 2
+    if df is not None and atr_value > 0:
+        start = matching_sweep.candle_index
+        end = choch.candle_index + 1
+        if end > len(df):
+            return choch
+        leg = df.iloc[start:end]
+        displacement_atr = float((leg["close"] - leg["open"]).abs().max()) / atr_value
+    choch.displacement_score = displacement_atr
+    score = calc_mss_score(
+        sweep_strength=matching_sweep.strength,
+        displacement_atr=displacement_atr,
+        reclaim_bars=reclaim_bars,
+        volume_ratio=volume_ratio,
+        htf_aligned=htf_aligned,
     )
-
-    if is_mss:
+    if displacement_atr >= 1.0 and reclaim_bars <= 2:
         choch.strength = "mss"
-        choch.mss_score = calc_mss_score(
-            sweep_strength=matching_sweep.strength if matching_sweep else 0.0,
-            displacement_atr=displacement_atr,
-            reclaim_bars=reclaim_bars,
-            volume_ratio=volume_ratio,
-            htf_aligned=htf_aligned,
-        )
-    elif choch.has_sweep_reference and displacement_atr >= 0.5:
+        choch.mss_score = score
+    elif displacement_atr >= 0.5:
         choch.strength = "normal"
-        choch.mss_score = calc_mss_score(
-            sweep_strength=matching_sweep.strength if matching_sweep else 0.0,
-            displacement_atr=displacement_atr,
-            reclaim_bars=reclaim_bars,
-            volume_ratio=volume_ratio,
-            htf_aligned=htf_aligned,
-        ) * 0.6  # partial credit
-    else:
-        choch.strength = "weak"
-        choch.mss_score = 0.0
-
+        choch.mss_score = score * 0.6
     return choch
 
 

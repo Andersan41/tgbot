@@ -1,0 +1,230 @@
+{
+  "findings": [
+    "B-001",
+    "B-002",
+    "B-003",
+    "B-004",
+    "B-005",
+    "B-006",
+    "B-007",
+    "B-008",
+    "B-009",
+    "B-010",
+    "B-011",
+    "B-012"
+  ],
+  "compiled_fix_blocks": 42,
+  "blocks": [
+    {
+      "block": 2,
+      "line": 69,
+      "context": "standalone"
+    },
+    {
+      "block": 6,
+      "line": 229,
+      "context": "standalone"
+    },
+    {
+      "block": 10,
+      "line": 496,
+      "context": "standalone"
+    },
+    {
+      "block": 11,
+      "line": 578,
+      "context": "async insertion"
+    },
+    {
+      "block": 12,
+      "line": 621,
+      "context": "async insertion"
+    },
+    {
+      "block": 14,
+      "line": 689,
+      "context": "standalone"
+    },
+    {
+      "block": 16,
+      "line": 818,
+      "context": "standalone"
+    },
+    {
+      "block": 18,
+      "line": 919,
+      "context": "standalone"
+    },
+    {
+      "block": 20,
+      "line": 1172,
+      "context": "standalone"
+    },
+    {
+      "block": 22,
+      "line": 1308,
+      "context": "standalone"
+    },
+    {
+      "block": 24,
+      "line": 1472,
+      "context": "standalone"
+    },
+    {
+      "block": 25,
+      "line": 1538,
+      "context": "standalone"
+    },
+    {
+      "block": 26,
+      "line": 1543,
+      "context": "async loop insertion"
+    },
+    {
+      "block": 27,
+      "line": 1555,
+      "context": "standalone"
+    },
+    {
+      "block": 28,
+      "line": 1558,
+      "context": "standalone"
+    },
+    {
+      "block": 30,
+      "line": 1588,
+      "context": "standalone"
+    },
+    {
+      "block": 31,
+      "line": 1615,
+      "context": "standalone"
+    },
+    {
+      "block": 34,
+      "line": 1661,
+      "context": "standalone"
+    },
+    {
+      "block": 35,
+      "line": 1703,
+      "context": "standalone"
+    },
+    {
+      "block": 36,
+      "line": 1717,
+      "context": "standalone"
+    },
+    {
+      "block": 37,
+      "line": 1746,
+      "context": "standalone"
+    },
+    {
+      "block": 38,
+      "line": 1752,
+      "context": "standalone"
+    },
+    {
+      "block": 39,
+      "line": 1760,
+      "context": "standalone"
+    },
+    {
+      "block": 40,
+      "line": 1795,
+      "context": "standalone"
+    },
+    {
+      "block": 41,
+      "line": 1802,
+      "context": "standalone"
+    },
+    {
+      "block": 42,
+      "line": 1813,
+      "context": "standalone"
+    },
+    {
+      "block": 43,
+      "line": 1837,
+      "context": "standalone"
+    },
+    {
+      "block": 44,
+      "line": 1859,
+      "context": "standalone"
+    },
+    {
+      "block": 45,
+      "line": 1866,
+      "context": "standalone"
+    },
+    {
+      "block": 46,
+      "line": 1873,
+      "context": "standalone"
+    },
+    {
+      "block": 47,
+      "line": 1880,
+      "context": "standalone"
+    },
+    {
+      "block": 48,
+      "line": 1887,
+      "context": "standalone"
+    },
+    {
+      "block": 52,
+      "line": 1962,
+      "context": "standalone"
+    },
+    {
+      "block": 53,
+      "line": 2046,
+      "context": "standalone"
+    },
+    {
+      "block": 54,
+      "line": 2057,
+      "context": "standalone"
+    },
+    {
+      "block": 55,
+      "line": 2065,
+      "context": "standalone"
+    },
+    {
+      "block": 56,
+      "line": 2073,
+      "context": "standalone"
+    },
+    {
+      "block": 57,
+      "line": 2080,
+      "context": "standalone"
+    },
+    {
+      "block": 58,
+      "line": 2088,
+      "context": "standalone"
+    },
+    {
+      "block": 59,
+      "line": 2101,
+      "context": "standalone"
+    },
+    {
+      "block": 60,
+      "line": 2130,
+      "context": "standalone"
+    },
+    {
+      "block": 62,
+      "line": 2169,
+      "context": "standalone"
+    }
+  ],
+  "failures": []
+}

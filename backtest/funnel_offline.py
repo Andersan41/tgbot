@@ -161,11 +161,11 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
 
         # ── Phase 1: liquidity + structure (mirrors scanner Phase 1) ──
         try:
-            sweeps = detect_sweeps(_df_clean, lookback=50)
+            sweeps = detect_sweeps(_df_clean, lookback=100)
         except Exception:
             sweeps = []
         try:
-            order_blocks = detect_order_blocks(_df_clean, lookback=100)
+            order_blocks = detect_order_blocks(_df_clean, lookback=150)
         except Exception:
             order_blocks = []
         try:
@@ -173,7 +173,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
         except Exception:
             candle_quality = None
         try:
-            fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
+            fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 150))
         except Exception:
             fvgs = []
 
@@ -187,7 +187,7 @@ def run_symbol(symbol: str, candles: int, limit: int | None) -> dict:
 
         try:
             structure = analyze_structure(
-                _df_clean, lookback=50, sweeps=sweeps,
+                _df_clean, lookback=100, sweeps=sweeps,
                 displacement_atr=_disp_atr, reclaim_bars=_reclaim,
                 atr_value=ind.atr if ind.atr else 0.0,
             )

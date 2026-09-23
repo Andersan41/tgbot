@@ -329,7 +329,7 @@ class TestFeatureSnapshot:
     """Tests for feature snapshot fields in DecisionTrace."""
 
     def test_feature_keys_defined(self):
-        assert len(FEATURE_KEYS) == 31  # 25 original + 6 Decision Intelligence
+        assert len(FEATURE_KEYS) == 40  # 25 original + 6 Decision Intelligence + 9 B-011 V2 pipeline
         assert "adx" in FEATURE_KEYS
         assert "rsi" in FEATURE_KEYS
         assert "regime" in FEATURE_KEYS

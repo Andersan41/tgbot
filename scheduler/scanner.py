@@ -203,6 +203,8 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         _funnel.log_gate(symbol, timeframe, "start", "ENTER")
         trace = DecisionTraceBuilder(symbol, timeframe)
         _config_snapshot = build_config_snapshot()  # one serialization per scan
+        import os
+        trace.set_features({"git_sha": os.getenv("BOT_GIT_SHA", "unknown")})
 
         # ═══ Phase 0: Hard Gates (capital protection) ═══
 
@@ -380,6 +382,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             "components": setup.components_count,
             "overall_quality": setup.overall_quality,
             "setup_confidence": setup.setup_confidence,
+            "setup_type": setup.setup_type,
         })
 
         # ═══ Phase 1.35: Direction / Symbol filter ═══
@@ -534,7 +537,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         tp = trade_plan.tp
         sl_source = trade_plan.sl_source
 
-        if sl is None or tp is None:
+        if not trade_plan.is_valid or sl is None or tp is None:
             _funnel.log_gate(symbol, timeframe, "sl_tp", "BLOCKED", "calculation failed")
             trace.blocked("sl_tp", "SL/TP calculation failed")
             await trace.save(db)
@@ -577,7 +580,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 tp = trade_plan.tp
                 entry_price = float(trade_plan.entry_price)
 
-                if sl is None or tp is None:
+                if not trade_plan.is_valid or sl is None or tp is None:
                     _funnel.log_gate(symbol, timeframe, "sl_tp_rebuild", "BLOCKED", "recalculation failed")
                     trace.blocked("sl_tp_rebuild", "SL/TP recalculation failed after live alignment")
                     trace.set_version(VERSION, _config_snapshot)
@@ -1043,7 +1046,8 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         _atr = ind.atr
         _last_candle = df.iloc[-1] if df is not None and len(df) > 0 else None
 
-        saved_signal = await db.save_signal(
+        saved_signal, _admission_reason = await db.save_signal_with_risk(
+            risk_pct=risk_decision.risk_pct,
             symbol=result.symbol,
             timeframe=result.timeframe,
             signal_type=result.signal.value,
@@ -1068,6 +1072,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             entry_tick_size=_tick_size,
             signal_detected_at=datetime.now(timezone.utc),
         )
+
+        if saved_signal is None:
+            _funnel.log_gate(symbol, timeframe, "portfolio_admission", "BLOCKED", _admission_reason)
+            trace.blocked("portfolio_admission", _admission_reason)
+            trace.set_version(VERSION, _config_snapshot)
+            await trace.save(db)
+            return None
+        trace.passed("portfolio_admission")
 
         trace.set_signal(
             signal_type=result.signal.value,
@@ -1111,18 +1123,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             "context_score": context_score_val,
             "mtf_aligned": mtf_aligned,
             "p_tp": p_tp,
-            "expected_rr": 0.0,
+            "expected_rr": risk_decision.rr_ratio,
             "risk_pct": risk_decision.risk_pct,
         }
         trace.set_features(_trace_features)
         trace.set_version(VERSION, _config_snapshot)
         await trace.save(db, signal_id=saved_signal.id)
 
-        await db.create_outcome(saved_signal.id, risk_pct=risk_decision.risk_pct)
-
-        # ═══ Phase 8: Cooldown + Notify ═══
-
-        await _set_cooldown(symbol, timeframe)
+        # ═══ Phase 8: Notify ═══
 
         try:
             await notify_callback(result, context_verdict)

@@ -90,6 +90,8 @@ class RiskEngine:
         mss_quality: float = 0.0,
         atr: float = 0.0,
         sl_source: Optional[str] = None,
+        *,
+        direction: Optional[str] = None,
     ) -> RiskDecision:
         """Evaluate risk and size the position.
 
@@ -104,17 +106,45 @@ class RiskEngine:
             mss_quality: MSS score from Pattern Engine [0, 100]
             atr: raw ATR value
             sl_source: source of SL calculation (bos, ob, fractal, atr)
+            direction: 'buy' or 'sell' (inferred from SL if omitted)
 
         Returns:
             RiskDecision with should_trade, risk_pct, and details.
         """
-        # === DATA VALIDITY (only true hard gate) ===
+        import math
+
+        # Validate before arithmetic: comparisons against NaN do not reject it.
+        values = (entry_price, sl, tp, atr_pct, p_tp, confidence, mss_quality, atr)
+        if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in values):
+            return RiskDecision(False, rejection_reason="non-finite risk input")
+        if not 0 <= p_tp <= 1 or not 0 <= confidence <= 1:
+            return RiskDecision(False, rejection_reason="probability/confidence outside [0, 1]")
+        if direction is None:
+            direction = "buy" if sl < entry_price else "sell"
+        if direction not in ("buy", "sell"):
+            return RiskDecision(False, rejection_reason="invalid direction")
+        if atr_pct < 0 or atr < 0 or not 0 <= mss_quality <= 100:
+            return RiskDecision(False, rejection_reason="invalid sizing input")
+        if not math.isfinite(portfolio.total_risk_pct) or portfolio.total_risk_pct < 0:
+            return RiskDecision(False, rejection_reason="invalid portfolio risk")
+        if not math.isfinite(portfolio.max_portfolio_risk_pct) or portfolio.max_portfolio_risk_pct <= 0:
+            return RiskDecision(False, rejection_reason="invalid portfolio cap")
+        if portfolio.active_count >= portfolio.max_active_signals:
+            return RiskDecision(False, rejection_reason="max active signals")
+
+        # === DATA VALIDITY ===
 
         if entry_price <= 0 or sl <= 0 or tp <= 0:
             return RiskDecision(
                 should_trade=False,
                 rejection_reason="invalid price data",
             )
+
+        geometry_valid = (
+            sl < entry_price < tp if direction == "buy" else tp < entry_price < sl
+        )
+        if not geometry_valid:
+            return RiskDecision(False, rejection_reason=f"invalid {direction} SL/entry/TP geometry")
 
         risk_dist = abs(entry_price - sl)
         reward_dist = abs(tp - entry_price)
@@ -132,8 +162,8 @@ class RiskEngine:
 
         _structural_sources = {
             "sweep_extreme", "ob_boundary", "swing_point",
-            "structure_break", "structural",  # invalidation.py produces both
-            "bos_level", "ob", "fractal", "bos",  # signal_engine.py / trade_engine.py
+            "structure_break", "structural",
+            "bos_level", "ob", "fractal", "bos",
         }
         _is_structural = sl_source and sl_source in _structural_sources
 
@@ -164,7 +194,10 @@ class RiskEngine:
         q = 1 - p
         b = rr_ratio
         kelly = (p * b - q) / b if b > 0 else 0
-        kelly = max(0.0, min(kelly, 0.20))  # cap at 20% (half-Kelly)
+        if kelly <= 0 or confidence <= 0:
+            return RiskDecision(False, rr_ratio=round(rr_ratio, 2),
+                                rejection_reason="non-positive Kelly allocation")
+        kelly = min(kelly, 0.20)  # cap at 20% (half-Kelly)
 
         # Scale by model confidence
         kelly *= confidence
@@ -194,7 +227,12 @@ class RiskEngine:
             risk_pct *= 0.8  # penalty for wide SL
 
         # Clamp
-        risk_pct = max(self.min_risk_pct, min(risk_pct, self.max_risk_pct))
+        risk_pct = round(max(self.min_risk_pct, min(risk_pct, self.max_risk_pct)), 4)
+        if not math.isfinite(risk_pct) or risk_pct <= 0:
+            return RiskDecision(False, rejection_reason="invalid calculated risk")
+        if round(portfolio.total_risk_pct + risk_pct, 10) > portfolio.max_portfolio_risk_pct:
+            return RiskDecision(False, rr_ratio=round(rr_ratio, 2),
+                                rejection_reason="portfolio risk including new trade exceeds cap")
 
         logger.info(
             f"Risk decision: risk={risk_pct:.2f}% | "

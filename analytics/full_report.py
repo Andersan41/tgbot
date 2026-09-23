@@ -210,7 +210,7 @@ def plot_equity_curve(df: pd.DataFrame, output_path: Path):
     ax.fill_between(df_sorted["closed_at"], 0, cumulative_pnl,
                      where=cumulative_pnl < 0, alpha=0.15, color="red")
     ax.axhline(y=0, color="gray", linestyle="--", linewidth=0.8)
-    ax.set_title("Equity Curve (Cumulative PnL %)", fontsize=14, fontweight="bold")
+    ax.set_title("Price Return Sum (Cumulative PnL %)", fontsize=14, fontweight="bold")
     ax.set_ylabel("Cumulative PnL %")
     ax.set_xlabel("")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))

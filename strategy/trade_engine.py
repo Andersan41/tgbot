@@ -44,6 +44,7 @@ class TradeEngine:
         df: Optional[pd.DataFrame] = None,
         timeframe: str = "1h",
         entry_override: Optional[float] = None,
+        entry_mode: Literal["market", "limit"] = "market",
     ) -> TradePlan:
         """Build a complete trade plan.
 
@@ -57,8 +58,11 @@ class TradeEngine:
         atr = ind.atr if ind.atr and ind.atr > 0 else entry * cfg.atr_fallback_pct / 100
         signal = SignalType.BUY if direction == "buy" else SignalType.SELL
 
-        # ═══ FVG ENTRY: use median (50%) of active FVG as entry price ═══
-        if fvgs:
+        if entry_mode not in ("market", "limit"):
+            raise ValueError(f"Unsupported entry_mode: {entry_mode}")
+
+        # A limit price is a pending order, never an executed market fill.
+        if fvgs and entry_mode == "limit":
             fvg_proximity_pct = config.pattern_engine.fvg_proximity_pct
             for f in fvgs:
                 f_dir = "buy" if f.type == "bullish" else "sell" if f.type == "bearish" else f.type
@@ -205,6 +209,27 @@ class TradeEngine:
                     f"(candle_high={candle_high:.4f}, spread={spread_buffer:.6f}, "
                     f"tick={tick_buffer:.6f}, atr_buf={atr_buffer:.6f})"
                 )
+
+        # The configured maximum applies to the final SL, including buffers
+        # and wick safety. Never move SL inside invalidation to satisfy the cap.
+        max_sl_distance = atr * cfg.max_sl_atr
+        final_sl_distance = abs(entry - sl)
+        if not (0 < max_sl_distance < float("inf")) or final_sl_distance > max_sl_distance:
+            return TradePlan(
+                direction=direction,
+                symbol=ind.symbol,
+                timeframe=timeframe,
+                entry_price=entry,
+                invalidation=invalidation,
+                sl=sl,
+                sl_source=invalidation.type,
+                sl_distance_pct=round(final_sl_distance / entry * 100, 2),
+                is_valid=False,
+                rejection_reason=(
+                    f"final SL distance {final_sl_distance:.8g} exceeds "
+                    f"MAX_SL_ATR={cfg.max_sl_atr} ({max_sl_distance:.8g})"
+                ),
+            )
 
         # ═══ Step 3: Find Targets (TP) ═══
 

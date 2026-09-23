@@ -269,6 +269,22 @@ def get_preset_config(preset_name: str) -> BacktestConfig:
 # Helpers
 # ---------------------------------------------------------------------------
 
+def timeframe_duration(timeframe: str) -> pd.Timedelta:
+    unit = timeframe[-1].lower()
+    seconds = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+    if unit not in seconds or int(timeframe[:-1]) <= 0:
+        raise ValueError(f"Unsupported timeframe: {timeframe}")
+    return pd.Timedelta(seconds=int(timeframe[:-1]) * seconds[unit])
+
+
+def closed_htf_history(frame, timeframe: str, decision_time, limit: int = 60):
+    """OHLCV index is OPEN time; a row is usable only after its close."""
+    if frame is None or len(frame) == 0:
+        return None
+    available = frame.index + timeframe_duration(timeframe) <= decision_time
+    return frame.loc[available].tail(limit)
+
+
 def _normalize_symbol(symbol: str) -> str:
     if "/" not in symbol and symbol.endswith("USDT"):
         return symbol[:-4] + "/USDT"
@@ -396,12 +412,15 @@ class BacktestEngine:
         """
         from backtest.resampler import resample_ohlcv
         src = htf_base if htf_base is not None else df
+        source_tf = "15m" if htf_base is not None else self.timeframe
         htf: dict = {}
         for tf in ("1w", "1d", "4h"):
             if tf == self.timeframe:
                 htf[tf] = df
+            elif timeframe_duration(source_tf) > timeframe_duration(tf):
+                htf[tf] = None
             else:
-                htf[tf] = resample_ohlcv(src, tf)
+                htf[tf] = resample_ohlcv(src, tf, source_tf=source_tf)
         return htf
 
     def _load_local(self) -> tuple[Optional[pd.DataFrame], Optional[dict]]:
@@ -441,7 +460,7 @@ class BacktestEngine:
             if tf == self.timeframe:
                 htf[tf] = df
             else:
-                htf[tf] = resample_ohlcv(df_15m, tf)
+                htf[tf] = resample_ohlcv(df_15m, tf, source_tf=BASE_TIMEFRAME)
         logger.info(
             f"--source=local: {self.symbol} {self.timeframe} from "
             f"{path.name} ({len(df):,} candles, {df.index[0]} → {df.index[-1]})"
@@ -450,6 +469,11 @@ class BacktestEngine:
 
     async def _run_backtest(self) -> BacktestResult:
         """Internal: fetch data and walk through candles."""
+        if config.execution_model not in ("close", "limit_pending"):
+            raise ValueError(
+                "EXECUTION_MODEL must be close or limit_pending; "
+                "median_immediate creates unfilled trades"
+            )
         limit = max(config.trading.candles_limit + 100, 200)
         htf: Optional[dict] = None
         if self.source == "local" and self._local_data is not None:
@@ -482,18 +506,18 @@ class BacktestEngine:
         last_signal_direction: Optional[str] = None
         _traded_fvgs: set[tuple] = set()  # per-FVG dedup: (type, top, bottom)
 
-        # Pre-fetch HTF data for bias.
-        # local path: full HTF history available → compute per-candle (no look-ahead).
-        # live path: fetch current HTF state once (mirrors the live scanner).
-        _htf_once: Optional[HTFBiasResult] = None
+        # Fetch history once, then evaluate only rows closed at each decision.
         if config.htf_bias_v2 and htf is None:
-            try:
-                df_1d = await exchange_client.fetch_ohlcv(self.symbol, "1d", limit=60)
-                df_4h = await exchange_client.fetch_ohlcv(self.symbol, "4h", limit=60)
-                df_1w = await exchange_client.fetch_ohlcv(self.symbol, "1w", limit=60)
-                _htf_once = get_htf_bias_v2(df_1w, df_1d, df_4h, df)
-            except Exception:
-                _htf_once = None
+            htf = {}
+            span = df.index[-1] - df.index[0]
+            for tf in ("1w", "1d", "4h"):
+                needed = 61 + int(span / timeframe_duration(tf))
+                history = await exchange_client.fetch_ohlcv_paginated(
+                    self.symbol, tf, total_limit=needed,
+                )
+                if history is None or history.empty:
+                    raise RuntimeError(f"Missing {tf} history for causal HTF backtest")
+                htf[tf] = history
 
         # Funnel instrumentation (populated only when self.instrument=True)
         _funnel_counts: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
@@ -675,10 +699,10 @@ class BacktestEngine:
 
                 try:
                     if len(_df_clean) >= 10:
-                        sweeps = detect_sweeps(_df_clean, lookback=50)
-                        order_blocks = detect_order_blocks(_df_clean, lookback=100)
+                        sweeps = detect_sweeps(_df_clean, lookback=100)
+                        order_blocks = detect_order_blocks(_df_clean, lookback=150)
                         candle_quality = analyze_last_candle(_df_clean, atr_value=ind.atr)
-                        fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 100))
+                        fvgs = detect_fvg(_df_clean, lookback=getattr(config, "liquidity_fvg_lookback", 150))
 
                         _disp_atr = 0.0
                         _reclaim = 0
@@ -690,7 +714,7 @@ class BacktestEngine:
                                 _reclaim = _valid_sw[0].reclaim_candles
 
                         structure = analyze_structure(
-                            _df_clean, lookback=50,
+                            _df_clean, lookback=100,
                             sweeps=sweeps,
                             displacement_atr=_disp_atr,
                             reclaim_bars=_reclaim,
@@ -771,35 +795,27 @@ class BacktestEngine:
                             if self.instrument:
                                 _funnel_counts["SETUP_TYPE_GATE"] += 1
                             continue
-                        if not setup.has_sweep:
+                        # A continuation sweep is optional in the live scanner.
+                    elif setup.setup_type == "poi_entry":
+                        if not setup.has_ob and not setup.has_fvg:
                             reject_stats.setup_type_gate += 1
                             reject_stats.total_rejected += 1
                             if self.instrument:
                                 _funnel_counts["SETUP_TYPE_GATE"] += 1
                             continue
 
-                # === Phase 1.45: HTF Bias (per-candle in local path → no look-ahead) ===
-                # Local path slices HTF history up to the current candle; the
-                # live-fetch path reuses `_htf_once` (mirrors the live scanner,
-                # which also reads the current HTF state).
-                _htf_result: Optional[HTFBiasResult] = _htf_once
+                # Signal computation uses the just-closed primary candle.
+                decision_time = df.index[i] + timeframe_duration(self.timeframe)
+                _htf_result: Optional[HTFBiasResult] = None
                 _htf_penalty = 1.0
                 if config.htf_bias_v2:
-                    if htf is not None:
-                        try:
-                            _ts = df.index[i]
-                            _f1h = df.iloc[:i + 1]
-                            _f4h = htf.get("4h")
-                            _f1d = htf.get("1d")
-                            _f1w = htf.get("1w")
-                            _htf_result = get_htf_bias_v2(
-                                _f1w.loc[:_ts].tail(60) if _f1w is not None and len(_f1w) else None,
-                                _f1d.loc[:_ts].tail(60) if _f1d is not None and len(_f1d) else None,
-                                _f4h.loc[:_ts].tail(60) if _f4h is not None and len(_f4h) else None,
-                                _f1h,
-                            )
-                        except Exception:
-                            _htf_result = None
+                    _history = htf or {}
+                    _htf_result = get_htf_bias_v2(
+                        closed_htf_history(_history.get("1w"), "1w", decision_time),
+                        closed_htf_history(_history.get("1d"), "1d", decision_time),
+                        closed_htf_history(_history.get("4h"), "4h", decision_time),
+                        df.iloc[:i + 1] if self.timeframe == "1h" else None,
+                    )
                     if self.bt_config.enable_htf_bias_gate and _htf_result is not None:
                         _opposed, _hard_block = htf_opposition(setup, _htf_result.direction)
                         if _hard_block:
@@ -835,6 +851,9 @@ class BacktestEngine:
                     fvgs=fvgs,
                     df=_df_clean,
                     timeframe=self.timeframe,
+                    entry_mode=(
+                        "limit" if config.execution_model == "limit_pending" else "market"
+                    ),
                 )
 
                 if not trade_plan.is_valid or trade_plan.sl == 0 or trade_plan.tp == 0:
@@ -847,14 +866,8 @@ class BacktestEngine:
                 sl = trade_plan.sl
                 tp = trade_plan.tp
 
-                # === Execution model ===
-                # "close": the signal fires at candle close, so the fill price is
-                # the signal bar's close (mirrors live P&L tracking, which computes
-                # from signal.close_price). "median_immediate" (default) keeps the
-                # FVG median even if price never traded there; "limit_pending" keeps
-                # the median as a resting limit and fills only on a later bar's touch.
-                if config.execution_model == "close":
-                    entry_price = float(ind.close) if ind.close else entry_price
+                # Entry, SL, TP and RR are one plan. Do not mutate entry after
+                # constructing the plan; the market model already uses close.
 
                 # === Phase 2: Analytics (inline) ===
                 atr_pct = (float(ind.atr) / float(ind.close) * 100) if ind.atr and ind.close > 0 else 0.0
@@ -948,11 +961,15 @@ class BacktestEngine:
                     _funnel_counts["PASSED"] += 1
 
                 _ref_fvg = None
-                for _f in fvgs or []:
-                    _f_dir = "buy" if _f.type == "bullish" else "sell" if _f.type == "bearish" else _f.type
-                    if _f.is_active and _f_dir == setup.direction:
-                        _ref_fvg = _f
-                        break
+                if config.execution_model == "limit_pending":
+                    for _f in fvgs or []:
+                        _f_dir = {"bullish": "buy", "bearish": "sell"}.get(_f.type)
+                        if (
+                            _f.is_active and _f_dir == setup.direction
+                            and abs((_f.top + _f.bottom) / 2.0 - entry_price) <= 1e-8
+                        ):
+                            _ref_fvg = _f
+                            break
 
                 if config.execution_model == "limit_pending":
                     # Resting limit at the FVG median: no trade yet — registered and

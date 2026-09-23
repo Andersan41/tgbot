@@ -1,0 +1,64 @@
+{
+  "fvg_sparse_index": {
+    "formed_at_index": 7,
+    "gap_top": 104.0,
+    "post_formation_lows": [
+      105
+    ],
+    "incorrectly_filled": true
+  },
+  "phantom_live_entry": [
+    {
+      "direction": "buy",
+      "live": 101,
+      "booked_entry": 99.0,
+      "direction_gate_rejects": false
+    },
+    {
+      "direction": "sell",
+      "live": 101,
+      "booked_entry": 103.0,
+      "direction_gate_rejects": false
+    }
+  ],
+  "reversal_semantics": [
+    {
+      "choch": "bullish",
+      "sweep": "bullish",
+      "classified_strength": "weak",
+      "reversal_detected": false,
+      "rejection": "reversal: no MSS (strong CHoCH)"
+    },
+    {
+      "choch": "bullish",
+      "sweep": "bearish",
+      "classified_strength": "mss",
+      "reversal_detected": false,
+      "rejection": "reversal: sweep type 'bearish' != 'bullish' for buy"
+    },
+    {
+      "choch": "bearish",
+      "sweep": "bearish",
+      "classified_strength": "weak",
+      "reversal_detected": false,
+      "rejection": "reversal: no MSS (strong CHoCH)"
+    },
+    {
+      "choch": "bearish",
+      "sweep": "bullish",
+      "classified_strength": "mss",
+      "reversal_detected": false,
+      "rejection": "reversal: sweep type 'bullish' != 'bearish' for sell"
+    }
+  ],
+  "htf_lookahead": {
+    "signal_bar_open": "2026-09-01 01:00:00+00:00",
+    "decision_time": "2026-09-01 02:00:00+00:00",
+    "future_close_seen": 130.0,
+    "future_close_available_at": "2026-09-01 04:00:00+00:00"
+  },
+  "partial_resample": {
+    "input_15m_bars": 3,
+    "incorrectly_kept_1h_bars": 1
+  }
+}

@@ -731,7 +731,7 @@ class AppConfig:
     #   "limit_pending"    — resting limit at the FVG median: fill only when a
     #       LATER bar actually touches the median; expire when the FVG leaves
     #       the active set or `execution_pending_max_bars` elapse.
-    execution_model: str = os.getenv("EXECUTION_MODEL", "median_immediate")
+    execution_model: str = os.getenv("EXECUTION_MODEL", "close")
     # Max bars a pending limit order stays alive before it expires unfilled.
     execution_pending_max_bars: int = int(os.getenv("EXECUTION_PENDING_MAX_BARS", "50"))
     # Max bars a trade can stay open before forced close at current price (0 = disabled).
@@ -1075,5 +1075,26 @@ def build_config_snapshot() -> str:
         "risk_engine_sl_min_pct": config.risk_engine.sl_absolute_min_pct,
         "risk_engine_sl_max_pct": config.risk_engine.sl_absolute_max_pct,
         "risk_engine_base_risk_pct": config.risk_engine.base_risk_pct,
+        # B-011: Admission / execution / pattern parameters
+        "max_portfolio_risk_pct": config.max_portfolio_risk_pct,
+        "max_active_signals": config.max_active_signals,
+        "max_active_signals_per_symbol": config.max_active_signals_per_symbol,
+        "primary_timeframes": config.trading.primary_timeframes,
+        "max_sl_atr": config.trading.max_sl_atr,
+        "symbol_overrides": config.trading.symbol_overrides,
+        "max_sweep_age_bars": config.pattern_engine.max_sweep_age_bars,
+        "max_fvg_age_candles": config.pattern_engine.max_fvg_age_candles,
+        "poi_entry_enabled": config.pattern_engine.poi_entry_enabled,
+        "poi_min_quality": config.pattern_engine.poi_min_quality,
+        "htf_bias_v2": config.htf_bias_v2,
+        "htf_hard_gate": config.htf_hard_gate,
+        "htf_bias_continuation_penalty": config.htf_bias_continuation_penalty,
+        "require_entry_zone": config.require_entry_zone,
+        "min_p_tp": config.min_p_tp,
+        "execution_model": config.execution_model,
+        "execution_pending_max_bars": config.execution_pending_max_bars,
+        "max_trade_duration_bars": config.max_trade_duration_bars,
+        "signal_cooldown_minutes": config.signal_cooldown_minutes,
+        "signal_cooldown_tf_multiplier": config.signal_cooldown_tf_multiplier,
     }
     return _json.dumps(snapshot, sort_keys=True)

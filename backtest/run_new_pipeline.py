@@ -355,17 +355,17 @@ async def run_symbol(symbol: str, timeframe: str, candles: int) -> SymbolResult:
 
         # ── Phase 1: Liquidity + Structure ──
         try:
-            sweeps = detect_sweeps(window, lookback=50)
+            sweeps = detect_sweeps(window, lookback=100)
         except Exception:
             sweeps = []
         try:
-            order_blocks = detect_order_blocks(window, lookback=100)
+            order_blocks = detect_order_blocks(window, lookback=150)
         except Exception:
             order_blocks = []
 
         # MSS classification params
         try:
-            fvgs = detect_fvg(window, lookback=100)
+            fvgs = detect_fvg(window, lookback=150)
         except Exception:
             fvgs = []
         try:
@@ -384,7 +384,7 @@ async def run_symbol(symbol: str, timeframe: str, candles: int) -> SymbolResult:
 
         try:
             structure = analyze_structure(
-                window, lookback=50,
+                window, lookback=100,
                 sweeps=sweeps,
                 displacement_atr=_disp_atr,
                 reclaim_bars=_reclaim,

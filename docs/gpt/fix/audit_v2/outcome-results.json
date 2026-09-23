@@ -1,0 +1,27 @@
+[
+  {
+    "case": "both_barriers_hit_tp_wins",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "ticker_sl_erased_by_candle",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "previous_bar_sl_ignored",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "pre_entry_wick_false_tp",
+    "resolution": null,
+    "resolution_kwargs": null
+  },
+  {
+    "case": "expiry_discards_loss",
+    "resolution": null,
+    "resolution_kwargs": null
+  }
+]

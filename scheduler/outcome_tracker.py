@@ -15,6 +15,7 @@ from loguru import logger
 from data.exchange_client import exchange_client
 from storage.database import db
 from config.settings import config
+from scheduler.outcome_window import first_touch, load_outcome_window
 # from strategy.scenario_memory import scenario_memory, ScenarioOutcomeRecord  # DELETED module
 _SCENARIO_MEMORY_AVAILABLE = False
 
@@ -145,53 +146,6 @@ async def check_open_outcomes() -> None:
         signal = await db.get_signal(outcome.signal_id)
         if signal is None:
             continue
-        # Просроченный сигнал → EXPIRED
-        age = now - signal.created_at.replace(tzinfo=timezone.utc)
-        if age > timedelta(days=OUTCOME_TTL_DAYS):
-            await db.close_outcome(
-                outcome.id, "EXPIRED",
-                close_price=signal.close_price, pnl_pct=0.0,
-            )
-            continue
-
-        # Skip if current candle is the same as the entry candle.
-        # This prevents same-bar SL resolution when the candle's wick
-        # already breached the SL level at signal creation time.
-        # Uses entry_candle_open stored at signal creation (preferred)
-        # or falls back to calculated value for backward compatibility.
-        entry_candle_open = None
-        if hasattr(signal, 'entry_candle_open') and signal.entry_candle_open is not None:
-            entry_candle_open = signal.entry_candle_open.replace(tzinfo=timezone.utc)
-        else:
-            # Fallback: calculate from created_at and timeframe
-            _TF_MINUTES = {"1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
-                           "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440}
-            tf_minutes = _TF_MINUTES.get(signal.timeframe, 60)
-            signal_ts = signal.created_at.replace(tzinfo=timezone.utc)
-            tf_seconds = tf_minutes * 60
-            signal_epoch = int(signal_ts.timestamp())
-            entry_candle_open = datetime.fromtimestamp(
-                signal_epoch - (signal_epoch % tf_seconds), tz=timezone.utc
-            )
-
-        # Calculate current candle open time
-        now_epoch = int(now.timestamp())
-        tf_minutes = {"1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
-                      "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440}
-        tf_minutes_val = tf_minutes.get(signal.timeframe, 60)
-        tf_seconds = tf_minutes_val * 60
-        current_candle_open = datetime.fromtimestamp(
-            now_epoch - (now_epoch % tf_seconds), tz=timezone.utc
-        )
-
-        if current_candle_open <= entry_candle_open:
-            logger.debug(
-                f"Skipping {signal.symbol} {signal.timeframe}: "
-                f"still on or before entry candle "
-                f"(entry_open={entry_candle_open.isoformat()}, "
-                f"current_open={current_candle_open.isoformat()})"
-            )
-            continue
 
         # Skip symbols on cooldown after repeated fetch failures
         async with _symbol_tracker_lock:
@@ -214,31 +168,15 @@ async def check_open_outcomes() -> None:
         async with _symbol_tracker_lock:
             _symbol_fail_count.pop(signal.symbol, None)
 
-        # Also check recent candle high/low to catch TP/SL spikes
-        # that happened between tracker intervals.
-        # drop_last=False: включаем текущую незавершённую свечу, чтобы
-        # не пропустить SL/TP на актуальном баре.
-        candle_high = current_price
-        candle_low = current_price
         try:
-            candle_df = await exchange_client.fetch_ohlcv(signal.symbol, signal.timeframe, limit=2, drop_last=False)
-            if candle_df is not None and len(candle_df) >= 1:
-                last_candle = candle_df.iloc[-1]
-                candle_high = float(last_candle["high"])
-                candle_low = float(last_candle["low"])
-        except Exception:
-            pass
+            bars = await load_outcome_window(exchange_client, signal, outcome, now)
+            hit_tp, hit_sl, candle_high, candle_low = first_touch(
+                signal, bars, signal.created_at, now, float(current_price),
+            )
+        except (ValueError, TypeError, OverflowError) as exc:
+            logger.warning(f"Outcome history incomplete: signal={signal.id}: {exc}")
+            continue
 
-        hit_tp = (
-            signal.signal_type == "BUY" and signal.tp and candle_high >= signal.tp
-        ) or (
-            signal.signal_type == "SELL" and signal.tp and candle_low <= signal.tp
-        )
-        hit_sl = (
-            signal.signal_type == "BUY" and signal.sl and candle_low <= signal.sl
-        ) or (
-            signal.signal_type == "SELL" and signal.sl and candle_high >= signal.sl
-        )
         # Calculate hold bars for ScenarioMemory
         hold_bars = int((now - signal.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 60 / max(1, {"1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440}.get(signal.timeframe, 60)))
         if hit_tp:
@@ -285,7 +223,7 @@ async def check_open_outcomes() -> None:
                 f"at {current_price} gross={gross_pnl:+.2f}% net={net_pnl:+.2f}% "
                 f"(entry={signal.close_price}, SL={signal.sl}, TP={signal.tp})"
             )
-            await _send_close_notification(signal, "HIT_TP", current_price, net_pnl)
+            await _send_close_notification(signal, "HIT_TP", close_price, net_pnl)
         elif hit_sl:
             # Use SL price as close if candle hit it (better fill estimate)
             close_price = signal.sl if (
@@ -330,13 +268,37 @@ async def check_open_outcomes() -> None:
                 f"at {current_price} gross={gross_pnl:+.2f}% net={net_pnl:+.2f}% "
                 f"(entry={signal.close_price}, SL={signal.sl}, TP={signal.tp})"
             )
-            await _send_close_notification(signal, "HIT_SL", current_price, net_pnl)
+            await _send_close_notification(signal, "HIT_SL", close_price, net_pnl)
         else:
-            await db.touch_outcome_checked(outcome.id)
-            logger.debug(
-                f"Outcome still open: signal_id={signal.id} {signal.symbol} "
-                f"{signal.signal_type} price={current_price:.4f} SL={signal.sl:.4f} TP={signal.tp:.4f}"
-            )
+            if now - signal.created_at.replace(tzinfo=timezone.utc) > timedelta(days=OUTCOME_TTL_DAYS):
+                close_price = float(current_price)
+                gross_pnl, net_pnl = _calculate_net_pnl(
+                    signal.signal_type, signal.close_price, close_price,
+                    signal.created_at.replace(tzinfo=timezone.utc), now,
+                )
+                await db.close_outcome(outcome.id, "EXPIRED", close_price, net_pnl)
+                try:
+                    await db.update_candidate_outcome_by_signal(signal.id, "EXPIRED", net_pnl)
+                except Exception:
+                    pass
+                try:
+                    from storage.database import DecisionTrace
+                    from sqlalchemy import select
+                    async with db._session_factory() as session:
+                        rows = (await session.execute(
+                            select(DecisionTrace).where(DecisionTrace.signal_id == signal.id)
+                        )).scalars().all()
+                        for row in rows:
+                            row.outcome = "EXPIRED"
+                            row.pnl_pct = net_pnl
+                        await session.commit()
+                except Exception:
+                    pass
+                logger.info(
+                    f"Outcome EXPIRED: signal={signal.id} price={close_price} net={net_pnl:+.2f}%"
+                )
+            else:
+                await db.touch_outcome_checked(outcome.id, checked_at=now)
 
 
 async def outcome_tracker_loop() -> None:

@@ -1,0 +1,11 @@
+{
+  "risk_then_trade": {
+    "compiled_modules": 258,
+    "exact_trade_scripts": 7
+  },
+  "trade_then_risk": {
+    "compiled_modules": 258,
+    "exact_trade_scripts": 7
+  },
+  "source_commit": "9d0da045c617917e210e2ff802a2602a5068cfa1"
+}
