@@ -313,7 +313,7 @@ class TestSignalResultV2Confidence:
             signal=SignalType.BUY, symbol="BTC/USDT", timeframe="1h",
             close=50000.0, score=5, reasons=[], _confidence_v2=v2,
         )
-        assert sig.verdict == "STRONG"
+        assert sig.verdict == "СИЛЬНЫЙ"  # localized display label
         assert sig.confidence == 72.0
 
     def test_verdict_from_v2_moderate(self):
@@ -328,7 +328,7 @@ class TestSignalResultV2Confidence:
             signal=SignalType.BUY, symbol="BTC/USDT", timeframe="1h",
             close=50000.0, score=5, reasons=[], _confidence_v2=v2,
         )
-        assert sig.verdict == "MODERATE"
+        assert sig.verdict == "УМЕРЕННЫЙ"  # localized display label
         assert sig.confidence == 45.0
 
     def test_verdict_from_v2_weak(self):
@@ -343,7 +343,7 @@ class TestSignalResultV2Confidence:
             signal=SignalType.BUY, symbol="BTC/USDT", timeframe="1h",
             close=50000.0, score=5, reasons=[], _confidence_v2=v2,
         )
-        assert sig.verdict == "WEAK"
+        assert sig.verdict == "СЛАБЫЙ"  # localized display label
         assert sig.confidence == 20.0
 
     def test_verdict_from_v2_sell_negative_score(self):
@@ -358,7 +358,7 @@ class TestSignalResultV2Confidence:
             signal=SignalType.SELL, symbol="BTC/USDT", timeframe="1h",
             close=50000.0, score=5, reasons=[], _confidence_v2=v2,
         )
-        assert sig.verdict == "STRONG"
+        assert sig.verdict == "СИЛЬНЫЙ"  # localized display label
         assert sig.confidence == 65.0
 
     def test_fallback_to_legacy_when_no_v2(self):
@@ -366,7 +366,7 @@ class TestSignalResultV2Confidence:
             signal=SignalType.BUY, symbol="BTC/USDT", timeframe="1h",
             close=50000.0, score=5, reasons=[],
         )
-        assert sig.verdict == "MODERATE"
+        assert sig.verdict == "УМЕРЕННЫЙ"  # localized display label
         expected = round(5 / 7 * 100, 1)
         assert sig.confidence == expected
 
@@ -383,7 +383,7 @@ class TestSignalResultV2Confidence:
             close=50000.0, score=5, reasons=[], _confidence_v2=v2,
         )
         msg = sig.format_message()
-        assert "Quality: strong" in msg
+        assert "Confidence: 72/100" in msg  # Quality line removed in e6e311a
 
 
 class TestHistoricalWinrateBlending:

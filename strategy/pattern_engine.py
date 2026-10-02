@@ -234,19 +234,15 @@ class PatternEngine:
 
         if direction is None:
             trend = structure.trend if structure else "ranging"
-            # Prefer continuation-specific reason if continuation was tried
-            # and reversal failed at early stage (no sweep)
-            if continuation_rejection and reversal_rejection:
-                # If reversal failed at first step, continuation reason is more relevant
-                if "no sweep" in (reversal_rejection or ""):
-                    reason = continuation_rejection
-                else:
-                    reason = reversal_rejection
-            elif poi_rejection and (reversal_rejection or continuation_rejection):
-                # POI entry also failed — show most relevant reason
-                reason = continuation_rejection or reversal_rejection
-            else:
-                reason = continuation_rejection or poi_rejection or reversal_rejection or "no valid setup"
+            # Surface every failed path: display-only (menu/trace/log), so the
+            # operator sees why the reversal, continuation AND POI paths each
+            # rejected instead of whichever one the old priority picked.
+            reasons = [
+                r
+                for r in (reversal_rejection, continuation_rejection, poi_rejection)
+                if r
+            ]
+            reason = "; ".join(reasons) or "no valid setup"
             return ICTSetup(
                 detected=False,
                 structure_trend=trend,

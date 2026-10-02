@@ -1,11 +1,17 @@
 """
 analytics/calibration.py — Probability calibration analysis.
 
-Compares model-predicted confidence vs actual win rate. Shows calibration
+Compares model-predicted probability vs actual win rate. Shows calibration
 table: if model says 80%, does it actually win ~80%?
+
+Two sources (v2 first):
+  - p_tp: the v2 Probability Engine estimate stored in
+    decision_traces.feature_snapshot (source of truth for the live pipeline);
+  - confidence_v2: legacy score from the old signal_engine pipeline.
 
 Usage:
     python -m analytics.calibration [--db data/signals.db]
+    python -m analytics.calibration --source ptp
     python -m analytics.calibration --use-confidence
 """
 from __future__ import annotations
@@ -18,6 +24,10 @@ from pathlib import Path
 from typing import Any
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "signals.db"
+
+# Below this many samples the buckets are noise — print a warning, still show
+# the table (a small sample is more useful than nothing while it accumulates).
+MIN_SAMPLES = 20
 
 BUCKETS = [
     (0, 20, "0-20%"),
@@ -62,6 +72,73 @@ def load_calibration_data(db_path: str | Path) -> list[dict]:
             data.append(d)
 
     return data
+
+
+def load_ptp_data(db_path: str | Path) -> list[dict]:
+    """Load v2 P(TP) estimates with live outcomes.
+
+    p_tp is written by the scanner into decision_traces.feature_snapshot
+    (JSON) and the row's outcome is filled later by the outcome tracker —
+    so calibration is "predicted p_tp vs realized HIT_TP" on the exact rows
+    the Probability Engine produced.
+    """
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+
+    query = """
+        SELECT
+            dt.id, dt.symbol, dt.timeframe, dt.signal_type,
+            dt.regime, dt.direction, dt.feature_snapshot,
+            dt.outcome, dt.pnl_pct
+        FROM decision_traces dt
+        WHERE dt.outcome IN ('HIT_TP', 'HIT_SL')
+          AND dt.feature_snapshot IS NOT NULL
+        ORDER BY dt.id
+    """
+
+    rows = conn.execute(query).fetchall()
+    conn.close()
+
+    data = []
+    for row in rows:
+        d = dict(row)
+        try:
+            features = json.loads(d["feature_snapshot"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        p_tp = features.get("p_tp")
+        if not isinstance(p_tp, (int, float)) or not (0.0 < p_tp <= 1.0):
+            continue
+        data.append({
+            "id": d["id"],
+            "symbol": d["symbol"],
+            "timeframe": d["timeframe"],
+            "confidence": round(float(p_tp) * 100, 4),  # compute_* expect %
+            "is_win": 1 if d["outcome"] == "HIT_TP" else 0,
+            "pnl_pct": d["pnl_pct"],
+            "regime": d["regime"],
+            "direction": d["signal_type"] or d["direction"],
+            "setup_type": features.get("setup_type"),
+            "source": "p_tp",
+        })
+
+    return data
+
+
+def load_for_source(db_path: str | Path, source: str = "auto") -> tuple[list[dict], str]:
+    """Resolve the requested probability source to ``(data, used_source)``.
+
+    ``auto`` prefers the v2 p_tp rows and falls back to the legacy
+    confidence_v2 rows while the p_tp sample is still below MIN_SAMPLES.
+    """
+    if source == "confidence_v2":
+        return load_calibration_data(db_path), "confidence_v2"
+    data = load_ptp_data(db_path)
+    if source == "auto" and len(data) < MIN_SAMPLES:
+        legacy = load_calibration_data(db_path)
+        if len(legacy) > len(data):
+            return legacy, "confidence_v2"
+    return data, "p_tp"
 
 
 def compute_calibration_table(data: list[dict], n_bins: int = 10) -> list[dict]:
@@ -283,6 +360,15 @@ def main():
     parser = argparse.ArgumentParser(description="Probability Calibration Analysis")
     parser.add_argument("--db", default=str(DB_PATH))
     parser.add_argument("--bins", type=int, default=10)
+    parser.add_argument(
+        "--source", choices=("auto", "ptp", "confidence_v2"), default="auto",
+        help="probability source: v2 p_tp from decision_traces, legacy "
+             "confidence_v2, or auto (p_tp first, legacy fallback)",
+    )
+    parser.add_argument(
+        "--use-confidence", action="store_true",
+        help="legacy alias for --source confidence_v2",
+    )
     parser.add_argument("--export", action="store_true")
     args = parser.parse_args()
 
@@ -291,12 +377,19 @@ def main():
         print(f"ERROR: Database not found at {db_path}")
         sys.exit(1)
 
-    data = load_calibration_data(db_path)
-    print(f"Loaded {len(data)} signals with confidence data")
+    source = "confidence_v2" if args.use_confidence else args.source
+    data, used = load_for_source(db_path, source)
 
-    if len(data) < 20:
-        print("Need at least 20 signals for meaningful calibration analysis.")
+    print(f"Loaded {len(data)} rows with {used} probability data")
+
+    if not data:
+        print("No calibration data found (need outcomes + probability estimates).")
         return
+    if len(data) < MIN_SAMPLES:
+        print(
+            f"WARNING: only {len(data)} samples (<{MIN_SAMPLES}) — "
+            f"buckets are noisy; treat as a smoke test."
+        )
 
     bins = compute_coarse_calibration(data)
     regime_cal = compute_by_regime(data)
@@ -310,6 +403,8 @@ def main():
         output.parent.mkdir(parents=True, exist_ok=True)
         with open(output, "w", encoding="utf-8") as f:
             json.dump({
+                "source": used,
+                "n_samples": len(data),
                 "buckets": bins,
                 "brier_score": compute_brier_score(data),
                 "ece": compute_ece(data),

@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from math import ceil, floor, isfinite
 
+from loguru import logger
+
 
 def as_utc(value):
     if value.tzinfo is None:
@@ -32,14 +34,21 @@ def first_touch(signal, bars, created_at, now, current_price):
 
 
 async def load_outcome_window(client, signal, outcome, now):
-    """Read every available minute from the last check, with overlap."""
+    """Read every available minute from the last check, with overlap.
+
+    Missing minutes (rate-limit, exchange gap, deleted candles) no longer abort
+    the load: the cursor jumps forward over the hole and the gap is reported.
+    A hard failure only happens when the exchange returns nothing at all —
+    outcome_tracker then falls back to ticker-only evaluation.
+    """
     created_at = as_utc(signal.created_at)
     checked_at = as_utc(outcome.checked_at) if outcome.checked_at else created_at
     # Include a full entry-minute only when entry coincides with its opening.
     start_ms = max(ceil(created_at.timestamp() / 60) * 60000,
                    floor(min(checked_at, now).timestamp() / 60) * 60000)
     last_ms = floor(now.timestamp() / 60) * 60000
-    bars = []
+    bars: list = []
+    gap_minutes = 0
     cursor = start_ms
     while cursor <= last_ms:
         frame = await client.fetch_ohlcv(
@@ -53,10 +62,23 @@ async def load_outcome_window(client, signal, outcome, now):
             if stamp < cursor or stamp > last_ms:
                 continue
             if stamp != cursor:
-                raise ValueError("gap in outcome minute history")
+                # stamp > cursor: the minutes in between never arrived — skip
+                # them instead of failing the whole outcome check.
+                gap_minutes += (stamp - cursor) // 60000
+                cursor = stamp
             bars.append((opened.to_pydatetime(), row))
             cursor += 60000
             progressed = True
         if not progressed:
             raise ValueError("outcome history did not advance")
+        if gap_minutes > 60 * 24 * 14:
+            # Safety: a 7-day TTL can't produce more than ~10k minutes; a hole
+            # this large means the cursor is drifting, not gapping.
+            raise ValueError(f"outcome history gap too large: {gap_minutes}m")
+    if gap_minutes:
+        logger.warning(
+            f"Outcome window for {signal.symbol} skipped {gap_minutes} missing "
+            f"minute(s) (signal={signal.id}) — SL/TP inside the hole resolved "
+            "by the ticker on the next check"
+        )
     return bars

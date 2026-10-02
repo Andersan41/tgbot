@@ -240,6 +240,7 @@ class TradeEngine:
             liq_map=liq_map,
             invalidation_level=invalidation.level,
             atr_tp=atr_tp,
+            max_tp_rr=cfg.max_tp_rr,
         )
 
         # Diagnostic: log liquidity map composition
@@ -275,6 +276,18 @@ class TradeEngine:
         sl_dist = abs(entry - sl)
         tp_dist = abs(tp - entry)
         rr = tp_dist / sl_dist if sl_dist > 0 else 0
+
+        # ═══ TP CAP: final SL (with buffers) can be tighter than the ═══
+        # ═══ invalidation level used in _find_targets — re-enforce.   ═══
+        if cfg.max_tp_rr > 0 and sl_dist > 0 and rr > cfg.max_tp_rr:
+            tp_dist = sl_dist * cfg.max_tp_rr
+            tp = round(entry + tp_dist, 8) if signal == SignalType.BUY else round(entry - tp_dist, 8)
+            logger.debug(
+                f"TP capped: RR {rr:.1f} was above MAX_TP_RR={cfg.max_tp_rr} "
+                f"-> tp={tp:.4f} ({tp_dist / entry * 100:.2f}%)"
+            )
+            rr = cfg.max_tp_rr
+            tp_source = f"{tp_source} (capped at {cfg.max_tp_rr:g}R)"
 
         # ═══ Step 6: Validate ═══
 
@@ -320,6 +333,7 @@ class TradeEngine:
         liq_map: LiquidityMap,
         invalidation_level: float,
         atr_tp: float,
+        max_tp_rr: float = 0.0,
     ) -> list[TargetScore]:
         """Find and score all potential TP targets.
 
@@ -346,6 +360,10 @@ class TradeEngine:
 
         targets = []
         min_distance = atr * 0.5  # minimum TP distance = 0.5 ATR (relaxed from 1.0)
+        sl_dist = abs(entry - invalidation_level)
+        # RR denominator floor: avoid divide-by-zero for a zero-width invalidation
+        rr_denominator = max(sl_dist, atr * 0.5)
+        max_rr = max_tp_rr if max_tp_rr and max_tp_rr > 0 else float("inf")
 
         if signal == SignalType.BUY:
             candidates = liq_map.targets_above
@@ -353,6 +371,7 @@ class TradeEngine:
             candidates = liq_map.targets_below
 
         _filtered_close = 0
+        _filtered_rr = 0
         for level in candidates:
             dist = abs(level.level - entry)
             if dist < min_distance:
@@ -363,8 +382,12 @@ class TradeEngine:
             dist_pct = dist / entry * 100
 
             # RR if this is the target
-            sl_dist = abs(entry - invalidation_level)
-            rr = dist / max(sl_dist, atr * 0.5)
+            rr = dist / rr_denominator
+            if rr > max_rr:
+                # Target is out of reach inside OUTCOME_TTL_DAYS — a trade
+                # planned here would expire and hold the portfolio slot.
+                _filtered_rr += 1
+                continue
 
             # Path clarity (simplified — check if any opposing levels in between)
             path_clear = self._check_path(entry, level.level, liq_map, signal)
@@ -385,19 +408,27 @@ class TradeEngine:
 
         if not targets and candidates:
             logger.debug(
-                f"No targets passed min_distance filter: "
-                f"{len(candidates)} candidates, {_filtered_close} too close "
-                f"(min={min_distance:.2f}, entry={entry:.4f})"
+                f"No targets passed filters: {len(candidates)} candidates, "
+                f"{_filtered_close} too close (min={min_distance:.2f}, "
+                f"entry={entry:.4f}), {_filtered_rr} beyond MAX_TP_RR="
+                f"{max_tp_rr:g}"
             )
 
         # ATR fallback: if no liquidity targets found, use ATR-scaled targets
         if not targets:
             if signal == SignalType.BUY:
-                tp_atr = round(entry + atr * atr_tp, 8)
+                tp_atr = entry + atr * atr_tp
             else:
-                tp_atr = round(entry - atr * atr_tp, 8)
-            sl_dist = abs(entry - invalidation_level)
-            rr_atr = abs(tp_atr - entry) / max(sl_dist, atr * 0.5)
+                tp_atr = entry - atr * atr_tp
+            if abs(tp_atr - entry) > rr_denominator * max_rr:
+                # Clamp the synthetic target to the RR cap as well
+                tp_atr = (
+                    entry + rr_denominator * max_rr
+                    if signal == SignalType.BUY
+                    else entry - rr_denominator * max_rr
+                )
+            tp_atr = round(tp_atr, 8)
+            rr_atr = abs(tp_atr - entry) / rr_denominator
             targets.append(TargetScore(
                 level=tp_atr,
                 type="atr",

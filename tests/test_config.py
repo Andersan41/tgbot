@@ -58,8 +58,13 @@ class TestTradingConfig:
         assert "BTC/USDT" in cfg.symbols
         assert "XRP/USDT" in cfg.symbols
 
-    def test_timeframes_from_env(self):
-        cfg = TradingConfig()
+    def test_timeframes_from_env(self, monkeypatch):
+        # Hermetic: the developer .env may narrow PRIMARY_TIMEFRAMES (e.g. "4h")
+        monkeypatch.setenv("PRIMARY_TIMEFRAMES", "1h,4h")
+        monkeypatch.setenv("CONFIRM_TIMEFRAME", "15m")
+        import config.settings as settings
+        importlib.reload(settings)
+        cfg = settings.TradingConfig()
         assert "1h" in cfg.primary_timeframes
         assert "4h" in cfg.primary_timeframes
         assert cfg.confirm_timeframe == "15m"
@@ -74,8 +79,14 @@ class TestTradingConfig:
         assert cfg.candles_limit == 200
         assert cfg.volume_sma_period == 20
 
-    def test_sl_distance_and_rr_params(self):
-        cfg = TradingConfig()
+    def test_sl_distance_and_rr_params(self, monkeypatch):
+        # Hermetic: .env overrides these (MAX_SL_DISTANCE_PCT, MIN_RR_THRESHOLD)
+        monkeypatch.setenv("MIN_SL_DISTANCE_PCT", "1.0")
+        monkeypatch.setenv("MAX_SL_DISTANCE_PCT", "10.0")
+        monkeypatch.setenv("MIN_RR_THRESHOLD", "1.5")
+        import config.settings as settings
+        importlib.reload(settings)
+        cfg = settings.TradingConfig()
         assert cfg.min_sl_distance_pct == 1.0
         assert cfg.max_sl_distance_pct == 10.0
         assert cfg.min_rr_threshold == 1.5
@@ -86,8 +97,12 @@ class TestAppConfig:
         cfg = AppConfig()
         assert "signals.db" in cfg.database_url
 
-    def test_cooldown_default(self):
-        cfg = AppConfig()
+    def test_cooldown_default(self, monkeypatch):
+        # Hermetic: .env may raise the cooldown (e.g. 240)
+        monkeypatch.setenv("SIGNAL_COOLDOWN_MINUTES", "45")
+        import config.settings as settings
+        importlib.reload(settings)
+        cfg = settings.AppConfig()
         assert cfg.signal_cooldown_minutes == 45
 
 

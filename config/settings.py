@@ -164,6 +164,11 @@ class TradingConfig:
     max_sl_atr: float = float(os.getenv("MAX_SL_ATR", "3.0"))
     # Минимальный R:R для финализации сигнала
     min_rr_threshold: float = float(os.getenv("MIN_RR_THRESHOLD", "1.5"))
+    # Верхняя граница R:R выбранной цели (0 = без ограничения). Цель дальше
+    # max_tp_rr × SL не достижима за OUTCOME_TTL_DAYS — сделка истекает
+    # (EXPIRED), занимая бюджет портфеля. Фильтрует кандидатов в _find_targets
+    # и дополнительно обрезает финальный TP в build_trade_plan.
+    max_tp_rr: float = float(os.getenv("MAX_TP_RR", "6.0"))
     # Буфер stop hunt для structural SL (%) — стоп ставится за уровень, а не на него
     stop_hunt_buffer_pct: float = float(os.getenv("STOP_HUNT_BUFFER_PCT", "0.5"))
     # Максимальное расстояние Order Block от entry (%) — OB дальше этого порога не используется для SL
@@ -652,17 +657,20 @@ class ProbabilityConfig:
 class RiskEngineConfig:
     """Risk Engine — Layer 3 capital protection."""
 
-    # Minimum R:R ratio (hard gate)
-    # DEPRECATED (dead): single RR gate source is `trading.min_rr_threshold`
-    # (used by risk/engine.py, trade_engine.py, funnel, edge_discovery).
-    # Kept for config snapshot compatibility only — changing this value has no effect.
-    min_rr_ratio: float = float(os.getenv("RISK_ENGINE_MIN_RR", "2.0"))
+    # NOTE: there is no RISK_ENGINE_MIN_RR knob anymore. The single RR gate
+    # source is `trading.min_rr_threshold` (risk/engine.py, trade_engine.py,
+    # funnel, edge_discovery) — an env var with that name was a no-op.
     # Absolute SL minimum % (hard gate)
     sl_absolute_min_pct: float = float(os.getenv("RISK_ENGINE_SL_MIN_PCT", "0.4"))
-    # Absolute SL maximum % (hard gate)
-    sl_absolute_max_pct: float = float(os.getenv("RISK_ENGINE_SL_MAX_PCT", "5.0"))
-    # Base risk % per trade
-    base_risk_pct: float = float(os.getenv("RISK_ENGINE_BASE_RISK_PCT", "1.0"))
+    # Absolute SL maximum % — LOG-ONLY soft gate (risk/engine.py logs and
+    # proceeds via Kelly). Hard enforcement of SL width is trading.max_sl_atr.
+    sl_absolute_max_pct: float = float(os.getenv("RISK_ENGINE_SL_MAX_PCT", "1.5"))
+    # Base risk % per trade — hard ceiling on the Kelly sizing. Applied twice
+    # in risk/engine.py: before the vol/MSS/SL multipliers (their baseline)
+    # and again after them (final cap), so bonuses can raise the size back up
+    # to base but never past it. Portfolio budget is max_portfolio_risk_pct=3.0,
+    # so 5 slots x 0.6% fill it exactly.
+    base_risk_pct: float = float(os.getenv("RISK_ENGINE_BASE_RISK_PCT", "0.6"))
     # Minimum risk % (floor)
     min_risk_pct: float = float(os.getenv("RISK_ENGINE_MIN_RISK_PCT", "0.1"))
     # Maximum risk % (ceiling)
@@ -698,7 +706,6 @@ class AppConfig:
     external_liquidity_tp: bool = os.getenv("EXTERNAL_LIQUIDITY_TP", "true").lower() == "true"
     ob_mitigation: bool = os.getenv("OB_MITIGATION", "true").lower() == "true"
     confidence_cap: bool = os.getenv("CONFIDENCE_CAP", "true").lower() == "true"
-    shadow_mode: bool = os.getenv("SHADOW_MODE", "true").lower() == "true"
 
     # ─── Feature Flags (Phase 2 — HTF Bias V2 + Premium/Discount) ──────
     htf_bias_v2: bool = os.getenv("HTF_BIAS_V2", "true").lower() == "true"
@@ -720,6 +727,8 @@ class AppConfig:
     require_entry_zone: bool = os.getenv("REQUIRE_ENTRY_ZONE", "false").lower() == "true"
     # Minimum P(TP) required to emit a signal (0.0 = disabled, current behavior). When > 0
     # the Probability Engine becomes an actual selector rather than sizing-only input.
+    # BACKTEST-ONLY: scan_symbol_v2 never reads min_p_tp, so this gates
+    # backtest/engine.py and funnel_offline.py but not the live pipeline.
     min_p_tp: float = float(os.getenv("MIN_P_TP", "0.45"))
     # Backtest execution model for FVG-based entries. The product decision on
     # whether the bot auto-executes is NOT made yet, so backtests must support
@@ -736,6 +745,9 @@ class AppConfig:
     execution_pending_max_bars: int = int(os.getenv("EXECUTION_PENDING_MAX_BARS", "50"))
     # Max bars a trade can stay open before forced close at current price (0 = disabled).
     max_trade_duration_bars: int = int(os.getenv("MAX_TRADE_DURATION_BARS", "72"))
+    # Через сколько дней незакрытая сделка признаётся истёкшей (live:
+    # outcome_tracker закрывает по текущей цене, backtest — тем же правилом).
+    outcome_ttl_days: int = int(os.getenv("OUTCOME_TTL_DAYS", "7"))
 
     # URL базы данных
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db")
@@ -766,8 +778,9 @@ class AppConfig:
     context_cache_ttl_seconds: int = int(os.getenv("CONTEXT_CACHE_TTL_SECONDS", "1800"))
 
     # ─── Portfolio Risk Gate ─────────────────────────────────────────────
-    # Максимальное число одновременно открытых сигналов
-    max_active_signals: int = int(os.getenv("MAX_ACTIVE_SIGNALS", "3"))
+    # Максимальное число одновременно открытых сигналов.
+    # 5 слотов x 0.6% (RISK_ENGINE_BASE_RISK_PCT) = 3.0% бюджета портфеля.
+    max_active_signals: int = int(os.getenv("MAX_ACTIVE_SIGNALS", "5"))
     # Максимальное число открытых сигналов на один символ
     max_active_signals_per_symbol: int = int(os.getenv("MAX_ACTIVE_SIGNALS_PER_SYMBOL", "1"))
     # Максимальный суммарный риск открытых позиций (%)
@@ -1071,7 +1084,6 @@ def build_config_snapshot() -> str:
         "min_setup_confidence": config.pattern_engine.min_setup_confidence,
         "min_components_required": config.pattern_engine.min_components_required,
         # Oracle V1: Risk Engine
-        "risk_engine_min_rr": config.risk_engine.min_rr_ratio,
         "risk_engine_sl_min_pct": config.risk_engine.sl_absolute_min_pct,
         "risk_engine_sl_max_pct": config.risk_engine.sl_absolute_max_pct,
         "risk_engine_base_risk_pct": config.risk_engine.base_risk_pct,
@@ -1081,6 +1093,7 @@ def build_config_snapshot() -> str:
         "max_active_signals_per_symbol": config.max_active_signals_per_symbol,
         "primary_timeframes": config.trading.primary_timeframes,
         "max_sl_atr": config.trading.max_sl_atr,
+        "max_tp_rr": config.trading.max_tp_rr,
         "symbol_overrides": config.trading.symbol_overrides,
         "max_sweep_age_bars": config.pattern_engine.max_sweep_age_bars,
         "max_fvg_age_candles": config.pattern_engine.max_fvg_age_candles,
@@ -1094,6 +1107,7 @@ def build_config_snapshot() -> str:
         "execution_model": config.execution_model,
         "execution_pending_max_bars": config.execution_pending_max_bars,
         "max_trade_duration_bars": config.max_trade_duration_bars,
+        "outcome_ttl_days": config.outcome_ttl_days,
         "signal_cooldown_minutes": config.signal_cooldown_minutes,
         "signal_cooldown_tf_multiplier": config.signal_cooldown_tf_multiplier,
     }

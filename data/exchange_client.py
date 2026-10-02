@@ -49,6 +49,24 @@ class ExchangeClient:
         """Конвертируем bot symbol в ccxt symbol (если есть маппинг)."""
         return self._symbol_map.get(symbol, symbol)
 
+    def filter_available_symbols(self, symbols: list[str]) -> tuple[list[str], list[str]]:
+        """Делит символы на (доступные, недоступные) на текущем рынке.
+
+        Доступность берётся из load_markets(): символ, делистнутый биржей,
+        перестаёт сканироваться без правки .env. Если рынки ещё не загружены —
+        все символы считаются доступными (не прячем данные при сбое загрузки).
+        """
+        if not self._markets_loaded or not self._available_symbols:
+            return list(symbols), []
+        usable: list[str] = []
+        missing: list[str] = []
+        for symbol in symbols:
+            if self._resolve_symbol(symbol) in self._available_symbols:
+                usable.append(symbol)
+            else:
+                missing.append(symbol)
+        return usable, missing
+
     async def connect(self):
         """Создаём подключение к бирже (sync exchange для Windows compatibility)"""
         exchange_class = getattr(ccxt_sync, config.exchange.name)
@@ -286,6 +304,9 @@ class ExchangeClient:
 
     def get_tick_size(self, symbol: str) -> Optional[float]:
         """Получаем минимальный шаг цены (tick size) из market info."""
+        if self._exchange is None:
+            # Not connected (tests / pre-connect calls) — same as "no market info"
+            return None
         ccxt_symbol = self._resolve_symbol(symbol)
         market = self._exchange.markets.get(ccxt_symbol)
         if market is None:

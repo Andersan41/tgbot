@@ -306,10 +306,22 @@ class TestFetchFullHistory:
         monkeypatch.setattr(ohlcv_cache.exchange_client, "connect", AsyncMock())
         monkeypatch.setattr(ohlcv_cache.asyncio, "sleep", AsyncMock())
 
+        # Freeze fetch_full_history's clock: it computes start_ms = now - 365d
+        # independently of this test, and a 1ms drift drops the oldest candle
+        # via the `>= start_ms` filter (was flaky: 19 vs 20 candles).
+        fixed_now = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        class _FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return fixed_now if tz else fixed_now.replace(tzinfo=None)
+
+        monkeypatch.setattr(ohlcv_cache, "datetime", _FixedDatetime)
+
         # Контролируем через _fetch_batch_with_retry: возвращаем батч, который
         # перекрывает и цель, и современные свечи — проверим, что fetch_full_history
         # не ходит дальше первого батча (oldest <= start_ms).
-        start_ms = int((datetime.now(timezone.utc) - timedelta(days=365)).timestamp() * 1000)
+        start_ms = int((fixed_now - timedelta(days=365)).timestamp() * 1000)
 
         async def fake_fetch(symbol, timeframe, limit=998, drop_last=True, end_time=None):
             # батч перекрывает start_ms → после обрезки остаётся кусок,

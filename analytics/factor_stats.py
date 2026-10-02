@@ -71,6 +71,16 @@ class FalsePositiveReport:
 # Core analysis functions
 # ---------------------------------------------------------------------------
 
+def _verdict(t: BacktestTrade) -> str:
+    """Case-insensitive verdict bucket.
+
+    Prod writers store lowercase score_verdict ('strong'/'moderate'/'weak'),
+    legacy datasets store 'STRONG'/'MODERATE'/'WEAK'. Comparisons must
+    normalize or lowercase data silently skips every STRONG filter.
+    """
+    return (t.verdict or "").upper()
+
+
 def compute_factor_stats(trades: list[BacktestTrade]) -> dict[str, FactorContribution]:
     """Compute per-factor contribution stats.
 
@@ -108,7 +118,7 @@ def compute_factor_stats(trades: list[BacktestTrade]) -> dict[str, FactorContrib
         # False positives: STRONG verdict trades that hit SL
         fp_count = sum(
             1 for t in ftrades
-            if t.verdict == "STRONG" and t.exit_reason == "sl"
+            if _verdict(t) == "STRONG" and t.exit_reason == "sl"
         )
 
         avg_str = (
@@ -206,8 +216,8 @@ def compute_false_positives(
         combination_stats = compute_combination_stats(trades, min_occurrences=min_occurrences)
 
     total = len(trades)
-    strong_trades = [t for t in trades if t.verdict == "STRONG"]
-    moderate_trades = [t for t in trades if t.verdict == "MODERATE"]
+    strong_trades = [t for t in trades if _verdict(t) == "STRONG"]
+    moderate_trades = [t for t in trades if _verdict(t) == "MODERATE"]
     strong_count = len(strong_trades)
     strong_sl = sum(1 for t in strong_trades if t.exit_reason == "sl")
     moderate_sl = sum(1 for t in moderate_trades if t.exit_reason == "sl")
@@ -233,13 +243,13 @@ def compute_false_positives(
         regime_fp[regime]["total"] += 1
         if t.exit_reason == "sl":
             regime_fp[regime]["sl"] += 1
-            if t.verdict == "STRONG":
+            if _verdict(t) == "STRONG":
                 regime_fp[regime]["strong_sl"] += 1
 
     # FP by verdict
     verdict_fp: dict[str, dict[str, int]] = {}
     for t in trades:
-        v = t.verdict or "UNKNOWN"
+        v = _verdict(t) or "UNKNOWN"
         verdict_fp.setdefault(v, {"total": 0, "sl": 0, "tp": 0, "eob": 0})
         verdict_fp[v]["total"] += 1
         if t.exit_reason == "sl":

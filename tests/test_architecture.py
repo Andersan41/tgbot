@@ -64,28 +64,41 @@ class TestSingletons:
         config2 = settings.config
         assert config1 is config2
 
-    def test_exchange_client_singleton(self):
-        import importlib
+    @staticmethod
+    def _fresh_import(prefix: str):
+        """Re-import module with `prefix` fresh, restoring the original after.
+
+        Deleting from sys.modules without restoring poisons every other test:
+        they patch the new module while holding bindings to the old one.
+        """
+        import contextlib
         import sys
-        # Force fresh import to test module-level singleton
-        for mod in list(sys.modules.keys()):
-            if mod.startswith("data.exchange_client"):
-                del sys.modules[mod]
-        from data.exchange_client import exchange_client as ec1
-        # Re-import through package
-        import data.exchange_client as ec_mod
-        ec2 = ec_mod.exchange_client
-        assert ec1 is ec2
+
+        @contextlib.contextmanager
+        def _ctx():
+            saved = {m: sys.modules.pop(m) for m in list(sys.modules)
+                     if m.startswith(prefix)}
+            try:
+                yield
+            finally:
+                sys.modules.update(saved)
+
+        return _ctx()
+
+    def test_exchange_client_singleton(self):
+        import sys
+        with self._fresh_import("data.exchange_client"):
+            from data.exchange_client import exchange_client as ec1
+            import data.exchange_client as ec_mod
+            ec2 = ec_mod.exchange_client
+            assert ec1 is ec2
 
     def test_indicator_engine_singleton(self):
-        import sys
-        for mod in list(sys.modules.keys()):
-            if mod.startswith("indicators.engine"):
-                del sys.modules[mod]
-        from indicators.engine import indicator_engine as ie1
-        import indicators.engine as ie_mod
-        ie2 = ie_mod.indicator_engine
-        assert ie1 is ie2
+        with self._fresh_import("indicators.engine"):
+            from indicators.engine import indicator_engine as ie1
+            import indicators.engine as ie_mod
+            ie2 = ie_mod.indicator_engine
+            assert ie1 is ie2
 
     def test_signal_engine_types_exist(self):
         from strategy.signal_engine import SignalType, SignalResult, _calculate_sl_tp
@@ -95,24 +108,18 @@ class TestSingletons:
         assert callable(_calculate_sl_tp)
 
     def test_db_singleton(self):
-        import sys
-        for mod in list(sys.modules.keys()):
-            if mod.startswith("storage.database"):
-                del sys.modules[mod]
-        from storage.database import db as db1
-        import storage.database as db_mod
-        db2 = db_mod.db
-        assert db1 is db2
+        with self._fresh_import("storage.database"):
+            from storage.database import db as db1
+            import storage.database as db_mod
+            db2 = db_mod.db
+            assert db1 is db2
 
     def test_context_engine_singleton(self):
-        import sys
-        for mod in list(sys.modules.keys()):
-            if mod.startswith("context.analyzer"):
-                del sys.modules[mod]
-        from context.analyzer import context_engine as ce1
-        import context.analyzer as ce_mod
-        ce2 = ce_mod.context_engine
-        assert ce1 is ce2
+        with self._fresh_import("context.analyzer"):
+            from context.analyzer import context_engine as ce1
+            import context.analyzer as ce_mod
+            ce2 = ce_mod.context_engine
+            assert ce1 is ce2
 
 
 class TestConfigDataclass:
@@ -403,4 +410,4 @@ class TestSignalResultFormatting:
             reasons=[], score=5,
         )
         msg = result.format_message()
-        assert "R/R" in msg
+        assert "RR: 1:" in msg  # current format: "RR: 1:3.0"

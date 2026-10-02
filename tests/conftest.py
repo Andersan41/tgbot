@@ -1,9 +1,29 @@
 import sys
 import os
+import shutil
+import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Loguru sinks are configured at import time by config/logger.py (imported by
+# whichever test module loads first), so the redirection has to happen here,
+# before any test module is imported — otherwise every run writes into the
+# production logs/bot.log.
+_TEST_LOG_DIR = tempfile.mkdtemp(prefix="tgbot-pytest-logs-")
+os.environ["LOG_FILE"] = os.path.join(_TEST_LOG_DIR, "bot.log")
+os.environ["LOG_DIR"] = _TEST_LOG_DIR
+
 collect_ignore = ["test_weight_sweep.py"]
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # Loguru holds the files open — Windows can't rmtree them otherwise.
+    try:
+        from loguru import logger
+        logger.remove()
+    except Exception:
+        pass
+    shutil.rmtree(_TEST_LOG_DIR, ignore_errors=True)
 
 import numpy as np
 import pandas as pd

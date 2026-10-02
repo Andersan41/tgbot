@@ -5,6 +5,7 @@ ICT Core pipeline: Pattern Engine → Risk Engine (no ML, no scoring).
 """
 import asyncio
 import collections
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from loguru import logger
@@ -23,6 +24,7 @@ from storage.database import db
 from context.analyzer import context_engine
 from context.scorer import context_scorer, ContextVerdict
 from monitoring.metrics import scan_duration_seconds, signals_total
+from monitoring.gate_taxonomy import LIVE_GATES, MARKER_GATES
 from market_structure.structure import check_mtf_alignment, get_htf_directional_bias
 from market_structure.htf_bias import get_htf_bias, HTFBias, extract_structure_dict
 from market_structure.htf_bias_v2 import get_htf_bias_v2, HTFBiasResult
@@ -48,12 +50,56 @@ _portfolio_lock = asyncio.Lock()
 _scan_semaphore = asyncio.Semaphore(10)
 
 
+# ── Portfolio Budget Alert ─────────────────────────────────────────────
+# Fires once when used risk crosses BUDGET_ALERT_THRESHOLD of the cap —
+# that is the state where new signals are rejected for lack of budget.
+# Re-arms when usage drops below BUDGET_ALERT_RELEASE, so admins see both
+# "budget filled" and "budget free" transitions, never a per-scan spam.
+_budget_alert_armed = True
+BUDGET_ALERT_THRESHOLD = float(os.getenv("BUDGET_ALERT_THRESHOLD", "0.9"))
+BUDGET_ALERT_RELEASE = float(os.getenv("BUDGET_ALERT_RELEASE", "0.5"))
+
+
+async def _maybe_alert_budget(
+    portfolio_risk: float,
+    max_risk: float,
+    active_count: Optional[int] = None,
+) -> None:
+    """Admin alert on (near-)exhausted portfolio risk budget."""
+    global _budget_alert_armed
+    if not max_risk or max_risk <= 0:
+        return
+    ratio = portfolio_risk / max_risk
+    if _budget_alert_armed and ratio >= BUDGET_ALERT_THRESHOLD:
+        _budget_alert_armed = False
+        _slots = f", активных {active_count}" if active_count is not None else ""
+        _text = (
+            f"Бюджет портфеля занят: {portfolio_risk:.2f}% из {max_risk:.2f}%"
+            f"{_slots} — новые сигналы блокируются по portfolio_risk"
+        )
+        logger.warning(f"Portfolio budget alert: {_text}")
+        # Tests must never message admins (DB fixtures use real values).
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        try:
+            from bot.notifier import send_admin_alert
+            await send_admin_alert(_text)
+        except Exception as e:
+            logger.warning(f"Budget alert send failed: {e}")
+    elif not _budget_alert_armed and ratio <= BUDGET_ALERT_RELEASE:
+        _budget_alert_armed = True
+        logger.info(
+            f"Portfolio budget released: {portfolio_risk:.2f}% <= "
+            f"{BUDGET_ALERT_RELEASE * max_risk:.2f}% — alert re-armed"
+        )
+
+
 # ── Signal Funnel Logging ──────────────────────────────────────────────
-_FUNNEL_GATES = [
-    "cooldown", "portfolio_risk", "indicators", "pattern_engine",
-    "structure_alignment", "sweep_required", "regime_block",
-    "sl_tp", "risk_engine", "dedup",
-]
+# Canonical gate names live in monitoring/gate_taxonomy.py (single source
+# shared with storage.trace.GATE_ORDER and the backtest funnel buckets).
+_FUNNEL_GATES = list(LIVE_GATES) + list(MARKER_GATES)
+_known_gate_names = frozenset(_FUNNEL_GATES)
+_unknown_gates_warned: set[str] = set()
 
 
 class _FunnelCounter:
@@ -65,6 +111,14 @@ class _FunnelCounter:
 
     def log_gate(self, symbol: str, tf: str, gate: str, status: str, detail: str = ""):
         tag = f"[FUNNEL] {symbol} {tf}"
+        if gate not in _known_gate_names and gate not in _unknown_gates_warned:
+            # Taxonomy drift: a new gate name that monitoring/gate_taxonomy.py
+            # doesn't know about (would silently vanish from comparisons).
+            _unknown_gates_warned.add(gate)
+            logger.warning(
+                f"{tag} → {gate}: gate not in monitoring/gate_taxonomy.py — "
+                f"add it to LIVE_GATES/MARKER_GATES"
+            )
         if status == "PASS":
             logger.debug(f"{tag} → {gate}: PASS")
         elif status == "BLOCKED":
@@ -235,13 +289,16 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             max_sigs = config.max_active_signals
             max_risk = config.max_portfolio_risk_pct
             active_count = await db.get_active_signals_count()
+            portfolio_risk = await db.get_portfolio_risk_sum()
+            # Budget occupancy alert — evaluated even when the count gate
+            # below blocks first (both limits usually fill together).
+            await _maybe_alert_budget(portfolio_risk, max_risk, active_count)
             if active_count >= max_sigs:
                 reason = f"max active signals ({active_count}/{max_sigs})"
                 _funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
                 trace.blocked("portfolio_risk", reason)
                 await trace.save(db)
                 return None
-            portfolio_risk = await db.get_portfolio_risk_sum()
             if portfolio_risk >= max_risk:
                 reason = f"portfolio risk {portfolio_risk:.1f}% >= {max_risk}%"
                 _funnel.log_gate(symbol, timeframe, "portfolio_risk", "BLOCKED", reason)
@@ -312,7 +369,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             _df_1d_early = await exchange_client.fetch_ohlcv(symbol, "1d", limit=60)
             _df_4h_early = await exchange_client.fetch_ohlcv(symbol, "4h", limit=60)
             if _df_1d_early is not None and _df_4h_early is not None:
-                from market_structure.htf_bias_v2 import get_htf_bias_v2
+                # NB: get_htf_bias_v2 is imported at module top — a function-local
+                # import here would shadow it for the whole scan_symbol_v2 scope
+                # and raise UnboundLocalError at Phase 1.45 when this fetch fails.
                 _early_htf = get_htf_bias_v2(
                     None, _df_1d_early, _df_4h_early, _df_clean.tail(60),
                 )
@@ -538,8 +597,9 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         sl_source = trade_plan.sl_source
 
         if not trade_plan.is_valid or sl is None or tp is None:
-            _funnel.log_gate(symbol, timeframe, "sl_tp", "BLOCKED", "calculation failed")
-            trace.blocked("sl_tp", "SL/TP calculation failed")
+            _reject_reason = trade_plan.rejection_reason or "calculation failed"
+            _funnel.log_gate(symbol, timeframe, "sl_tp", "BLOCKED", _reject_reason)
+            trace.blocked("sl_tp", f"SL/TP calculation failed: {_reject_reason}")
             await trace.save(db)
             return None
 
@@ -581,8 +641,14 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
                 entry_price = float(trade_plan.entry_price)
 
                 if not trade_plan.is_valid or sl is None or tp is None:
-                    _funnel.log_gate(symbol, timeframe, "sl_tp_rebuild", "BLOCKED", "recalculation failed")
-                    trace.blocked("sl_tp_rebuild", "SL/TP recalculation failed after live alignment")
+                    _reject_reason = trade_plan.rejection_reason or "recalculation failed"
+                    _funnel.log_gate(
+                        symbol, timeframe, "sl_tp_rebuild", "BLOCKED", _reject_reason
+                    )
+                    trace.blocked(
+                        "sl_tp_rebuild",
+                        f"SL/TP recalculation failed after live alignment: {_reject_reason}",
+                    )
                     trace.set_version(VERSION, _config_snapshot)
                     await trace.save(db)
                     return None
@@ -902,6 +968,7 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
         # Re-check portfolio state (may have changed during pipeline)
         _recheck_active = await db.get_active_signals_count()
         _recheck_risk = await db.get_portfolio_risk_sum()
+        await _maybe_alert_budget(_recheck_risk, config.max_portfolio_risk_pct, _recheck_active)
         if _recheck_active >= config.max_active_signals:
             reason = f"max active signals ({_recheck_active}/{config.max_active_signals}) [re-check]"
             _funnel.log_gate(symbol, timeframe, "portfolio_risk_recheck", "BLOCKED", reason)
@@ -1089,9 +1156,31 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             tp=result.tp,
         )
 
+        # ═══ Phase 8: Notify ═══
+        # Notify before building the execution snapshot: sent_at is stamped at
+        # save time (before the Telegram call), so the real send moment has to
+        # be captured here — otherwise telegram_sent_at stays NULL and
+        # execution_latency_ms is a measurement of nothing.
+        _telegram_sent_at = None
+        try:
+            await notify_callback(result, context_verdict)
+            _telegram_sent_at = datetime.now(timezone.utc)
+        except Exception as e:
+            logger.error(
+                f"Failed to send notification for {result.signal} {symbol} {timeframe}: {e}"
+            )
+        if _telegram_sent_at is not None:
+            try:
+                await db.update_signal_execution_latency(
+                    saved_signal.id, telegram_sent_at=_telegram_sent_at
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to record telegram_sent_at for signal {saved_signal.id}: {e}"
+                )
+
         # Build execution snapshot
         _signal_detected_at = saved_signal.signal_detected_at
-        _telegram_sent_at = saved_signal.sent_at
         _latency_ms = None
         if _signal_detected_at and _telegram_sent_at:
             _latency_ms = (_telegram_sent_at - _signal_detected_at).total_seconds() * 1000
@@ -1125,17 +1214,13 @@ async def scan_symbol_v2(symbol: str, timeframe: str, notify_callback, blocked_c
             "p_tp": p_tp,
             "expected_rr": risk_decision.rr_ratio,
             "risk_pct": risk_decision.risk_pct,
+            # Feeds the daily report's WR-by-filter slices (ADX bucket / regime)
+            "adx": ind.adx,
+            "regime": regime.regime if regime else None,
         }
         trace.set_features(_trace_features)
         trace.set_version(VERSION, _config_snapshot)
         await trace.save(db, signal_id=saved_signal.id)
-
-        # ═══ Phase 8: Notify ═══
-
-        try:
-            await notify_callback(result, context_verdict)
-        except Exception as e:
-            logger.error(f"Failed to send notification for {result.signal} {symbol} {timeframe}: {e}")
 
         signals_total.labels(
             signal_type=result.signal.value,
@@ -1166,6 +1251,12 @@ async def run_scan_cycle(notify_callback, blocked_callback=None, timeframes: Opt
     symbols = get_active_symbols()
     disabled = await db.get_disabled_symbols() or []
     symbols = [s for s in symbols if s not in disabled]
+    symbols, unavailable = exchange_client.filter_available_symbols(symbols)
+    if unavailable:
+        logger.warning(
+            f"Skipping symbols not available on "
+            f"{config.exchange.market_type}: {', '.join(unavailable)}"
+        )
     tfs = timeframes if timeframes is not None else config.trading.primary_timeframes
 
     logger.info(f"Starting scan: {len(symbols)} symbols × {tfs}")

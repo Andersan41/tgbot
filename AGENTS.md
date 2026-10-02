@@ -29,26 +29,35 @@ is `plan/14-env-config.md`. Update those files when behavior changes, not this o
 
 ## Signal logic (new pipeline — scan_symbol_v2)
 
-**Architecture:** Pattern Engine → Feature Builder → Probability Engine → Risk Engine
+**Architecture:** Pattern Engine → Scanner gates → Probability (`estimate_p_tp`) → Risk Engine
 
 - **Layer 1 — Pattern Engine** (`strategy/pattern_engine.py`): Pure ICT pattern detection.
   Setup = trigger (BOS or sweep) + confirmation (OB or FVG). No indicators, no scoring.
-- **Layer 2 — Feature Builder** (`strategy/feature_builder.py`): Collects ~35 raw features
-  into a flat vector (ICT pattern, market structure, volume, indicators, MTF, context, risk).
-  No scoring, no blocking — just data.
-- **Layer 3 — Probability Engine** (`strategy/probability_engine.py`): Estimates P(TP),
-  expected RR, profit factor. Rules-based fallback; ML (XGBoost/RandomForest) replaces
-  rules once 100+ historical outcomes are collected.
+  Rejection reasons from all merge classes are joined (`"; ".join`).
+- **Layer 2 — Scanner gates** (`scheduler/scanner.py`): indicators, compression/regime,
+  HTF bias, classification (bos/sweep/displacement), POI entry, dedup, portfolio risk.
+  Trade plan built by `strategy/trade_engine.build_trade_plan()` (ICT SL/TP + liquidity map).
+  Gate names are catalogued in `monitoring/gate_taxonomy.py` (LIVE_GATES, MARKER_GATES,
+  BACKTEST_STEPS + cross-maps) — funnel/drift/trace all read it.
+- **Layer 3 — Probability** (`strategy/signal_evaluator.py::estimate_p_tp`): returns
+  `(p_tp, confidence)`, rules-based, context score [-1, 1] as an input component;
+  `confidence = min(0.85, p_tp)`. **Note:** the old `strategy/feature_builder.py` and
+  `strategy/probability_engine.py` modules were deleted (commit 03cc5b0) — docs/plans
+  referring to a "Feature Builder" / "Probability Engine" layer are stale.
 - **Layer 4 — Risk Engine** (`risk/engine.py`): Capital protection only. Hard gates:
   R:R minimum, SL absolute limits, portfolio risk, max active signals. Position sizing
-  via Kelly criterion with volatility adjustment.
+  via Kelly criterion: vol/MSS/SL multipliers, then final clamp to
+  `base_risk_pct`/`max_risk_pct` (Kelly never exceeds the base cap; confidence
+  multiplier `kelly *= confidence` is an f·p haircut, not a cap).
 
 **Old pipeline** (`scan_symbol`) still exists for backward compatibility.
 `run_scan_cycle()` calls `scan_symbol_v2()`.
 
 - Cooldown per `symbol_timeframe` is `SIGNAL_COOLDOWN_MINUTES` (default 45), effective cooldown =
-  `max(base, tf_minutes × multiplier)` (`SIGNAL_COOLDOWN_TF_MULTIPLIER`, default 2.0). **Persisted in
-  SQLite** (`db.get_cooldown` / `db.set_cooldown`) — survives restarts.
+  `max(base, tf_minutes × multiplier)` (`SIGNAL_COOLDOWN_TF_MULTIPLIER`, default 2.0). Persisted in
+  SQLite — read via `db.get_cooldown`, **written atomically inside
+  `db.save_signal_with_risk()`** together with the signal/outcome (scanner no longer
+  calls `db.set_cooldown`; `_set_cooldown` in scanner is dead code).
 - Context never blocks: `ContextScore` provides a score [-1, 1] for the Probability Engine.
 - BTC/ETH correlation removed as gates — become secondary features.
 - 15m confirmation TF removed entirely.
@@ -63,6 +72,10 @@ is `plan/14-env-config.md`. Update those files when behavior changes, not this o
 - **Max-duration exit** (`MAX_TRADE_DURATION_BARS`, default 72): trades that neither
   hit SL nor TP within this many bars are closed at the current close price. Prevents
   stale trades from dragging down win rate. Set to 0 to disable.
+- **Backtest TTL exit**: the backtest also force-closes trades older than
+  `OUTCOME_TTL_DAYS` (default 7, converted to bars) with `exit_reason="expired"` at the
+  current close — the same rule the live outcome tracker applies, so holding periods
+  stay comparable.
 - **TP scoring** uses power-scaled RR factor: `min(1.0, (rr/3.0)^0.6)` instead of
   linear cap. This rewards higher-RR targets (RR=3→0.72, RR=5→0.86, RR=10→1.0)
   instead of the old behavior where RR>=3 all scored equally.
@@ -74,7 +87,8 @@ is `plan/14-env-config.md`. Update those files when behavior changes, not this o
 - Каждые 15 минут сканируются все таймфреймы (1h, 4h).
 - Cooldown 45 мин защищает от дублей (persisted in SQLite).
 - `cmd_scan` (admin `/scan`) → `run_scan_cycle()` over all `primary_timeframes`.
-- `SHADOW_ENABLED=true` запускает shadow-сравнение после каждого цикла (`scheduler/shadow.py`).
+- Symbols that the exchange no longer lists (delisted/perp removed) are dropped from the
+  cycle once per run by `exchange_client.filter_available_symbols()` — no `.env` edit needed.
 
 ## Project-specific gotchas
 

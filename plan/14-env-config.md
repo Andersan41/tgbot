@@ -78,6 +78,7 @@ MARKET_TYPE=swap
 | `ADX_PERIOD` | `14` |
 | `ATR_MULTIPLIER_SL/TP` | `1.5/3.0` |
 | `MIN_RR_THRESHOLD` | `1.5` |
+| `MAX_TP_RR` | `6.0` | верхняя граница RR цели (0 = без ограничения) |
 | `CANDLES_LIMIT` | `200` |
 | `SYMBOL_OVERRIDES` | `{}` (JSON) |
 | `SIGNAL_COOLDOWN_MINUTES` | `45` |
@@ -94,9 +95,10 @@ MARKET_TYPE=swap
 | `NO_TRADE_MIN_ATR_PCT` | `0.6` | no-trade при низком ATR |
 | `VOLATILITY_LOW_THRESHOLD` | `0.8` | low-vol (% ATR) |
 | `VOLATILITY_HIGH_THRESHOLD` | `6.0` | high-vol |
-| `RISK_ENGINE_MIN_RR` | `1.2` | Risk Engine R:R min |
-| `RISK_ENGINE_SL_MIN_PCT` / `SL_MAX_PCT` | `0.25` / `5.0` | SL абс. лимиты |
-| `MAX_ACTIVE_SIGNALS` | `3` | макс активных |
+| `MIN_RR_THRESHOLD` (trading) | `1.5` | общий RR-gate: trade_engine + Risk Engine + funnel (сам ключ `RISK_ENGINE_MIN_RR` удалён — был мёртвым) |
+| `RISK_ENGINE_SL_MIN_PCT` / `SL_MAX_PCT` | `0.4` / `1.5` | SL абс. лимиты (MAX — log-only soft gate; жёсткий потолок = `MAX_SL_ATR`) |
+| `RISK_ENGINE_BASE_RISK_PCT` | `0.6` | жёсткий потолок риска на сделку — применяется **после** vol/MSS/SL-множителей (иначе бонусы давали до ~0.8% и 5 × base не влезало в 3.0%). Kelly: `f = min((p·b−q)/b, 0.20) × confidence`; `confidence ≡ p_tp` из `estimate_p_tp` — это задокументированный консервативный haircut f·p, не двойной счёт по ошибке. `confidence` вне [0, 1] → reject (`probability/confidence outside [0, 1]`) |
+| `MAX_ACTIVE_SIGNALS` | `5` | макс активных (слоты под бюджет 5 × 0.6%) |
 | `MAX_PORTFOLIO_RISK_PCT` | `3.0` | макс портфельный риск |
 | `DYNAMIC_RISK_ENABLED` | `true` | dynamic risk |
 | `VOLATILITY_FILTER_ENABLED` | `true` | volatility gate |

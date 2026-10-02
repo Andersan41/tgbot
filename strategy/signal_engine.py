@@ -169,12 +169,7 @@ class SignalResult:
         if self._zone_quality_multiplier != 1.0:
             lines.append(f"Zone Quality: {self._zone_quality_multiplier:.1f}x ({self._zone_type or 'neutral'} entry)")
 
-        if self._confidence_v2 is not None:
-            quality_map = {"strong": "высокая", "moderate": "средняя", "weak": "низкая"}
-            q = quality_map.get(self._confidence_v2.quality, self._confidence_v2.quality)
-            lines.append(f"Confidence: {self.confidence:.0f}/100")
-        else:
-            lines.append(f"Confidence: {self.confidence:.0f}/100")
+        lines.append(f"Confidence: {self.confidence:.0f}/100")
         return "\n".join(lines)
 
 

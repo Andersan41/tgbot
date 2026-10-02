@@ -159,13 +159,12 @@ def _format_blocked_message(result: 'SignalResult', symbol: str, timeframe: str,
     return "\n".join(lines)
 
 
-async def send_error_alert(message: str, retries: int = 3):
-    """Отправляем уведомление об ошибке администраторам с повторными попытками."""
+async def _send_to_admins(text: str, retries: int = 3) -> None:
+    """Отправить HTML-текст всем администраторам с повторными попытками."""
     if not config.telegram.admin_ids:
         return
 
     bot = get_bot()
-    text = f"⚠️ <b>Ошибка бота:</b>\n<code>{html.escape(message)}</code>"
 
     for admin_id in config.telegram.admin_ids:
         for attempt in range(retries):
@@ -175,7 +174,7 @@ async def send_error_alert(message: str, retries: int = 3):
                     text=text,
                     parse_mode=ParseMode.HTML,
                 )
-                logger.info(f"Error alert sent to admin {admin_id}")
+                logger.info(f"Admin alert sent to {admin_id}")
                 break
             except TelegramError as e:
                 if attempt < retries - 1:
@@ -183,10 +182,22 @@ async def send_error_alert(message: str, retries: int = 3):
                     logger.warning(f"Admin alert send failed (attempt {attempt + 1}/{retries}), retrying in {delay}s: {e}")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(f"Failed to send error alert to admin {admin_id} after {retries} attempts: {e}")
+                    logger.error(f"Failed to send admin alert to {admin_id} after {retries} attempts: {e}")
             except Exception as e:
                 logger.error(f"Unexpected error sending admin alert: {e}", exc_info=True)
                 break
+
+
+async def send_error_alert(message: str, retries: int = 3):
+    """Отправляем уведомление об ошибке администраторам с повторными попытками."""
+    await _send_to_admins(
+        f"⚠️ <b>Ошибка бота:</b>\n<code>{html.escape(message)}</code>", retries
+    )
+
+
+async def send_admin_alert(message: str, retries: int = 3):
+    """Оперативное уведомление администраторам (бюджет портфеля, деградации)."""
+    await _send_to_admins(f"📢 <b>Уведомление бота:</b>\n{message}", retries)
 
 
 # ── Hypothesis formatting (new pipeline) ─────────────────────────────

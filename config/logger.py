@@ -11,7 +11,8 @@ def setup_logger():
     os.makedirs(os.path.dirname(config.log_file), exist_ok=True)
 
     # Создаём logs.txt для уведомлений о блокировке (простой файл, без rotation)
-    logs_dir = "logs"
+    # LOG_DIR позволяет тестам уводить синк во временную папку
+    logs_dir = os.getenv("LOG_DIR", "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
     logger.remove()

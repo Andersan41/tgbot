@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
 from config.settings import config
+from data.exchange_client import exchange_client
 from scheduler.scanner import run_scan_cycle
 
 
@@ -116,6 +117,14 @@ class TaskScheduler:
         symbols = get_active_symbols()
         if not symbols:
             return
+        symbols, unavailable = exchange_client.filter_available_symbols(symbols)
+        if unavailable:
+            logger.warning(
+                f"History update: skipping symbols not available on "
+                f"{config.exchange.market_type}: {', '.join(unavailable)}"
+            )
+        if not symbols:
+            return
         logger.info(f"Scheduler: updating 15m OHLCV history for {len(symbols)} symbols")
         for symbol in symbols:
             try:
@@ -149,6 +158,14 @@ class TaskScheduler:
         from config.settings import get_active_symbols
 
         symbols = get_active_symbols()
+        if not symbols:
+            return
+        symbols, unavailable = exchange_client.filter_available_symbols(symbols)
+        if unavailable:
+            logger.warning(
+                f"Offline cache sync: skipping symbols not available on "
+                f"{config.exchange.market_type}: {', '.join(unavailable)}"
+            )
         if not symbols:
             return
         logger.info(f"Scheduler: syncing offline 15m OHLCV cache for {len(symbols)} symbols")

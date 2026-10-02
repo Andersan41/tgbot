@@ -38,6 +38,7 @@ import pandas as pd
 from loguru import logger
 
 from config.settings import config
+from monitoring import gate_taxonomy
 from data.exchange_client import exchange_client
 from indicators.engine import IndicatorEngine, IndicatorValues
 from strategy.signal_engine import SignalType, SignalResult
@@ -88,6 +89,16 @@ class BacktestTrade:
     signal_score: int = 0
     confidence: float = 0.0
     reasons: list[str] = field(default_factory=list)
+    # Signal metadata (from SignalEngine result) — consumed by
+    # analytics/factor_stats (verdict/factor_*) and funnel/edge-discovery
+    # reports. Passed by every BacktestTrade(...) construction site.
+    verdict: str = ""
+    factor_strengths: dict = field(default_factory=dict)
+    factor_present: dict = field(default_factory=dict)
+    confidence_v2_score: float = 0.0
+    confidence_v2_quality: str = ""
+    sl_distance_pct: float = 0.0
+    theoretical_rr: float = 0.0
     # New pipeline fields
     p_tp: float = 0.0
     risk_pct: float = 0.0
@@ -159,27 +170,13 @@ class FunnelData:
     sl_shifted: int = 0
 
 
-# Pipeline funnel steps (in order — first match wins)
-FUNNEL_STEPS = [
-    "NO_PATTERN",
-    "SETUP_TYPE_GATE",
-    "HTF_BIAS_BLOCKED",
-    "ENTRY_ZONE",
-    "RISK_ENGINE_BLOCKED",
-    "DEDUP",
-    "PASSED",
-]
+# Pipeline funnel steps (in order — first match wins).
+# Canonical definition: monitoring/gate_taxonomy.py — the same taxonomy that
+# names the live scanner gates, so live/backtest funnels stay comparable.
+FUNNEL_STEPS = list(gate_taxonomy.BACKTEST_STEPS)
 
 # Which pipeline steps are actually implemented in the backtest
-BACKTEST_ACTIVE: dict[str, bool] = {
-    "NO_PATTERN": True,
-    "SETUP_TYPE_GATE": True,
-    "HTF_BIAS_BLOCKED": True,
-    "ENTRY_ZONE": True,
-    "RISK_ENGINE_BLOCKED": True,
-    "DEDUP": True,
-    "PASSED": True,
-}
+BACKTEST_ACTIVE: dict[str, bool] = dict(gate_taxonomy.BACKTEST_ACTIVE)
 
 
 @dataclass
@@ -522,6 +519,15 @@ class BacktestEngine:
         # Funnel instrumentation (populated only when self.instrument=True)
         _funnel_counts: dict[str, int] = {s: 0 for s in FUNNEL_STEPS}
 
+        # Live parity: outcome_tracker closes a signal after OUTCOME_TTL_DAYS
+        # at the current close (EXPIRED). Express that window in bars so a
+        # backtest trade cannot outlive its live counterpart.
+        _ttl_bars = 0
+        if config.outcome_ttl_days > 0:
+            _tf_seconds = timeframe_duration(self.timeframe).total_seconds()
+            if _tf_seconds > 0:
+                _ttl_bars = int(config.outcome_ttl_days * 86400 / _tf_seconds)
+
         for i in range(warmup, len(df)):
             # Analysis window capped at `candle_limit` — mirrors the live scanner,
             # which fetches exactly candles_limit candles. This is both a parity fix
@@ -646,6 +652,13 @@ class BacktestEngine:
                     # Max-duration exit: close stale trades at current price
                     if config.max_trade_duration_bars > 0 and (i - t.entry_index) >= config.max_trade_duration_bars:
                         t.exit_price, t.exit_index, t.exit_reason = _close_price, i, "max_dur"
+                        t.exit_timestamp = str(df.index[i])
+                        trades.append(t)
+                        continue
+                    # Live TTL exit: outcome_tracker would mark this signal
+                    # EXPIRED and close it at the current close price.
+                    if _ttl_bars > 0 and (i - t.entry_index) >= _ttl_bars:
+                        t.exit_price, t.exit_index, t.exit_reason = _close_price, i, "expired"
                         t.exit_timestamp = str(df.index[i])
                         trades.append(t)
                         continue

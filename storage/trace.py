@@ -27,12 +27,9 @@ from loguru import logger
 from storage.database import Database
 
 
-# Canonical gate order — matches _FUNNEL_GATES in scanner.py (ICT Core)
-GATE_ORDER = [
-    "cooldown", "portfolio_risk", "indicators", "pattern_engine",
-    "structure_alignment", "sweep_required", "regime_block",
-    "sl_tp", "risk_engine", "dedup",
-]
+# Canonical gate order — shared with scanner._FUNNEL_GATES; single source
+# of truth is monitoring/gate_taxonomy.py (live v2 pipeline).
+from monitoring.gate_taxonomy import GATE_ORDER  # noqa: F401  (re-export)
 
 # Feature keys that are captured in the snapshot
 FEATURE_KEYS = {
@@ -74,7 +71,7 @@ class ExecutionSnapshot:
     atr: Optional[float] = None             # ATR at signal creation
     tick_size: Optional[float] = None       # Minimum price increment
     buffer_total: Optional[float] = None    # Total SL buffer applied
-    execution_latency_ms: Optional[float] = None  # signal detection → save
+    execution_latency_ms: Optional[float] = None  # signal detection → telegram send
     entry_source: Optional[str] = None      # CLOSE / OPEN / MID / BID / ASK
     entry_price: Optional[float] = None     # Actual entry price used
     bid: Optional[float] = None

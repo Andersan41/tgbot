@@ -84,7 +84,12 @@ class TestScanSymbolMetrics:
         monkeypatch.setattr("risk.engine.risk_engine", MagicMock(evaluate=MagicMock(return_value=risk_mock)))
         monkeypatch.setattr("scheduler.scanner.db", MagicMock(
             save_signal=AsyncMock(), set_cooldown=AsyncMock(),
+            save_signal_with_risk=AsyncMock(
+                return_value=(MagicMock(id=1, signal_detected_at=None), "admitted")
+            ),
+            update_signal_execution_latency=AsyncMock(),
             get_active_signals_count=AsyncMock(return_value=0),
+            get_active_signals_count_by_symbol=AsyncMock(return_value=0),
             get_portfolio_risk_sum=AsyncMock(return_value=0.0),
             get_last_signal=AsyncMock(return_value=None),
             create_outcome=AsyncMock(),
@@ -105,6 +110,7 @@ class TestScanSymbolMetrics:
         monkeypatch.setattr("scheduler.scanner._get_indicators", AsyncMock(return_value=(MagicMock(), MagicMock())))
         monkeypatch.setattr("scheduler.scanner.db", MagicMock(
             get_active_signals_count=AsyncMock(return_value=0),
+            get_active_signals_count_by_symbol=AsyncMock(return_value=0),
             get_portfolio_risk_sum=AsyncMock(return_value=0.0),
         ))
 

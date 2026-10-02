@@ -51,7 +51,10 @@ class TestSetupErrorSink:
         # Не должно кидать, sink не добавлен
         mock_bot.send_message.assert_not_called()
 
-    def test_adds_sink_when_error_channel_set(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_adds_sink_when_error_channel_set(self, monkeypatch):
+        # Coroutine sink + enqueue=True requires a running event loop at
+        # logger.add() time (main.py calls this inside async main()).
         monkeypatch.setenv("TELEGRAM_ERROR_CHANNEL_ID", "err_ch_42")
         import config.settings as settings
         importlib.reload(settings)
@@ -59,13 +62,17 @@ class TestSetupErrorSink:
         mock_bot = MagicMock()
         mock_bot.send_message = AsyncMock()
 
-        from config.logger import setup_error_sink
-        setup_error_sink(mock_bot)
-
-        # Проверяем, что sink добавлен (logger应该有 больше sink'ов)
-        # После setup_error_sink должен быть минимум один дополнительный sink
         from loguru import logger
-        # logger.add() вызван — sink count увеличился
+        from config.logger import setup_error_sink
+        before = set(logger._core.handlers)  # handlers is {id: handler}
+        try:
+            setup_error_sink(mock_bot)
+            added = set(logger._core.handlers) - before
+            assert len(added) >= 1, "setup_error_sink must add a loguru sink"
+        finally:
+            # Do not leak a sink pointing at the mock into other tests
+            for hid in set(logger._core.handlers) - before:
+                logger.remove(hid)
 
 
 # ── T3.3: rate limiter ──────────────────────────────────────────────
@@ -99,9 +106,10 @@ class TestRateLimiter:
     async def test_rate_limit_blocks_after_5(self):
         from bot.rate_limit import get_limiter
         limiter = get_limiter(100001)
-        # 5 вызовов должны пройти
+        # aiolimiter's has_capacity() does NOT consume — acquire to drain
+        # the 5-per-10s budget first.
         for _ in range(5):
-            assert limiter.has_capacity()
+            await limiter.acquire()
         # 6-й должен быть заблокирован
         assert not limiter.has_capacity()
 

@@ -188,6 +188,8 @@ class RiskEngine:
                 logger.info(f"Risk soft gate: SL tight vs ATR {sl_distance_pct:.2f}% < {self.sl_min_atr_multiplier}x ATR (proceeding via Kelly)")
 
         # === POSITION SIZING ===
+        # (confidence ∈ [0, 1] was validated above — a 0-100 scale caller is
+        # rejected with "probability/confidence outside [0, 1]", not sized.)
 
         # Kelly-inspired: f = (p * b - q) / b
         p = p_tp
@@ -199,10 +201,13 @@ class RiskEngine:
                                 rejection_reason="non-positive Kelly allocation")
         kelly = min(kelly, 0.20)  # cap at 20% (half-Kelly)
 
-        # Scale by model confidence
+        # Scale by model confidence. NOTE: estimate_p_tp() returns
+        # confidence ≡ p_tp, so today this is an intentional f·p haircut
+        # (conservative shrink of the Kelly fraction), not an independent
+        # signal — kept as-is by design (see plan/14-env-config.md).
         kelly *= confidence
 
-        # Final risk = min(kelly, base_risk)
+        # Cap before the quality multipliers: they modulate the capped value.
         risk_pct = min(kelly * 100, self.base_risk_pct)
 
         # Volatility adjustment
@@ -226,8 +231,15 @@ class RiskEngine:
         elif sl_distance_pct > 3.0:
             risk_pct *= 0.8  # penalty for wide SL
 
-        # Clamp
-        risk_pct = round(max(self.min_risk_pct, min(risk_pct, self.max_risk_pct)), 4)
+        # Clamp — base_risk_pct is a HARD per-signal cap applied after the
+        # quality bonuses: MAX_ACTIVE_SIGNALS × base must fit inside
+        # max_portfolio_risk_pct (5 × 0.6% = 3.0%). Bonuses can only bring
+        # the size back up to base, never past it; downward adjustments
+        # (volatility, wide SL) still apply.
+        risk_pct = round(
+            max(self.min_risk_pct, min(risk_pct, self.base_risk_pct, self.max_risk_pct)),
+            4,
+        )
         if not math.isfinite(risk_pct) or risk_pct <= 0:
             return RiskDecision(False, rejection_reason="invalid calculated risk")
         if round(portfolio.total_risk_pct + risk_pct, 10) > portfolio.max_portfolio_risk_pct:

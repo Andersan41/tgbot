@@ -127,7 +127,13 @@ class TestScanSymbolV2:
         monkeypatch.setattr("scheduler.scanner._get_indicators",
                             AsyncMock(return_value=(ind_mock, df_mock)))
         monkeypatch.setattr("scheduler.scanner._detect_regime", MagicMock(return_value=None))
-        _mock_sweep = MagicMock(is_valid=True, sweep_type="bearish", reclaim_candles=2)
+        _mock_sweep = MagicMock(
+            is_valid=True, sweep_type="bearish", reclaim_candles=2,
+            # Fields read by liquidity.pool.build_liquidity_map / trade_engine
+            type="bearish", swept_level=51000.0, strength=0.7,
+            sweep_high=51000.0, sweep_low=50800.0,
+            high=51000.0, low=50800.0, candle_index=5,
+        )
         monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[_mock_sweep]))
         monkeypatch.setattr("liquidity.order_blocks.detect_order_blocks", MagicMock(return_value=[]))
         monkeypatch.setattr("market_structure.structure.analyze_structure",
@@ -150,6 +156,10 @@ class TestScanSymbolV2:
             get_portfolio_risk_sum=AsyncMock(return_value=0.0),
             get_last_signal=AsyncMock(return_value=None),
             create_outcome=AsyncMock(),
+            save_signal_with_risk=AsyncMock(
+                return_value=(MagicMock(id=1, signal_detected_at=None), "admitted")
+            ),
+            update_signal_execution_latency=AsyncMock(),
         ))
 
         cb = AsyncMock()
@@ -189,13 +199,23 @@ class TestScanSymbolV2:
             get_portfolio_risk_sum=AsyncMock(return_value=0.0),
             get_last_signal=AsyncMock(return_value=None),
             create_outcome=AsyncMock(),
+            save_signal_with_risk=AsyncMock(
+                return_value=(MagicMock(id=1, signal_detected_at=None), "admitted")
+            ),
+            update_signal_execution_latency=AsyncMock(),
         )
 
         monkeypatch.setattr("scheduler.scanner._is_cooldown_active", AsyncMock(return_value=(False, 0)))
         monkeypatch.setattr("scheduler.scanner._get_indicators",
                             AsyncMock(return_value=(ind_mock, df_mock)))
         monkeypatch.setattr("scheduler.scanner._detect_regime", MagicMock(return_value=None))
-        _mock_sweep = MagicMock(is_valid=True, sweep_type="bearish", reclaim_candles=2)
+        _mock_sweep = MagicMock(
+            is_valid=True, sweep_type="bearish", reclaim_candles=2,
+            # Fields read by liquidity.pool.build_liquidity_map / trade_engine
+            type="bearish", swept_level=51000.0, strength=0.7,
+            sweep_high=51000.0, sweep_low=50800.0,
+            high=51000.0, low=50800.0, candle_index=5,
+        )
         monkeypatch.setattr("liquidity.sweep.detect_sweeps", MagicMock(return_value=[_mock_sweep]))
         monkeypatch.setattr("liquidity.order_blocks.detect_order_blocks", MagicMock(return_value=[]))
         monkeypatch.setattr("market_structure.structure.analyze_structure",
@@ -213,7 +233,9 @@ class TestScanSymbolV2:
         monkeypatch.setattr("scheduler.scanner.db", mock_db)
 
         await scan_symbol_v2("BTC/USDT", "1h", AsyncMock())
-        mock_db.set_cooldown.assert_awaited_once()
+        # Cooldown is persisted atomically inside save_signal_with_risk
+        # (storage/database.py) — scanner no longer calls db.set_cooldown.
+        mock_db.save_signal_with_risk.assert_awaited_once()
 
 
 class TestPortfolioRiskGate:

@@ -96,9 +96,9 @@ class TestSourceSwitch:
         resample_calls = []
         orig_resample = resampler_mod.resample_ohlcv
 
-        def fake_resample(df, target_tf):
+        def fake_resample(df, target_tf, source_tf="15m"):
             resample_calls.append(target_tf)
-            return orig_resample(df, target_tf)
+            return orig_resample(df, target_tf, source_tf=source_tf)
 
         monkeypatch.setattr(resampler_mod, "resample_ohlcv", fake_resample)
 

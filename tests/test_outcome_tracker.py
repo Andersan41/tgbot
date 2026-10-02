@@ -16,7 +16,8 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from storage.database import db, Base, Signal, SignalOutcome
-from scheduler.outcome_tracker import check_open_outcomes
+from scheduler.outcome_tracker import check_open_outcomes, _window_failures, WINDOW_FAILURE_LIMIT
+from scheduler.outcome_window import load_outcome_window
 
 
 @pytest.fixture(autouse=True)
@@ -73,11 +74,32 @@ async def sell_signal():
 
 
 @pytest.fixture(autouse=True)
+def reset_window_failures():
+    _window_failures.clear()
+    yield
+    _window_failures.clear()
+
+
+@pytest.fixture(autouse=True)
 def mock_notification():
     """Mock Telegram notifications to prevent real messages during tests."""
     with patch(
         "scheduler.outcome_tracker._send_close_notification",
         new_callable=AsyncMock,
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_outcome_window():
+    """No network in unit tests: load_outcome_window() hits the live exchange.
+
+    Without this every run blocks on fetch_ohlcv (CI hang). Individual tests
+    can still re-patch it with a real window when they need one.
+    """
+    with patch(
+        "scheduler.outcome_tracker.load_outcome_window",
+        new_callable=AsyncMock, return_value=[],
     ):
         yield
 
@@ -311,3 +333,134 @@ class TestTickerSLBreachWhileCandleInside:
         stats = await db.get_outcome_stats()
         assert stats["closed"] == 1
         assert stats["wins"] == 1  # TP
+
+
+class TestExpiredWithoutWindow:
+    """EXPIRED закрывается даже когда окно истории нечитаемо (иначе outcome
+    вечно OPEN и съедает бюджет портфельного риска)."""
+
+    @pytest.mark.asyncio
+    async def test_expired_closes_on_broken_window(self, setup_db):
+        old_ts = datetime.now(timezone.utc) - timedelta(days=8)
+        sig = await db.save_signal(
+            symbol="SOL/USDT", timeframe="1h", signal_type="BUY",
+            close_price=50.0, sl=48.0, tp=55.0, score=5, reasons=["test"],
+            entry_candle_open=old_ts - timedelta(hours=1),
+        )
+        async with db._session_factory() as session:
+            row = (await session.execute(
+                select(Signal).where(Signal.id == sig.id)
+            )).scalar_one()
+            row.created_at = old_ts
+            await session.commit()
+        await db.create_outcome(sig.id)
+
+        with patch(
+            "scheduler.outcome_tracker.load_outcome_window",
+            new_callable=AsyncMock,
+            side_effect=ValueError("outcome history unavailable"),
+        ), patch(
+            "scheduler.outcome_tracker.exchange_client.fetch_ticker_price",
+            new_callable=AsyncMock, return_value=51.0,
+        ), patch(
+            "scheduler.outcome_tracker._send_close_notification",
+            new_callable=AsyncMock,
+        ) as notify:
+            await check_open_outcomes()
+
+        stats = await db.get_outcome_stats()
+        assert stats["closed"] == 1
+        assert stats["open"] == 0
+        notify.assert_awaited_once()
+        assert notify.await_args.args[1] == "EXPIRED"
+
+
+class TestWindowFailureFallback:
+    """Нечитаемое окно: несколько ретраев, затем ticker-only оценка."""
+
+    @pytest.mark.asyncio
+    async def test_retries_then_ticker_fallback(self, buy_signal, setup_db):
+        open_outcomes = await db.get_open_outcomes()
+        initial_checked_at = open_outcomes[0].checked_at
+        broken = dict(
+            new_callable=AsyncMock,
+            side_effect=ValueError("outcome history unavailable"),
+        )
+        for attempt in range(WINDOW_FAILURE_LIMIT - 1):
+            with patch(
+                "scheduler.outcome_tracker.load_outcome_window", **broken
+            ), patch(
+                "scheduler.outcome_tracker.exchange_client.fetch_ticker_price",
+                new_callable=AsyncMock, return_value=105.0,
+            ):
+                await check_open_outcomes()
+            open_outcomes = await db.get_open_outcomes()
+            assert len(open_outcomes) == 1, f"closed early at attempt {attempt}"
+            # окно ещё можно починить — checked_at не двигаем
+            assert open_outcomes[0].checked_at == initial_checked_at
+
+        # Последняя неудача: checked_at продвигается, окно перестаёт расти
+        with patch(
+            "scheduler.outcome_tracker.load_outcome_window", **broken
+        ), patch(
+            "scheduler.outcome_tracker.exchange_client.fetch_ticker_price",
+            new_callable=AsyncMock, return_value=105.0,
+        ):
+            await check_open_outcomes()
+
+        open_outcomes = await db.get_open_outcomes()
+        assert len(open_outcomes) == 1
+        assert open_outcomes[0].checked_at > initial_checked_at
+        assert len(_window_failures) == 1
+
+    @pytest.mark.asyncio
+    async def test_fallback_resolves_sl_hit(self, buy_signal, setup_db):
+        for _ in range(WINDOW_FAILURE_LIMIT):
+            with patch(
+                "scheduler.outcome_tracker.load_outcome_window",
+                new_callable=AsyncMock,
+                side_effect=ValueError("outcome history unavailable"),
+            ), patch(
+                "scheduler.outcome_tracker.exchange_client.fetch_ticker_price",
+                new_callable=AsyncMock, return_value=94.0,
+            ):
+                await check_open_outcomes()
+
+        stats = await db.get_outcome_stats()
+        assert stats["closed"] == 1
+        assert stats["wins"] == 0  # SL по тикеру
+
+
+class TestWindowGapTolerance:
+    """Дырка в минутной истории не роняет проверку исхода."""
+
+    @pytest.mark.asyncio
+    async def test_gap_is_skipped_not_fatal(self):
+        from types import SimpleNamespace
+
+        start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        signal = SimpleNamespace(
+            id=1, symbol="BTC/USDT", created_at=start,
+            sl=95.0, tp=110.0, signal_type="BUY",
+        )
+        outcome = SimpleNamespace(checked_at=None)
+        now = start + timedelta(minutes=5)
+        # minute +1 отсутствует
+        minutes = [start + timedelta(minutes=i) for i in (0, 2, 3, 4, 5)]
+
+        class FrameClient:
+            async def fetch_ohlcv(self, symbol, timeframe, limit=1000,
+                                  since=None, drop_last=False, **kw):
+                rows = [m for m in minutes if m.timestamp() * 1000 >= since]
+                idx = pd.DatetimeIndex(rows)
+                frame = pd.DataFrame(
+                    {"open": [1.0] * len(rows), "high": [1.0] * len(rows),
+                     "low": [1.0] * len(rows), "close": [1.0] * len(rows)},
+                    index=idx,
+                )
+                frame.index.name = "timestamp"
+                return frame
+
+        bars = await load_outcome_window(FrameClient(), signal, outcome, now)
+        # 6 минут окна, одна отсутствует → 5 свечей, дырка пропущена
+        assert len(bars) == 5

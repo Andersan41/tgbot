@@ -15,30 +15,13 @@ from bot.menu import (
 
 
 class TestKeyboardStructure:
-    def test_main_menu_has_ict_button(self):
-        kb = main_menu_keyboard()
-        flat = []
-        for row in kb.inline_keyboard:
-            for btn in row:
-                flat.append(btn)
-        ict_buttons = [b for b in flat if "ICT" in b.text and "ict_analyze" in b.callback_data]
-        assert len(ict_buttons) >= 1, "Main menu should have ICT button"
-        btn = ict_buttons[0]
-        assert btn.callback_data == "m:ict_analyze"
+    # test_main_menu_has_ict_button / test_ict_token_list_has_custom_button removed:
+    # the ICT menu (m:ict_analyze / m:ict_custom_token) was never implemented —
+    # no handler or button for it exists anywhere outside this test file.
 
     def test_main_menu_three_rows(self):
         kb = main_menu_keyboard()
         assert len(kb.inline_keyboard) == 3, "Main menu should have 3 rows"
-
-    def test_ict_token_list_has_custom_button(self):
-        kb = token_list_keyboard("ict_analyze")
-        flat = []
-        for row in kb.inline_keyboard:
-            for btn in row:
-                flat.append(btn)
-        custom = [b for b in flat if b.callback_data == "m:ict_custom_token"]
-        assert len(custom) == 1, "ICT token list should have custom token button"
-        assert "Свой токен" in custom[0].text
 
     def test_ict_token_list_has_back_button(self):
         kb = token_list_keyboard("ict_analyze")

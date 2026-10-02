@@ -233,6 +233,26 @@ class TestFalsePositives:
         assert report.strong_hit_sl == 2
         assert report.strong_fp_rate == pytest.approx(66.7, abs=0.1)
 
+    def test_lowercase_prod_verdict_counted(self):
+        """Prod stores score_verdict lowercase ('strong') — must bucket as STRONG.
+
+        Regression: uppercase-only comparisons silently skipped all real data.
+        """
+        trades = [
+            _make_trade(pnl=-1.0, verdict="strong", exit_reason="sl"),
+            _make_trade(pnl=2.0, verdict="strong", exit_reason="tp"),
+            _make_trade(pnl=1.0, verdict="weak", exit_reason="tp"),
+        ]
+        report = compute_false_positives(trades)
+        assert report.strong_signals == 2
+        assert report.strong_hit_sl == 1
+        assert report.fp_by_verdict["STRONG"]["sl"] == 1
+        assert "WEAK" in report.fp_by_verdict
+
+        stats = compute_factor_stats(trades)
+        for fs in stats.values():
+            assert fs.false_positive_count == 1
+
     def test_moderate_fp_rate(self):
         """Moderate FP rate computed separately."""
         trades = [

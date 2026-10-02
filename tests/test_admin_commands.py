@@ -348,7 +348,7 @@ class TestScannerDisabledFilter:
 
         # Mock scan_symbol to track which symbols were scanned
         scanned = []
-        async def mock_scan(symbol, tf, cb, blocked_cb=None):
+        async def mock_scan(symbol, tf, cb, blocked_cb=None, funnel=None):
             scanned.append((symbol, tf))
             return None
 
@@ -375,7 +375,7 @@ class TestScannerDisabledFilter:
         from scheduler.scanner import run_scan_cycle
 
         scanned = []
-        async def mock_scan(symbol, tf, cb, blocked_cb=None):
+        async def mock_scan(symbol, tf, cb, blocked_cb=None, funnel=None):
             scanned.append((symbol, tf))
             return None
 
