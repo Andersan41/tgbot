@@ -1,8 +1,0 @@
-cluster,representative,avg_rank,cluster_members,lr_coef,shap_abs
-7,dmi_strength,4.0,"dmi_strength, adx_strength, rsi_strength, ema_spread_pct, supertrend_strength, ema_spread_trend",0.24522634891589684,0.3022912
-4,atr_percentile,4.666666666666667,"atr_percentile, macd_bullish_cross, ema_bearish_cross, macd_bearish_cross, ema_bullish_cross, trend_is_strong",0.17690045782267083,0.24833788
-1,rsi_value,6.666666666666667,"rsi_value, supertrend_direction, ema_bullish_alignment, macd_hist_normalized, ema_bearish_alignment, supertrend_bearish, supertrend_bullish",-0.06803152246997536,0.35632825
-5,structure_breaks,11.0,"structure_breaks, has_bos, structure_trend",0.3256384705927194,0.023297705
-6,regime_confidence,11.0,"regime_confidence, volume_ratio, regime, volume_above_avg",0.009503555461262218,0.16550326
-3,has_sweep,17.666666666666668,"has_sweep, sweep_strength",-0.12600596231675332,0.03521313
-2,has_ob,20.666666666666668,"has_ob, ob_valid",0.07066581809048188,0.0058978293
